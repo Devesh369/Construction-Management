@@ -26,6 +26,7 @@ class BusinessRuleError(APIException):
             self.default_detail = message
         if code:
             self.default_code = code
+        self.code = code or self.default_code
         self.details = details or {}
         super().__init__(detail=self.default_detail, code=self.default_code)
 
@@ -61,6 +62,11 @@ class UnbalancedEntryError(APIException):
     status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
     default_code = "unbalanced_entry"
     default_detail = "Total debits must equal total credits."
+
+
+class NotFoundError(NotFound):
+    default_code = "not_found"
+    default_detail = "The requested resource was not found."
 
 
 class AccountLockedError(APIException):

@@ -65,6 +65,9 @@ class NightShiftSession(TenantModel):
     )
     approved_at = models.DateTimeField(null=True, blank=True)
 
+    class Meta:
+        ordering = ["-shift_date", "-id"]
+
     def __str__(self):
         return f"{self.project.code} Night Shift {self.shift_date} ({self.status})"
 
@@ -88,6 +91,7 @@ class Holiday(TenantModel):
     is_paid = models.BooleanField(default=True)
 
     class Meta:
+        ordering = ["date"]
         unique_together = ("organization", "project", "date")
 
     def __str__(self):
@@ -147,6 +151,7 @@ class Attendance(TenantModel):
     )
 
     class Meta:
+        ordering = ["-date", "-id"]
         unique_together = ("organization", "employee", "date", "shift_type")
         indexes = [
             models.Index(fields=["organization", "project", "date"]),

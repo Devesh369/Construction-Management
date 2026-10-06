@@ -62,6 +62,9 @@ class TaskProgress(TenantModel):
     )
     notes = models.TextField(blank=True)
 
+    class Meta:
+        ordering = ["id"]
+
     def __str__(self):
         return f"{self.task_name}: {self.percent_complete}%"
 
@@ -83,6 +86,9 @@ class MaterialUsage(TenantModel):
     quantity = models.DecimalField(max_digits=12, decimal_places=3)
     unit = models.CharField(max_length=20)
 
+    class Meta:
+        ordering = ["id"]
+
     def __str__(self):
         return f"{self.material_name}: {self.quantity} {self.unit}"
 
@@ -93,6 +99,9 @@ class SitePhoto(TenantModel):
     report = models.ForeignKey(DailyProgressReport, on_delete=models.CASCADE, related_name="photos")
     image = models.ImageField(upload_to="dpr_photos/")
     caption = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["id"]
 
     def __str__(self):
         return f"Photo for DPR {self.report_id}"

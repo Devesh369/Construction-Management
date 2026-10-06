@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from progress.views import DailyProgressReportViewSet
 
-router = DefaultRouter()
+router = DefaultRouter(trailing_slash=False)
 router.register(r"dpr", DailyProgressReportViewSet, basename="dpr")
 
 urlpatterns = [

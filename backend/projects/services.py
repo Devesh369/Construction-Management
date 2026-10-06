@@ -55,12 +55,13 @@ def create_project(org, user, data: dict, request=None) -> Project:
         )
 
         # Auto-add creator as member
-        ProjectMembership.objects.create(
-            organization=org,
-            project=project,
-            user=user,
-            site_role="Project Lead",
-        )
+        if user:
+            ProjectMembership.objects.create(
+                organization=org,
+                project=project,
+                user=user,
+                site_role="Project Lead",
+            )
 
         # Create default budget categories: LABOR, MATERIALS, EQUIPMENT, OVERHEAD
         for cat_name in DEFAULT_BUDGET_CATEGORIES:
@@ -185,6 +186,23 @@ def archive_project(project: Project, user, request=None) -> Project:
         organization=project.organization,
     )
     return project
+
+
+def add_project_member(project: Project, user, site_role: str = "") -> ProjectMembership:
+    """Add user as member to project."""
+    membership, _ = ProjectMembership.objects.get_or_create(
+        organization=project.organization,
+        project=project,
+        user=user,
+        defaults={"site_role": site_role},
+    )
+    return membership
+
+
+def remove_project_member(project: Project, user) -> bool:
+    """Remove user membership from project."""
+    count, _ = ProjectMembership.objects.filter(project=project, user=user).delete()
+    return count > 0
 
 
 def user_project_ids(user) -> set[int]:
