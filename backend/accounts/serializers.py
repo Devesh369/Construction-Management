@@ -1,10 +1,65 @@
 """
-Accounts serializers stub / base implementation.
+Accounts request and response serializers.
 """
+
+from decimal import Decimal
 
 from rest_framework import serializers
 
 from accounts.models import Invitation, Organization, User
+from core.roles import Role
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+
+class AcceptInviteSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    password = serializers.CharField(min_length=10, write_only=True)
+    name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    password = serializers.CharField(min_length=10, write_only=True)
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(min_length=10, write_only=True)
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "email", "name", "phone", "role"]
+        read_only_fields = ["id", "email", "role"]
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "email", "name", "phone", "role", "is_active", "created_at"]
+        read_only_fields = ["id", "email", "created_at"]
+
+
+class InvitationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invitation
+        fields = ["id", "email", "name", "role", "expires_at", "used_at", "created_at"]
+        read_only_fields = ["id", "expires_at", "used_at", "created_at"]
+
+
+class CreateInvitationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    name = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
+    role = serializers.ChoiceField(choices=Role.choices)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -28,23 +83,40 @@ class OrganizationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def validate(self, attrs):
+        workday = attrs.get(
+            "workday_hours", getattr(self.instance, "workday_hours", Decimal("8.00"))
+        )
+        half_day = attrs.get(
+            "half_day_hours", getattr(self.instance, "half_day_hours", Decimal("4.00"))
+        )
+        overtime = attrs.get(
+            "overtime_after_hours", getattr(self.instance, "overtime_after_hours", Decimal("8.00"))
+        )
+        multiplier = attrs.get(
+            "night_shift_multiplier",
+            getattr(self.instance, "night_shift_multiplier", Decimal("1.50")),
+        )
+        approval_limit = attrs.get(
+            "expense_approval_limit",
+            getattr(self.instance, "expense_approval_limit", Decimal("1000.00")),
+        )
 
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ["id", "email", "name", "phone", "role", "is_active", "created_at"]
-        read_only_fields = ["id", "email", "created_at"]
+        if half_day > workday:
+            raise serializers.ValidationError(
+                {"half_day_hours": "half_day_hours cannot be greater than workday_hours."}
+            )
+        if overtime <= Decimal("0.00"):
+            raise serializers.ValidationError(
+                {"overtime_after_hours": "overtime_after_hours must be greater than 0."}
+            )
+        if multiplier < Decimal("1.00"):
+            raise serializers.ValidationError(
+                {"night_shift_multiplier": "night_shift_multiplier must be >= 1.00."}
+            )
+        if approval_limit < Decimal("0.00"):
+            raise serializers.ValidationError(
+                {"expense_approval_limit": "expense_approval_limit cannot be negative."}
+            )
 
-
-class UserProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ["id", "email", "name", "phone", "role"]
-        read_only_fields = ["id", "email", "role"]
-
-
-class InvitationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Invitation
-        fields = ["id", "email", "name", "role", "expires_at", "used_at", "created_at"]
-        read_only_fields = ["id", "expires_at", "used_at", "created_at"]
+        return attrs

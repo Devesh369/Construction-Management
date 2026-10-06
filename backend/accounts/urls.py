@@ -15,7 +15,7 @@ from accounts.views import (
     UserViewSet,
 )
 
-router = DefaultRouter()
+router = DefaultRouter(trailing_slash=False)
 router.register(r"users", UserViewSet, basename="users")
 router.register(r"org/invitations", InvitationViewSet, basename="org-invitations")
 

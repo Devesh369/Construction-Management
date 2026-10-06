@@ -4,7 +4,23 @@ Contract:
 log_action(user, action, obj=None, changes=None, request=None, organization=None, metadata=None) -> AuditLog
 """
 
+from datetime import date, datetime
+from decimal import Decimal
+
 from audit.models import AuditLog
+
+
+def _make_json_safe(data):
+    """Recursively convert Decimals, dates, and non-primitives to JSON-serializable types."""
+    if isinstance(data, dict):
+        return {k: _make_json_safe(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [_make_json_safe(item) for item in data]
+    elif isinstance(data, Decimal):
+        return str(data)
+    elif isinstance(data, (date, datetime)):
+        return data.isoformat()
+    return data
 
 
 def log_action(
@@ -54,8 +70,8 @@ def log_action(
         action=action,
         resource_type=resource_type,
         resource_id=resource_id,
-        changes=changes or {},
-        metadata=metadata or {},
+        changes=_make_json_safe(changes or {}),
+        metadata=_make_json_safe(metadata or {}),
         ip_address=ip_address,
         user_agent=user_agent,
     )
