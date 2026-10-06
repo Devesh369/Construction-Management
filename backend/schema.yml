@@ -1,0 +1,6853 @@
+openapi: 3.0.3
+info:
+  title: Construction Management Portal API
+  version: 1.0.0
+  description: Multi-tenant SaaS platform for construction companies. Provides project
+    management, GPS-verified attendance, DPR, expenses, payroll calculation, double-entry
+    ledger, and audit tracking.
+paths:
+  /api/v1/advances/:
+    get:
+      operationId: advances_list
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: query
+        name: employee
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: project
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ADJUSTED
+          - OPEN
+          - PARTIALLY_ADJUSTED
+        description: |-
+          * `OPEN` - Open
+          * `PARTIALLY_ADJUSTED` - Partially Adjusted
+          * `ADJUSTED` - Adjusted
+      tags:
+      - advances
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdvanceList'
+          description: ''
+    post:
+      operationId: advances_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      tags:
+      - advances
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvanceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdvanceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdvanceRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Advance'
+          description: ''
+  /api/v1/advances/{id}/:
+    get:
+      operationId: advances_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this advance.
+        required: true
+      tags:
+      - advances
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Advance'
+          description: ''
+    put:
+      operationId: advances_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this advance.
+        required: true
+      tags:
+      - advances
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvanceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdvanceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdvanceRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Advance'
+          description: ''
+    patch:
+      operationId: advances_partial_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this advance.
+        required: true
+      tags:
+      - advances
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdvanceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdvanceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdvanceRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Advance'
+          description: ''
+    delete:
+      operationId: advances_destroy
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this advance.
+        required: true
+      tags:
+      - advances
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/attendance/:
+    get:
+      operationId: attendance_list
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: is_locked
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: project
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - ABSENT
+          - HALF_DAY
+          - HOLIDAY
+          - PRESENT
+        description: |-
+          * `PRESENT` - Present
+          * `HALF_DAY` - Half Day
+          * `ABSENT` - Absent
+          * `HOLIDAY` - Holiday
+      tags:
+      - attendance
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAttendanceList'
+          description: ''
+    post:
+      operationId: attendance_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      tags:
+      - attendance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendanceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AttendanceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttendanceRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attendance'
+          description: ''
+  /api/v1/attendance/{id}/:
+    get:
+      operationId: attendance_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this attendance.
+        required: true
+      tags:
+      - attendance
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attendance'
+          description: ''
+    put:
+      operationId: attendance_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this attendance.
+        required: true
+      tags:
+      - attendance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendanceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AttendanceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttendanceRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attendance'
+          description: ''
+    patch:
+      operationId: attendance_partial_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this attendance.
+        required: true
+      tags:
+      - attendance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAttendanceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAttendanceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAttendanceRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attendance'
+          description: ''
+    delete:
+      operationId: attendance_destroy
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this attendance.
+        required: true
+      tags:
+      - attendance
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/audit-logs/:
+    get:
+      operationId: audit_logs_list
+      description: |-
+        Read-only viewset for viewing the immutable security audit log.
+        Accessible only to ORG_ADMIN.
+      parameters:
+      - in: query
+        name: action
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: resource_id
+        schema:
+          type: string
+      - in: query
+        name: resource_type
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - audit-logs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLogList'
+          description: ''
+  /api/v1/audit-logs/{id}/:
+    get:
+      operationId: audit_logs_retrieve
+      description: |-
+        Read-only viewset for viewing the immutable security audit log.
+        Accessible only to ORG_ADMIN.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this audit log.
+        required: true
+      tags:
+      - audit-logs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLog'
+          description: ''
+  /api/v1/auth/accept-invite:
+    post:
+      operationId: auth_accept_invite_create
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/change-password:
+    post:
+      operationId: auth_change_password_create
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/forgot-password:
+    post:
+      operationId: auth_forgot_password_create
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/login:
+    post:
+      operationId: auth_login_create
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/logout:
+    post:
+      operationId: auth_logout_create
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/refresh:
+    post:
+      operationId: auth_refresh_create
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/reset-password:
+    post:
+      operationId: auth_reset_password_create
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/dashboard/overview:
+    get:
+      operationId: dashboard_overview_retrieve
+      tags:
+      - dashboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/dashboard/projects/{id}:
+    get:
+      operationId: dashboard_projects_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - dashboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/dpr/:
+    get:
+      operationId: dpr_list
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: project
+        schema:
+          type: integer
+      - in: query
+        name: report_date
+        schema:
+          type: string
+          format: date
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - REJECTED
+          - SUBMITTED
+          - VERIFIED
+        description: |-
+          * `SUBMITTED` - Submitted
+          * `VERIFIED` - Verified
+          * `REJECTED` - Rejected
+      tags:
+      - dpr
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDailyProgressReportList'
+          description: ''
+    post:
+      operationId: dpr_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      tags:
+      - dpr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyProgressReport'
+          description: ''
+  /api/v1/dpr/{id}/:
+    get:
+      operationId: dpr_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this daily progress report.
+        required: true
+      tags:
+      - dpr
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyProgressReport'
+          description: ''
+    put:
+      operationId: dpr_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this daily progress report.
+        required: true
+      tags:
+      - dpr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyProgressReport'
+          description: ''
+    patch:
+      operationId: dpr_partial_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this daily progress report.
+        required: true
+      tags:
+      - dpr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyProgressReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyProgressReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDailyProgressReportRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyProgressReport'
+          description: ''
+    delete:
+      operationId: dpr_destroy
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this daily progress report.
+        required: true
+      tags:
+      - dpr
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/dpr/{id}/reject/:
+    post:
+      operationId: dpr_reject_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this daily progress report.
+        required: true
+      tags:
+      - dpr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyProgressReport'
+          description: ''
+  /api/v1/dpr/{id}/verify/:
+    post:
+      operationId: dpr_verify_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this daily progress report.
+        required: true
+      tags:
+      - dpr
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DailyProgressReportRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyProgressReport'
+          description: ''
+  /api/v1/employees/:
+    get:
+      operationId: employees_list
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: query
+        name: employment_type
+        schema:
+          type: string
+          enum:
+          - DAILY_WAGE
+          - MONTHLY_SALARY
+        description: |-
+          * `DAILY_WAGE` - Daily Wage
+          * `MONTHLY_SALARY` - Monthly Salary
+      - in: query
+        name: group
+        schema:
+          type: integer
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: primary_project
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: trade
+        schema:
+          type: string
+          enum:
+          - CARPENTER
+          - ELECTRICIAN
+          - HELPER
+          - MASON
+          - OTHER
+          - PAINTER
+          - PLUMBER
+          - WELDER
+        description: |-
+          * `MASON` - Mason
+          * `CARPENTER` - Carpenter
+          * `ELECTRICIAN` - Electrician
+          * `PLUMBER` - Plumber
+          * `WELDER` - Welder
+          * `PAINTER` - Painter
+          * `HELPER` - Helper
+          * `OTHER` - Other
+      tags:
+      - employees
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEmployeeList'
+          description: ''
+    post:
+      operationId: employees_create
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      tags:
+      - employees
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+  /api/v1/employees/{id}/:
+    get:
+      operationId: employees_retrieve
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this employee.
+        required: true
+      tags:
+      - employees
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+    put:
+      operationId: employees_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this employee.
+        required: true
+      tags:
+      - employees
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmployeeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+    patch:
+      operationId: employees_partial_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this employee.
+        required: true
+      tags:
+      - employees
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployeeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployeeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEmployeeRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+    delete:
+      operationId: employees_destroy
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this employee.
+        required: true
+      tags:
+      - employees
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/expenses/:
+    get:
+      operationId: expenses_list
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+          enum:
+          - EQUIPMENT_RENTAL
+          - FUEL
+          - MATERIAL
+          - OTHER
+          - PETTY_CASH
+          - TRANSPORT
+          - UTILITY
+        description: |-
+          * `MATERIAL` - Material
+          * `EQUIPMENT_RENTAL` - Equipment Rental
+          * `FUEL` - Fuel
+          * `TRANSPORT` - Transport
+          * `UTILITY` - Utility
+          * `PETTY_CASH` - Petty Cash
+          * `OTHER` - Other
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: payment_mode
+        schema:
+          type: string
+          enum:
+          - BANK_TRANSFER
+          - CASH
+          - CREDIT
+          - UPI
+        description: |-
+          * `CASH` - Cash
+          * `UPI` - UPI
+          * `BANK_TRANSFER` - Bank Transfer
+          * `CREDIT` - Credit
+      - in: query
+        name: project
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - APPROVED
+          - CANCELLED
+          - PENDING_APPROVAL
+          - REJECTED
+        description: |-
+          * `PENDING_APPROVAL` - Pending Approval
+          * `APPROVED` - Approved
+          * `REJECTED` - Rejected
+          * `CANCELLED` - Cancelled
+      - in: query
+        name: vendor
+        schema:
+          type: integer
+      tags:
+      - expenses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedExpenseList'
+          description: ''
+    post:
+      operationId: expenses_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      tags:
+      - expenses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+  /api/v1/expenses/{id}/:
+    get:
+      operationId: expenses_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this expense.
+        required: true
+      tags:
+      - expenses
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+    put:
+      operationId: expenses_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this expense.
+        required: true
+      tags:
+      - expenses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+    patch:
+      operationId: expenses_partial_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this expense.
+        required: true
+      tags:
+      - expenses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedExpenseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedExpenseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedExpenseRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+    delete:
+      operationId: expenses_destroy
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this expense.
+        required: true
+      tags:
+      - expenses
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/expenses/{id}/approve/:
+    post:
+      operationId: expenses_approve_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this expense.
+        required: true
+      tags:
+      - expenses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+  /api/v1/expenses/{id}/cancel/:
+    post:
+      operationId: expenses_cancel_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this expense.
+        required: true
+      tags:
+      - expenses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+  /api/v1/expenses/{id}/reject/:
+    post:
+      operationId: expenses_reject_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this expense.
+        required: true
+      tags:
+      - expenses
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ExpenseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+  /api/v1/holidays/:
+    get:
+      operationId: holidays_list
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: is_paid
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: project
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - holidays
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHolidayList'
+          description: ''
+    post:
+      operationId: holidays_create
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      tags:
+      - holidays
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HolidayRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HolidayRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HolidayRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Holiday'
+          description: ''
+  /api/v1/holidays/{id}/:
+    get:
+      operationId: holidays_retrieve
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this holiday.
+        required: true
+      tags:
+      - holidays
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Holiday'
+          description: ''
+    put:
+      operationId: holidays_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this holiday.
+        required: true
+      tags:
+      - holidays
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HolidayRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HolidayRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HolidayRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Holiday'
+          description: ''
+    patch:
+      operationId: holidays_partial_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this holiday.
+        required: true
+      tags:
+      - holidays
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedHolidayRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedHolidayRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedHolidayRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Holiday'
+          description: ''
+    delete:
+      operationId: holidays_destroy
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this holiday.
+        required: true
+      tags:
+      - holidays
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/labor-groups/:
+    get:
+      operationId: labor_groups_list
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: project
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - labor-groups
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLaborGroupList'
+          description: ''
+    post:
+      operationId: labor_groups_create
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      tags:
+      - labor-groups
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaborGroupRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LaborGroupRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LaborGroupRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaborGroup'
+          description: ''
+  /api/v1/labor-groups/{id}/:
+    get:
+      operationId: labor_groups_retrieve
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this labor group.
+        required: true
+      tags:
+      - labor-groups
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaborGroup'
+          description: ''
+    put:
+      operationId: labor_groups_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this labor group.
+        required: true
+      tags:
+      - labor-groups
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaborGroupRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LaborGroupRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LaborGroupRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaborGroup'
+          description: ''
+    patch:
+      operationId: labor_groups_partial_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this labor group.
+        required: true
+      tags:
+      - labor-groups
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedLaborGroupRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedLaborGroupRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedLaborGroupRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaborGroup'
+          description: ''
+    delete:
+      operationId: labor_groups_destroy
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this labor group.
+        required: true
+      tags:
+      - labor-groups
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/labor-groups/{id}/members/:
+    post:
+      operationId: labor_groups_members_create
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this labor group.
+        required: true
+      tags:
+      - labor-groups
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaborGroupRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LaborGroupRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LaborGroupRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaborGroup'
+          description: ''
+  /api/v1/labor-groups/{id}/members/{employee_id}/:
+    delete:
+      operationId: labor_groups_members_destroy
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: employee_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this labor group.
+        required: true
+      tags:
+      - labor-groups
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/ledger/accounts/:
+    get:
+      operationId: ledger_accounts_list
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAccountList'
+          description: ''
+    post:
+      operationId: ledger_accounts_create
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      tags:
+      - ledger
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+          description: ''
+  /api/v1/ledger/accounts/{id}/:
+    get:
+      operationId: ledger_accounts_retrieve
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+          description: ''
+    put:
+      operationId: ledger_accounts_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ledger
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+          description: ''
+    patch:
+      operationId: ledger_accounts_partial_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ledger
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAccountRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAccountRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAccountRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+          description: ''
+    delete:
+      operationId: ledger_accounts_destroy
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/ledger/balance-sheet:
+    get:
+      operationId: ledger_balance_sheet_retrieve
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/ledger/entries/:
+    get:
+      operationId: ledger_entries_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedJournalEntryList'
+          description: ''
+    post:
+      operationId: ledger_entries_create
+      description: Post a manual journal entry.
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+          description: ''
+  /api/v1/ledger/entries/{id}/:
+    get:
+      operationId: ledger_entries_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+          description: ''
+  /api/v1/ledger/entries/{id}/reverse/:
+    post:
+      operationId: ledger_entries_reverse_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+          description: ''
+  /api/v1/ledger/profit-loss:
+    get:
+      operationId: ledger_profit_loss_retrieve
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/ledger/trial-balance:
+    get:
+      operationId: ledger_trial_balance_retrieve
+      tags:
+      - ledger
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/night-shifts/:
+    get:
+      operationId: night_shifts_list
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: project
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: shift_date
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - APPROVED
+          - COMPLETED
+          - IN_PROGRESS
+        description: |-
+          * `IN_PROGRESS` - In Progress
+          * `COMPLETED` - Completed
+          * `APPROVED` - Approved
+      tags:
+      - night-shifts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNightShiftSessionList'
+          description: ''
+    post:
+      operationId: night_shifts_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      tags:
+      - night-shifts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NightShiftSessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NightShiftSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NightShiftSessionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NightShiftSession'
+          description: ''
+  /api/v1/night-shifts/{id}/:
+    get:
+      operationId: night_shifts_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this night shift session.
+        required: true
+      tags:
+      - night-shifts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NightShiftSession'
+          description: ''
+    put:
+      operationId: night_shifts_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this night shift session.
+        required: true
+      tags:
+      - night-shifts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NightShiftSessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NightShiftSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NightShiftSessionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NightShiftSession'
+          description: ''
+    patch:
+      operationId: night_shifts_partial_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this night shift session.
+        required: true
+      tags:
+      - night-shifts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNightShiftSessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedNightShiftSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedNightShiftSessionRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NightShiftSession'
+          description: ''
+    delete:
+      operationId: night_shifts_destroy
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this night shift session.
+        required: true
+      tags:
+      - night-shifts
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/org/current:
+    get:
+      operationId: org_current_retrieve
+      tags:
+      - org
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: org_current_partial_update
+      tags:
+      - org
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/org/invitations/:
+    get:
+      operationId: org_invitations_list
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - org
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedInvitationList'
+          description: ''
+    post:
+      operationId: org_invitations_create
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      tags:
+      - org
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InvitationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InvitationRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+          description: ''
+  /api/v1/org/invitations/{id}/:
+    get:
+      operationId: org_invitations_retrieve
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this invitation.
+        required: true
+      tags:
+      - org
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+          description: ''
+    put:
+      operationId: org_invitations_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this invitation.
+        required: true
+      tags:
+      - org
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InvitationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InvitationRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+          description: ''
+    patch:
+      operationId: org_invitations_partial_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this invitation.
+        required: true
+      tags:
+      - org
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedInvitationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedInvitationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedInvitationRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+          description: ''
+    delete:
+      operationId: org_invitations_destroy
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this invitation.
+        required: true
+      tags:
+      - org
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/projects/:
+    get:
+      operationId: projects_list
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - projects
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProjectList'
+          description: ''
+    post:
+      operationId: projects_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api/v1/projects/{id}/:
+    get:
+      operationId: projects_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    put:
+      operationId: projects_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    patch:
+      operationId: projects_partial_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProjectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProjectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProjectRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    delete:
+      operationId: projects_destroy
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/projects/{id}/analytics/:
+    get:
+      operationId: projects_analytics_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api/v1/projects/{id}/archive/:
+    post:
+      operationId: projects_archive_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api/v1/projects/{id}/members/:
+    get:
+      operationId: projects_members_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    post:
+      operationId: projects_members_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api/v1/projects/{id}/members/{user_id}/:
+    delete:
+      operationId: projects_members_destroy
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - projects
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/reports/attendance/excel:
+    post:
+      operationId: reports_attendance_excel_create
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/reports/dpr/excel:
+    post:
+      operationId: reports_dpr_excel_create
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/reports/expenses/excel:
+    post:
+      operationId: reports_expenses_excel_create
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/reports/payroll/pdf:
+    post:
+      operationId: reports_payroll_pdf_create
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/reports/profit-loss/pdf:
+    post:
+      operationId: reports_profit_loss_pdf_create
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/reports/trial-balance/pdf:
+    post:
+      operationId: reports_trial_balance_pdf_create
+      tags:
+      - reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/running-cost-baselines/:
+    get:
+      operationId: running_cost_baselines_list
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - running-cost-baselines
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRunningCostBaselineList'
+          description: ''
+    post:
+      operationId: running_cost_baselines_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      tags:
+      - running-cost-baselines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunningCostBaselineRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RunningCostBaselineRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RunningCostBaselineRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunningCostBaseline'
+          description: ''
+  /api/v1/running-cost-baselines/{id}/:
+    get:
+      operationId: running_cost_baselines_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this running cost baseline.
+        required: true
+      tags:
+      - running-cost-baselines
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunningCostBaseline'
+          description: ''
+    put:
+      operationId: running_cost_baselines_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this running cost baseline.
+        required: true
+      tags:
+      - running-cost-baselines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunningCostBaselineRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RunningCostBaselineRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RunningCostBaselineRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunningCostBaseline'
+          description: ''
+    patch:
+      operationId: running_cost_baselines_partial_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this running cost baseline.
+        required: true
+      tags:
+      - running-cost-baselines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRunningCostBaselineRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRunningCostBaselineRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRunningCostBaselineRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunningCostBaseline'
+          description: ''
+    delete:
+      operationId: running_cost_baselines_destroy
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this running cost baseline.
+        required: true
+      tags:
+      - running-cost-baselines
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/runs/:
+    get:
+      operationId: runs_list
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: project
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - APPROVED
+          - CANCELLED
+          - DRAFT
+          - PAID
+        description: |-
+          * `DRAFT` - Draft
+          * `APPROVED` - Approved
+          * `PAID` - Paid
+          * `CANCELLED` - Cancelled
+      tags:
+      - runs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPayrollRunList'
+          description: ''
+    post:
+      operationId: runs_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+          description: ''
+  /api/v1/runs/{id}/:
+    get:
+      operationId: runs_retrieve
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payroll run.
+        required: true
+      tags:
+      - runs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+          description: ''
+    put:
+      operationId: runs_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payroll run.
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+          description: ''
+    patch:
+      operationId: runs_partial_update
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payroll run.
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPayrollRunRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPayrollRunRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPayrollRunRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+          description: ''
+    delete:
+      operationId: runs_destroy
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payroll run.
+        required: true
+      tags:
+      - runs
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/runs/{id}/approve/:
+    post:
+      operationId: runs_approve_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payroll run.
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+          description: ''
+  /api/v1/runs/{id}/cancel/:
+    post:
+      operationId: runs_cancel_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payroll run.
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+          description: ''
+  /api/v1/runs/{id}/recalculate/:
+    post:
+      operationId: runs_recalculate_create
+      description: |-
+        Mixin for ViewSets that need project-level scoping:
+        - ORG_ADMIN and ACCOUNTANT see all organization records.
+        - PROJECT_MANAGER, SITE_ENGINEER, and SUPERVISOR see only records for assigned projects.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payroll run.
+        required: true
+      tags:
+      - runs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PayrollRunRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollRun'
+          description: ''
+  /api/v1/users/:
+    get:
+      operationId: users_list
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+          description: ''
+    post:
+      operationId: users_create
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/:
+    get:
+      operationId: users_retrieve
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    put:
+      operationId: users_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: users_partial_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    delete:
+      operationId: users_destroy
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/users/me:
+    get:
+      operationId: users_me_retrieve
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: users_me_partial_update
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/vendors/:
+    get:
+      operationId: vendors_list
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - vendors
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVendorList'
+          description: ''
+    post:
+      operationId: vendors_create
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      tags:
+      - vendors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VendorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VendorRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vendor'
+          description: ''
+  /api/v1/vendors/{id}/:
+    get:
+      operationId: vendors_retrieve
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vendor.
+        required: true
+      tags:
+      - vendors
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vendor'
+          description: ''
+    put:
+      operationId: vendors_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vendor.
+        required: true
+      tags:
+      - vendors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VendorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VendorRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vendor'
+          description: ''
+    patch:
+      operationId: vendors_partial_update
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vendor.
+        required: true
+      tags:
+      - vendors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVendorRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedVendorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedVendorRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vendor'
+          description: ''
+    delete:
+      operationId: vendors_destroy
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vendor.
+        required: true
+      tags:
+      - vendors
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/vendors/{id}/payments/:
+    get:
+      operationId: vendors_payments_retrieve
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vendor.
+        required: true
+      tags:
+      - vendors
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vendor'
+          description: ''
+    post:
+      operationId: vendors_payments_create
+      description: |-
+        Standard ModelViewSet that strictly enforces tenant data isolation.
+        - Filters every queryset by request.user.organization.
+        - Sets organization on creation from request.user.organization.
+        - Soft-deletes objects upon deletion.
+        - Returns 404 for records belonging to another tenant or non-existent IDs.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this vendor.
+        required: true
+      tags:
+      - vendors
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VendorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VendorRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vendor'
+          description: ''
+  /api/v1/vouchers/:
+    get:
+      operationId: vouchers_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - vouchers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPayrollVoucherList'
+          description: ''
+  /api/v1/vouchers/{id}/:
+    get:
+      operationId: vouchers_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payroll voucher.
+        required: true
+      tags:
+      - vouchers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollVoucher'
+          description: ''
+  /api/v1/vouchers/{id}/mark-paid/:
+    post:
+      operationId: vouchers_mark_paid_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payroll voucher.
+        required: true
+      tags:
+      - vouchers
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrollVoucher'
+          description: ''
+components:
+  schemas:
+    Account:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 10
+        name:
+          type: string
+          maxLength: 100
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+        is_active:
+          type: boolean
+      required:
+      - code
+      - id
+      - name
+      - type
+    AccountRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 10
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+        is_active:
+          type: boolean
+      required:
+      - code
+      - name
+      - type
+    Advance:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        employee:
+          type: integer
+        employee_code:
+          type: string
+          readOnly: true
+        employee_name:
+          type: string
+          readOnly: true
+        project:
+          type: integer
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        advance_date:
+          type: string
+          format: date
+        reason:
+          type: string
+        payment_mode:
+          type: string
+          maxLength: 20
+        given_by:
+          type: integer
+          readOnly: true
+        adjusted_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        remaining_amount:
+          type: number
+          format: double
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AdvanceStatusEnum'
+          readOnly: true
+        journal_entry:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - adjusted_amount
+      - advance_date
+      - amount
+      - employee
+      - employee_code
+      - employee_name
+      - given_by
+      - id
+      - journal_entry
+      - project
+      - remaining_amount
+      - status
+    AdvanceRequest:
+      type: object
+      properties:
+        employee:
+          type: integer
+        project:
+          type: integer
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        advance_date:
+          type: string
+          format: date
+        reason:
+          type: string
+        payment_mode:
+          type: string
+          minLength: 1
+          maxLength: 20
+      required:
+      - advance_date
+      - amount
+      - employee
+      - project
+    AdvanceStatusEnum:
+      enum:
+      - OPEN
+      - PARTIALLY_ADJUSTED
+      - ADJUSTED
+      type: string
+      description: |-
+        * `OPEN` - Open
+        * `PARTIALLY_ADJUSTED` - Partially Adjusted
+        * `ADJUSTED` - Adjusted
+    Attendance:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        employee:
+          type: integer
+        employee_code:
+          type: string
+          readOnly: true
+        employee_name:
+          type: string
+          readOnly: true
+        project:
+          type: integer
+        date:
+          type: string
+          format: date
+        shift_type:
+          $ref: '#/components/schemas/ShiftTypeEnum'
+        status:
+          $ref: '#/components/schemas/AttendanceStatusEnum'
+        check_in_time:
+          type: string
+          format: date-time
+          nullable: true
+        check_out_time:
+          type: string
+          format: date-time
+          nullable: true
+        worked_hours:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          nullable: true
+        ot_hours:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        distance_m:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        is_geofence_verified:
+          type: boolean
+        method:
+          $ref: '#/components/schemas/MethodEnum'
+        night_shift:
+          type: integer
+          nullable: true
+        remarks:
+          type: string
+        is_locked:
+          type: boolean
+          readOnly: true
+        locked_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - date
+      - employee
+      - employee_code
+      - employee_name
+      - id
+      - is_locked
+      - locked_at
+      - project
+    AttendanceRequest:
+      type: object
+      properties:
+        employee:
+          type: integer
+        project:
+          type: integer
+        date:
+          type: string
+          format: date
+        shift_type:
+          $ref: '#/components/schemas/ShiftTypeEnum'
+        status:
+          $ref: '#/components/schemas/AttendanceStatusEnum'
+        check_in_time:
+          type: string
+          format: date-time
+          nullable: true
+        check_out_time:
+          type: string
+          format: date-time
+          nullable: true
+        worked_hours:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          nullable: true
+        ot_hours:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        distance_m:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        is_geofence_verified:
+          type: boolean
+        method:
+          $ref: '#/components/schemas/MethodEnum'
+        night_shift:
+          type: integer
+          nullable: true
+        remarks:
+          type: string
+      required:
+      - date
+      - employee
+      - project
+    AttendanceStatusEnum:
+      enum:
+      - PRESENT
+      - HALF_DAY
+      - ABSENT
+      - HOLIDAY
+      type: string
+      description: |-
+        * `PRESENT` - Present
+        * `HALF_DAY` - Half Day
+        * `ABSENT` - Absent
+        * `HOLIDAY` - Holiday
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        actor:
+          type: integer
+          readOnly: true
+          nullable: true
+        actor_email:
+          type: string
+          format: email
+          readOnly: true
+        action:
+          type: string
+          readOnly: true
+        resource_type:
+          type: string
+          readOnly: true
+        resource_id:
+          type: string
+          readOnly: true
+        changes:
+          readOnly: true
+        metadata:
+          readOnly: true
+        ip_address:
+          type: string
+          readOnly: true
+          nullable: true
+        user_agent:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - action
+      - actor
+      - actor_email
+      - changes
+      - created_at
+      - id
+      - ip_address
+      - metadata
+      - resource_id
+      - resource_type
+      - user_agent
+    BudgetCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        allocated_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+      required:
+      - id
+      - name
+    BudgetCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        allocated_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+      required:
+      - name
+    CategoryEnum:
+      enum:
+      - MATERIAL
+      - EQUIPMENT_RENTAL
+      - FUEL
+      - TRANSPORT
+      - UTILITY
+      - PETTY_CASH
+      - OTHER
+      type: string
+      description: |-
+        * `MATERIAL` - Material
+        * `EQUIPMENT_RENTAL` - Equipment Rental
+        * `FUEL` - Fuel
+        * `TRANSPORT` - Transport
+        * `UTILITY` - Utility
+        * `PETTY_CASH` - Petty Cash
+        * `OTHER` - Other
+    DailyProgressReport:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        project:
+          type: integer
+        report_date:
+          type: string
+          format: date
+        submitted_by:
+          type: integer
+        submitted_by_name:
+          type: string
+          readOnly: true
+        weather:
+          type: string
+          maxLength: 50
+        summary:
+          type: string
+        issues:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/DailyProgressReportStatusEnum'
+          readOnly: true
+        verified_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        verified_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        rejection_reason:
+          type: string
+          readOnly: true
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskProgress'
+        materials:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterialUsage'
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/SitePhoto'
+          readOnly: true
+      required:
+      - id
+      - photos
+      - project
+      - rejection_reason
+      - report_date
+      - status
+      - submitted_by
+      - submitted_by_name
+      - summary
+      - verified_at
+      - verified_by
+    DailyProgressReportRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        report_date:
+          type: string
+          format: date
+        submitted_by:
+          type: integer
+        weather:
+          type: string
+          maxLength: 50
+        summary:
+          type: string
+          minLength: 1
+        issues:
+          type: string
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskProgressRequest'
+        materials:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterialUsageRequest'
+      required:
+      - project
+      - report_date
+      - submitted_by
+      - summary
+    DailyProgressReportStatusEnum:
+      enum:
+      - SUBMITTED
+      - VERIFIED
+      - REJECTED
+      type: string
+      description: |-
+        * `SUBMITTED` - Submitted
+        * `VERIFIED` - Verified
+        * `REJECTED` - Rejected
+    Employee:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        employee_code:
+          type: string
+          maxLength: 20
+        full_name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 50
+        joining_date:
+          type: string
+          format: date
+          nullable: true
+        is_active:
+          type: boolean
+        trade:
+          $ref: '#/components/schemas/TradeEnum'
+        skill_level:
+          $ref: '#/components/schemas/SkillLevelEnum'
+        employment_type:
+          $ref: '#/components/schemas/EmploymentTypeEnum'
+        daily_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        ot_hourly_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        monthly_salary:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        effective_daily_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        primary_project:
+          type: integer
+          nullable: true
+        group:
+          type: integer
+          nullable: true
+        bank_account_name:
+          type: string
+          maxLength: 150
+        bank_account_number:
+          type: string
+          maxLength: 50
+        bank_ifsc:
+          type: string
+          maxLength: 30
+        upi_id:
+          type: string
+          maxLength: 100
+        id_proof_type:
+          $ref: '#/components/schemas/IdProofTypeEnum'
+        id_proof_number:
+          type: string
+          maxLength: 100
+      required:
+      - effective_daily_rate
+      - employee_code
+      - full_name
+      - id
+    EmployeeRequest:
+      type: object
+      properties:
+        employee_code:
+          type: string
+          minLength: 1
+          maxLength: 20
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 50
+        joining_date:
+          type: string
+          format: date
+          nullable: true
+        is_active:
+          type: boolean
+        trade:
+          $ref: '#/components/schemas/TradeEnum'
+        skill_level:
+          $ref: '#/components/schemas/SkillLevelEnum'
+        employment_type:
+          $ref: '#/components/schemas/EmploymentTypeEnum'
+        daily_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        ot_hourly_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        monthly_salary:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        primary_project:
+          type: integer
+          nullable: true
+        group:
+          type: integer
+          nullable: true
+        bank_account_name:
+          type: string
+          maxLength: 150
+        bank_account_number:
+          type: string
+          maxLength: 50
+        bank_ifsc:
+          type: string
+          maxLength: 30
+        upi_id:
+          type: string
+          maxLength: 100
+        id_proof_type:
+          $ref: '#/components/schemas/IdProofTypeEnum'
+        id_proof_number:
+          type: string
+          maxLength: 100
+      required:
+      - employee_code
+      - full_name
+    EmploymentTypeEnum:
+      enum:
+      - DAILY_WAGE
+      - MONTHLY_SALARY
+      type: string
+      description: |-
+        * `DAILY_WAGE` - Daily Wage
+        * `MONTHLY_SALARY` - Monthly Salary
+    Expense:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        project:
+          type: integer
+        vendor:
+          type: integer
+          nullable: true
+        vendor_name:
+          type: string
+          readOnly: true
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        description:
+          type: string
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        expense_date:
+          type: string
+          format: date
+        payment_mode:
+          $ref: '#/components/schemas/PaymentModeEnum'
+        invoice_number:
+          type: string
+          maxLength: 50
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        receipt:
+          type: string
+          format: uri
+          nullable: true
+        is_recurring:
+          type: boolean
+        details: {}
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ExpenseStatusEnum'
+          readOnly: true
+        created_by:
+          type: integer
+          readOnly: true
+        created_by_name:
+          type: string
+          readOnly: true
+        approved_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        approved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        rejection_reason:
+          type: string
+          readOnly: true
+        cancel_reason:
+          type: string
+          readOnly: true
+        journal_entry:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - amount
+      - approved_at
+      - approved_by
+      - cancel_reason
+      - category
+      - created_by
+      - created_by_name
+      - description
+      - expense_date
+      - id
+      - journal_entry
+      - payment_mode
+      - project
+      - rejection_reason
+      - status
+      - vendor_name
+    ExpenseRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        vendor:
+          type: integer
+          nullable: true
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        description:
+          type: string
+          minLength: 1
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        expense_date:
+          type: string
+          format: date
+        payment_mode:
+          $ref: '#/components/schemas/PaymentModeEnum'
+        invoice_number:
+          type: string
+          maxLength: 50
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        receipt:
+          type: string
+          format: binary
+          nullable: true
+        is_recurring:
+          type: boolean
+        details: {}
+      required:
+      - amount
+      - category
+      - description
+      - expense_date
+      - payment_mode
+      - project
+    ExpenseStatusEnum:
+      enum:
+      - PENDING_APPROVAL
+      - APPROVED
+      - REJECTED
+      - CANCELLED
+      type: string
+      description: |-
+        * `PENDING_APPROVAL` - Pending Approval
+        * `APPROVED` - Approved
+        * `REJECTED` - Rejected
+        * `CANCELLED` - Cancelled
+    Holiday:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        project:
+          type: integer
+          nullable: true
+          description: Null indicates organization-wide holiday
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+          maxLength: 150
+        holiday_type:
+          $ref: '#/components/schemas/HolidayTypeEnum'
+        is_paid:
+          type: boolean
+      required:
+      - date
+      - id
+      - name
+    HolidayRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+          nullable: true
+          description: Null indicates organization-wide holiday
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        holiday_type:
+          $ref: '#/components/schemas/HolidayTypeEnum'
+        is_paid:
+          type: boolean
+      required:
+      - date
+      - name
+    HolidayTypeEnum:
+      enum:
+      - NATIONAL
+      - SITE_CLOSURE
+      - WEATHER
+      type: string
+      description: |-
+        * `NATIONAL` - National Holiday
+        * `SITE_CLOSURE` - Site Closure
+        * `WEATHER` - Weather Closure
+    IdProofTypeEnum:
+      enum:
+      - AADHAAR
+      - NATIONAL_ID
+      - OTHER
+      type: string
+      description: |-
+        * `AADHAAR` - Aadhaar
+        * `NATIONAL_ID` - National ID
+        * `OTHER` - Other
+    Invitation:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        name:
+          type: string
+          maxLength: 150
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        used_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - expires_at
+      - id
+      - role
+      - used_at
+    InvitationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        name:
+          type: string
+          maxLength: 150
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+      required:
+      - email
+      - role
+    JournalEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        entry_number:
+          type: string
+          readOnly: true
+        date:
+          type: string
+          format: date
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        project:
+          type: integer
+          readOnly: true
+          nullable: true
+        reference_type:
+          allOf:
+          - $ref: '#/components/schemas/ReferenceTypeEnum'
+          readOnly: true
+        reference_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalLine'
+          readOnly: true
+        reversal_reason:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - date
+      - description
+      - entry_number
+      - id
+      - lines
+      - project
+      - reference_id
+      - reference_type
+      - reversal_reason
+    JournalLine:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        account:
+          type: integer
+          readOnly: true
+        account_code:
+          type: string
+          readOnly: true
+        account_name:
+          type: string
+          readOnly: true
+        side:
+          allOf:
+          - $ref: '#/components/schemas/SideEnum'
+          readOnly: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        memo:
+          type: string
+          readOnly: true
+      required:
+      - account
+      - account_code
+      - account_name
+      - amount
+      - id
+      - memo
+      - side
+    LaborGroup:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        project:
+          type: integer
+        leader:
+          type: integer
+          nullable: true
+        leader_name:
+          type: string
+          readOnly: true
+        is_active:
+          type: boolean
+        member_count:
+          type: integer
+          readOnly: true
+      required:
+      - id
+      - leader_name
+      - member_count
+      - name
+      - project
+    LaborGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        project:
+          type: integer
+        leader:
+          type: integer
+          nullable: true
+        is_active:
+          type: boolean
+      required:
+      - name
+      - project
+    MaterialUsage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        material_name:
+          type: string
+          maxLength: 100
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,9}(?:\.\d{0,3})?$
+        unit:
+          type: string
+          maxLength: 20
+      required:
+      - id
+      - material_name
+      - quantity
+      - unit
+    MaterialUsageRequest:
+      type: object
+      properties:
+        material_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,9}(?:\.\d{0,3})?$
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 20
+      required:
+      - material_name
+      - quantity
+      - unit
+    MethodEnum:
+      enum:
+      - GPS
+      - MANUAL
+      type: string
+      description: |-
+        * `GPS` - GPS Verified
+        * `MANUAL` - Manual Entry
+    NightShiftSession:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        project:
+          type: integer
+        shift_date:
+          type: string
+          format: date
+        supervisor:
+          type: integer
+        supervisor_name:
+          type: string
+          readOnly: true
+        start_time:
+          type: string
+          format: date-time
+          readOnly: true
+        end_time:
+          type: string
+          format: date-time
+          nullable: true
+        safety_checklist_signed:
+          type: boolean
+        checklist_notes:
+          type: string
+        work_completed:
+          type: string
+        status:
+          $ref: '#/components/schemas/NightShiftSessionStatusEnum'
+        approved_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        approved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - approved_at
+      - approved_by
+      - id
+      - project
+      - shift_date
+      - start_time
+      - supervisor
+      - supervisor_name
+    NightShiftSessionRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        shift_date:
+          type: string
+          format: date
+        supervisor:
+          type: integer
+        end_time:
+          type: string
+          format: date-time
+          nullable: true
+        safety_checklist_signed:
+          type: boolean
+        checklist_notes:
+          type: string
+        work_completed:
+          type: string
+        status:
+          $ref: '#/components/schemas/NightShiftSessionStatusEnum'
+      required:
+      - project
+      - shift_date
+      - supervisor
+    NightShiftSessionStatusEnum:
+      enum:
+      - IN_PROGRESS
+      - COMPLETED
+      - APPROVED
+      type: string
+      description: |-
+        * `IN_PROGRESS` - In Progress
+        * `COMPLETED` - Completed
+        * `APPROVED` - Approved
+    PaginatedAccountList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+    PaginatedAdvanceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Advance'
+    PaginatedAttendanceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attendance'
+    PaginatedAuditLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+    PaginatedDailyProgressReportList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyProgressReport'
+    PaginatedEmployeeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Employee'
+    PaginatedExpenseList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Expense'
+    PaginatedHolidayList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Holiday'
+    PaginatedInvitationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invitation'
+    PaginatedJournalEntryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalEntry'
+    PaginatedLaborGroupList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LaborGroup'
+    PaginatedNightShiftSessionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NightShiftSession'
+    PaginatedPayrollRunList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayrollRun'
+    PaginatedPayrollVoucherList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayrollVoucher'
+    PaginatedProjectList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+    PaginatedRunningCostBaselineList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunningCostBaseline'
+    PaginatedUserList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+    PaginatedVendorList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vendor'
+    PatchedAccountRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 10
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+        is_active:
+          type: boolean
+    PatchedAdvanceRequest:
+      type: object
+      properties:
+        employee:
+          type: integer
+        project:
+          type: integer
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        advance_date:
+          type: string
+          format: date
+        reason:
+          type: string
+        payment_mode:
+          type: string
+          minLength: 1
+          maxLength: 20
+    PatchedAttendanceRequest:
+      type: object
+      properties:
+        employee:
+          type: integer
+        project:
+          type: integer
+        date:
+          type: string
+          format: date
+        shift_type:
+          $ref: '#/components/schemas/ShiftTypeEnum'
+        status:
+          $ref: '#/components/schemas/AttendanceStatusEnum'
+        check_in_time:
+          type: string
+          format: date-time
+          nullable: true
+        check_out_time:
+          type: string
+          format: date-time
+          nullable: true
+        worked_hours:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          nullable: true
+        ot_hours:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        distance_m:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+        is_geofence_verified:
+          type: boolean
+        method:
+          $ref: '#/components/schemas/MethodEnum'
+        night_shift:
+          type: integer
+          nullable: true
+        remarks:
+          type: string
+    PatchedDailyProgressReportRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        report_date:
+          type: string
+          format: date
+        submitted_by:
+          type: integer
+        weather:
+          type: string
+          maxLength: 50
+        summary:
+          type: string
+          minLength: 1
+        issues:
+          type: string
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskProgressRequest'
+        materials:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterialUsageRequest'
+    PatchedEmployeeRequest:
+      type: object
+      properties:
+        employee_code:
+          type: string
+          minLength: 1
+          maxLength: 20
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 50
+        joining_date:
+          type: string
+          format: date
+          nullable: true
+        is_active:
+          type: boolean
+        trade:
+          $ref: '#/components/schemas/TradeEnum'
+        skill_level:
+          $ref: '#/components/schemas/SkillLevelEnum'
+        employment_type:
+          $ref: '#/components/schemas/EmploymentTypeEnum'
+        daily_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        ot_hourly_rate:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        monthly_salary:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        primary_project:
+          type: integer
+          nullable: true
+        group:
+          type: integer
+          nullable: true
+        bank_account_name:
+          type: string
+          maxLength: 150
+        bank_account_number:
+          type: string
+          maxLength: 50
+        bank_ifsc:
+          type: string
+          maxLength: 30
+        upi_id:
+          type: string
+          maxLength: 100
+        id_proof_type:
+          $ref: '#/components/schemas/IdProofTypeEnum'
+        id_proof_number:
+          type: string
+          maxLength: 100
+    PatchedExpenseRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        vendor:
+          type: integer
+          nullable: true
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        description:
+          type: string
+          minLength: 1
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        expense_date:
+          type: string
+          format: date
+        payment_mode:
+          $ref: '#/components/schemas/PaymentModeEnum'
+        invoice_number:
+          type: string
+          maxLength: 50
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        receipt:
+          type: string
+          format: binary
+          nullable: true
+        is_recurring:
+          type: boolean
+        details: {}
+    PatchedHolidayRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+          nullable: true
+          description: Null indicates organization-wide holiday
+        date:
+          type: string
+          format: date
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        holiday_type:
+          $ref: '#/components/schemas/HolidayTypeEnum'
+        is_paid:
+          type: boolean
+    PatchedInvitationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        name:
+          type: string
+          maxLength: 150
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+    PatchedLaborGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        project:
+          type: integer
+        leader:
+          type: integer
+          nullable: true
+        is_active:
+          type: boolean
+    PatchedNightShiftSessionRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        shift_date:
+          type: string
+          format: date
+        supervisor:
+          type: integer
+        end_time:
+          type: string
+          format: date-time
+          nullable: true
+        safety_checklist_signed:
+          type: boolean
+        checklist_notes:
+          type: string
+        work_completed:
+          type: string
+        status:
+          $ref: '#/components/schemas/NightShiftSessionStatusEnum'
+    PatchedPayrollRunRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        notes:
+          type: string
+    PatchedProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        code:
+          type: string
+          minLength: 1
+          maxLength: 30
+        client_name:
+          type: string
+          maxLength: 200
+        location:
+          type: string
+        status:
+          $ref: '#/components/schemas/ProjectStatusEnum'
+        start_date:
+          type: string
+          format: date
+          nullable: true
+        expected_end_date:
+          type: string
+          format: date
+          nullable: true
+        estimated_budget:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        geofence_lat:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        geofence_lng:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        geofence_radius_m:
+          type: integer
+          maximum: 5000
+          minimum: 20
+          description: Radius of geofence circle in meters (20 to 5000)
+    PatchedRunningCostBaselineRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        utility_type:
+          $ref: '#/components/schemas/UtilityTypeEnum'
+        monthly_baseline:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+    PatchedUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 50
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+    PatchedVendorRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        contact_person:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 50
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        address:
+          type: string
+        tax_id:
+          type: string
+          maxLength: 50
+        is_active:
+          type: boolean
+    PaymentModeEnum:
+      enum:
+      - CASH
+      - UPI
+      - BANK_TRANSFER
+      - CREDIT
+      type: string
+      description: |-
+        * `CASH` - Cash
+        * `UPI` - UPI
+        * `BANK_TRANSFER` - Bank Transfer
+        * `CREDIT` - Credit
+    PayrollRun:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        project:
+          type: integer
+        project_name:
+          type: string
+          readOnly: true
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        status:
+          allOf:
+          - $ref: '#/components/schemas/PayrollRunStatusEnum'
+          readOnly: true
+        created_by:
+          type: integer
+          readOnly: true
+        approved_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        approved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        total_gross:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        total_advances:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        total_net:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        journal_entry:
+          type: integer
+          readOnly: true
+          nullable: true
+        notes:
+          type: string
+        vouchers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayrollVoucher'
+          readOnly: true
+      required:
+      - approved_at
+      - approved_by
+      - created_by
+      - id
+      - journal_entry
+      - period_end
+      - period_start
+      - project
+      - project_name
+      - status
+      - total_advances
+      - total_gross
+      - total_net
+      - vouchers
+    PayrollRunRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        notes:
+          type: string
+      required:
+      - period_end
+      - period_start
+      - project
+    PayrollRunStatusEnum:
+      enum:
+      - DRAFT
+      - APPROVED
+      - PAID
+      - CANCELLED
+      type: string
+      description: |-
+        * `DRAFT` - Draft
+        * `APPROVED` - Approved
+        * `PAID` - Paid
+        * `CANCELLED` - Cancelled
+    PayrollVoucher:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        voucher_number:
+          type: string
+          readOnly: true
+        employee:
+          type: integer
+          readOnly: true
+        employee_code:
+          type: string
+          readOnly: true
+        employee_name:
+          type: string
+          readOnly: true
+        days_present:
+          type: integer
+          readOnly: true
+        half_days:
+          type: integer
+          readOnly: true
+        paid_holidays:
+          type: integer
+          readOnly: true
+        ot_hours:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,2})?$
+          readOnly: true
+        night_shifts:
+          type: integer
+          readOnly: true
+        daily_rate_used:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        ot_rate_used:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        basic_pay:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        ot_pay:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        night_allowance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        gross_pay:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        advances_deducted:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        net_pay:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        payment_mode:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/PayrollVoucherStatusEnum'
+          readOnly: true
+        paid_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        payment_reference:
+          type: string
+          readOnly: true
+      required:
+      - advances_deducted
+      - basic_pay
+      - daily_rate_used
+      - days_present
+      - employee
+      - employee_code
+      - employee_name
+      - gross_pay
+      - half_days
+      - id
+      - net_pay
+      - night_allowance
+      - night_shifts
+      - ot_hours
+      - ot_pay
+      - ot_rate_used
+      - paid_at
+      - paid_holidays
+      - payment_mode
+      - payment_reference
+      - status
+      - voucher_number
+    PayrollVoucherStatusEnum:
+      enum:
+      - PENDING
+      - PAID
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `PAID` - Paid
+    Project:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        code:
+          type: string
+          maxLength: 30
+        client_name:
+          type: string
+          maxLength: 200
+        location:
+          type: string
+        status:
+          $ref: '#/components/schemas/ProjectStatusEnum'
+        start_date:
+          type: string
+          format: date
+          nullable: true
+        expected_end_date:
+          type: string
+          format: date
+          nullable: true
+        estimated_budget:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        actual_spend:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+        progress_percent:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          readOnly: true
+        geofence_lat:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        geofence_lng:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        geofence_radius_m:
+          type: integer
+          maximum: 5000
+          minimum: 20
+          description: Radius of geofence circle in meters (20 to 5000)
+        budget_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetCategory'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - actual_spend
+      - budget_categories
+      - code
+      - created_at
+      - id
+      - name
+      - progress_percent
+      - updated_at
+    ProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        code:
+          type: string
+          minLength: 1
+          maxLength: 30
+        client_name:
+          type: string
+          maxLength: 200
+        location:
+          type: string
+        status:
+          $ref: '#/components/schemas/ProjectStatusEnum'
+        start_date:
+          type: string
+          format: date
+          nullable: true
+        expected_end_date:
+          type: string
+          format: date
+          nullable: true
+        estimated_budget:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        geofence_lat:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        geofence_lng:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        geofence_radius_m:
+          type: integer
+          maximum: 5000
+          minimum: 20
+          description: Radius of geofence circle in meters (20 to 5000)
+      required:
+      - code
+      - name
+    ProjectStatusEnum:
+      enum:
+      - PLANNING
+      - ACTIVE
+      - ON_HOLD
+      - COMPLETED
+      - ARCHIVED
+      type: string
+      description: |-
+        * `PLANNING` - Planning
+        * `ACTIVE` - Active
+        * `ON_HOLD` - On Hold
+        * `COMPLETED` - Completed
+        * `ARCHIVED` - Archived
+    ReferenceTypeEnum:
+      enum:
+      - EXPENSE
+      - VENDOR_PAYMENT
+      - ADVANCE
+      - PAYROLL
+      - MANUAL
+      - REVERSAL
+      type: string
+      description: |-
+        * `EXPENSE` - Expense
+        * `VENDOR_PAYMENT` - Vendor Payment
+        * `ADVANCE` - Advance
+        * `PAYROLL` - Payroll
+        * `MANUAL` - Manual
+        * `REVERSAL` - Reversal
+    RoleEnum:
+      enum:
+      - ORG_ADMIN
+      - PROJECT_MANAGER
+      - SITE_ENGINEER
+      - SUPERVISOR
+      - ACCOUNTANT
+      type: string
+      description: |-
+        * `ORG_ADMIN` - Org Admin
+        * `PROJECT_MANAGER` - Project Manager
+        * `SITE_ENGINEER` - Site Engineer
+        * `SUPERVISOR` - Supervisor
+        * `ACCOUNTANT` - Accountant
+    RunningCostBaseline:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        project:
+          type: integer
+        utility_type:
+          $ref: '#/components/schemas/UtilityTypeEnum'
+        monthly_baseline:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+      required:
+      - id
+      - monthly_baseline
+      - project
+      - utility_type
+    RunningCostBaselineRequest:
+      type: object
+      properties:
+        project:
+          type: integer
+        utility_type:
+          $ref: '#/components/schemas/UtilityTypeEnum'
+        monthly_baseline:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+      required:
+      - monthly_baseline
+      - project
+      - utility_type
+    ShiftTypeEnum:
+      enum:
+      - DAY
+      - NIGHT
+      type: string
+      description: |-
+        * `DAY` - Day Shift
+        * `NIGHT` - Night Shift
+    SideEnum:
+      enum:
+      - DR
+      - CR
+      type: string
+      description: |-
+        * `DR` - Debit
+        * `CR` - Credit
+    SitePhoto:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        image:
+          type: string
+          format: uri
+        caption:
+          type: string
+          maxLength: 200
+      required:
+      - id
+      - image
+    SitePhotoRequest:
+      type: object
+      properties:
+        image:
+          type: string
+          format: binary
+        caption:
+          type: string
+          maxLength: 200
+      required:
+      - image
+    SkillLevelEnum:
+      enum:
+      - UNSKILLED
+      - SEMI_SKILLED
+      - SKILLED
+      type: string
+      description: |-
+        * `UNSKILLED` - Unskilled
+        * `SEMI_SKILLED` - Semi-Skilled
+        * `SKILLED` - Skilled
+    TaskProgress:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        task_name:
+          type: string
+          maxLength: 200
+        percent_complete:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        notes:
+          type: string
+      required:
+      - id
+      - percent_complete
+      - task_name
+    TaskProgressRequest:
+      type: object
+      properties:
+        task_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        percent_complete:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        notes:
+          type: string
+      required:
+      - percent_complete
+      - task_name
+    TradeEnum:
+      enum:
+      - MASON
+      - CARPENTER
+      - ELECTRICIAN
+      - PLUMBER
+      - WELDER
+      - PAINTER
+      - HELPER
+      - OTHER
+      type: string
+      description: |-
+        * `MASON` - Mason
+        * `CARPENTER` - Carpenter
+        * `ELECTRICIAN` - Electrician
+        * `PLUMBER` - Plumber
+        * `WELDER` - Welder
+        * `PAINTER` - Painter
+        * `HELPER` - Helper
+        * `OTHER` - Other
+    TypeEnum:
+      enum:
+      - ASSET
+      - LIABILITY
+      - EQUITY
+      - REVENUE
+      - EXPENSE
+      type: string
+      description: |-
+        * `ASSET` - Asset
+        * `LIABILITY` - Liability
+        * `EQUITY` - Equity
+        * `REVENUE` - Revenue
+        * `EXPENSE` - Expense
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 50
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - id
+      - name
+    UserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 50
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+      required:
+      - name
+    UtilityTypeEnum:
+      enum:
+      - ELECTRICITY
+      - WATER
+      - SECURITY
+      - DUMPSTER
+      - OTHER
+      type: string
+      description: |-
+        * `ELECTRICITY` - Electricity
+        * `WATER` - Water
+        * `SECURITY` - Security
+        * `DUMPSTER` - Dumpster
+        * `OTHER` - Other
+    Vendor:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        contact_person:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 50
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        address:
+          type: string
+        tax_id:
+          type: string
+          maxLength: 50
+        is_active:
+          type: boolean
+        outstanding_balance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          readOnly: true
+      required:
+      - id
+      - name
+      - outstanding_balance
+    VendorRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        contact_person:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 50
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        address:
+          type: string
+        tax_id:
+          type: string
+          maxLength: 50
+        is_active:
+          type: boolean
+      required:
+      - name
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

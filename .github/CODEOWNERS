@@ -1,0 +1,19 @@
+# Team CODEOWNERS as defined in Section 12.1
+# Member A: core, accounts, audit, ledger, dashboard (+ infrastructure)
+/backend/core/ @member-a
+/backend/accounts/ @member-a
+/backend/audit/ @member-a
+/backend/ledger/ @member-a
+/backend/dashboard/ @member-a
+/backend/config/ @member-a
+
+# Member B: projects, workforce, attendance, progress
+/backend/projects/ @member-b
+/backend/workforce/ @member-b
+/backend/attendance/ @member-b
+/backend/progress/ @member-b
+
+# Member C: expenses, payroll, reports
+/backend/expenses/ @member-c
+/backend/payroll/ @member-c
+/backend/reports/ @member-c
