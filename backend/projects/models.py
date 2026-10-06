@@ -62,6 +62,7 @@ class Project(TenantModel):
     )
 
     class Meta:
+        ordering = ["-created_at"]
         unique_together = ("organization", "code")
         indexes = [
             models.Index(fields=["organization", "status"]),
@@ -81,6 +82,7 @@ class ProjectMembership(TenantModel):
     site_role = models.CharField(max_length=50, blank=True)
 
     class Meta:
+        ordering = ["-created_at"]
         unique_together = ("project", "user")
 
     def __str__(self):
@@ -95,6 +97,7 @@ class BudgetCategory(TenantModel):
     allocated_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
 
     class Meta:
+        ordering = ["-created_at"]
         unique_together = ("project", "name")
 
     def __str__(self):

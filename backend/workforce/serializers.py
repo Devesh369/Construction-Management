@@ -15,6 +15,7 @@ class LaborGroupSerializer(serializers.ModelSerializer):
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
+    employee_code = serializers.CharField(required=False, allow_blank=True, default="")
     effective_daily_rate = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
@@ -44,6 +45,20 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "id_proof_number",
         ]
         read_only_fields = ["id", "effective_daily_rate"]
+
+    def validate_primary_project(self, value):
+        request = self.context.get("request")
+        if value and request and request.user and request.user.is_authenticated:
+            if value.organization_id != request.user.organization_id:
+                raise serializers.ValidationError("Project does not exist.")
+        return value
+
+    def validate_group(self, value):
+        request = self.context.get("request")
+        if value and request and request.user and request.user.is_authenticated:
+            if value.organization_id != request.user.organization_id:
+                raise serializers.ValidationError("Labor group does not exist.")
+        return value
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

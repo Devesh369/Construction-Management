@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from projects.models import BudgetCategory, Project, ProjectMembership
@@ -19,8 +21,14 @@ class ProjectMembershipSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "project"]
 
 
+class AddMemberSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    site_role = serializers.CharField(max_length=50, required=False, allow_blank=True, default="")
+
+
 class ProjectSerializer(serializers.ModelSerializer):
     budget_categories = BudgetCategorySerializer(many=True, read_only=True)
+    warning = serializers.CharField(read_only=True, required=False)
 
     class Meta:
         model = Project
@@ -40,7 +48,52 @@ class ProjectSerializer(serializers.ModelSerializer):
             "geofence_lng",
             "geofence_radius_m",
             "budget_categories",
+            "warning",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "actual_spend", "progress_percent", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "actual_spend",
+            "progress_percent",
+            "warning",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate(self, attrs):
+        lat = attrs.get("geofence_lat", getattr(self.instance, "geofence_lat", None))
+        lng = attrs.get("geofence_lng", getattr(self.instance, "geofence_lng", None))
+
+        # Geofence needs both coordinates or none
+        if (lat is not None and lng is None) or (lat is None and lng is not None):
+            raise serializers.ValidationError(
+                {
+                    "geofence": "Both latitude and longitude must be provided for a geofence, or both omitted."
+                }
+            )
+
+        if lat is not None and not (Decimal("-90.0") <= lat <= Decimal("90.0")):
+            raise serializers.ValidationError(
+                {"geofence_lat": "Latitude must be between -90 and 90 degrees."}
+            )
+
+        if lng is not None and not (Decimal("-180.0") <= lng <= Decimal("180.0")):
+            raise serializers.ValidationError(
+                {"geofence_lng": "Longitude must be between -180 and 180 degrees."}
+            )
+
+        return attrs
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Check if category allocation matches estimated budget; warn if difference exists
+        total_allocated = sum(c.allocated_amount for c in instance.budget_categories.all())
+        if (
+            instance.estimated_budget > Decimal("0.00")
+            and total_allocated != instance.estimated_budget
+        ):
+            data["warning"] = (
+                f"Total category allocation ({total_allocated}) differs from estimated budget ({instance.estimated_budget})."
+            )
+        return data

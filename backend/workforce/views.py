@@ -11,7 +11,13 @@ from core.permissions import IsTenantUser
 from core.views import TenantViewSet
 from workforce.models import Employee, LaborGroup
 from workforce.serializers import EmployeeSerializer, LaborGroupSerializer
-from workforce.services import generate_employee_code
+from workforce.services import (
+    add_gang_members,
+    create_employee,
+    delete_labor_group,
+    remove_gang_member,
+    update_employee,
+)
 
 
 class EmployeeViewSet(TenantViewSet):
@@ -27,16 +33,31 @@ class EmployeeViewSet(TenantViewSet):
         return Employee.objects.filter(
             organization=self.request.user.organization,
             deleted_at__isnull=True,
-        )
+        ).select_related("primary_project", "group")
 
-    def perform_create(self, serializer):
-        code = serializer.validated_data.get("employee_code")
-        if not code:
-            code = generate_employee_code(self.request.user.organization)
-        serializer.save(
-            organization=self.request.user.organization,
-            employee_code=code,
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        employee = create_employee(
+            org=request.user.organization,
+            data=serializer.validated_data,
+            user=request.user,
+            request=request,
         )
+        return Response(self.get_serializer(employee).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        updated = update_employee(
+            employee=instance,
+            data=serializer.validated_data,
+            user=request.user,
+            request=request,
+        )
+        return Response(self.get_serializer(updated).data)
 
 
 class LaborGroupViewSet(TenantViewSet):
@@ -52,24 +73,20 @@ class LaborGroupViewSet(TenantViewSet):
         return LaborGroup.objects.filter(
             organization=self.request.user.organization,
             deleted_at__isnull=True,
-        )
+        ).select_related("project", "leader")
+
+    def perform_destroy(self, instance):
+        delete_labor_group(instance)
 
     @action(detail=True, methods=["post"], url_path="members")
     def add_members(self, request, pk=None):
         group = self.get_object()
         employee_ids = request.data.get("employee_ids", [])
-        Employee.objects.filter(
-            organization=request.user.organization,
-            id__in=employee_ids,
-        ).update(group=group)
-        return Response({"status": "members_added", "count": len(employee_ids)})
+        updated_count = add_gang_members(group, employee_ids)
+        return Response({"status": "members_added", "count": updated_count})
 
     @action(detail=True, methods=["delete"], url_path="members/(?P<employee_id>[^/.]+)")
     def remove_member(self, request, pk=None, employee_id=None):
         group = self.get_object()
-        Employee.objects.filter(
-            organization=request.user.organization,
-            group=group,
-            id=employee_id,
-        ).update(group=None)
+        remove_gang_member(group, int(employee_id))
         return Response(status=status.HTTP_204_NO_CONTENT)

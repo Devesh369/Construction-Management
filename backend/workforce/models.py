@@ -56,6 +56,9 @@ class LaborGroup(TenantModel):
     )
     is_active = models.BooleanField(default=True)
 
+    class Meta:
+        ordering = ["-created_at"]
+
     def __str__(self):
         return f"{self.name} ({self.project.code})"
 
@@ -109,6 +112,7 @@ class Employee(TenantModel):
     )
 
     class Meta:
+        ordering = ["-created_at"]
         unique_together = ("organization", "employee_code")
         indexes = [
             models.Index(fields=["organization", "trade"]),

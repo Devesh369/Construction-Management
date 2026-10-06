@@ -64,5 +64,7 @@ class ProjectScopedMixin:
         from projects.services import user_project_ids
 
         allowed_ids = user_project_ids(user)
-        field_filter = {f"{self.project_field_name}__id__in": allowed_ids}
+        if queryset.model.__name__ == "Project" or self.project_field_name in ("self", "id"):
+            return queryset.filter(id__in=allowed_ids)
+        field_filter = {f"{self.project_field_name}_id__in": allowed_ids}
         return queryset.filter(**field_filter)

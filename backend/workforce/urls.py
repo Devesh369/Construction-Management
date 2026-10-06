@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from workforce.views import EmployeeViewSet, LaborGroupViewSet
 
-router = DefaultRouter()
+router = DefaultRouter(trailing_slash=False)
 router.register(r"employees", EmployeeViewSet, basename="employees")
 router.register(r"labor-groups", LaborGroupViewSet, basename="labor-groups")
 
