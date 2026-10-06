@@ -40,6 +40,7 @@ class Account(TenantModel):
     is_active = models.BooleanField(default=True)
 
     class Meta:
+        ordering = ["code"]
         unique_together = ("organization", "code")
         indexes = [
             models.Index(fields=["organization", "code"]),
@@ -106,6 +107,7 @@ class JournalLine(ImmutableTenantModel):
     memo = models.TextField(blank=True)
 
     class Meta:
+        ordering = ["id"]
         indexes = [
             models.Index(fields=["entry", "account"]),
         ]

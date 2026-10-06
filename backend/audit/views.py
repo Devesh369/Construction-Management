@@ -5,6 +5,7 @@ Audit trail views. Read-only for ORG_ADMIN.
 from rest_framework import mixins, viewsets
 from rest_framework.permissions import IsAuthenticated
 
+from audit.filters import AuditLogFilter
 from audit.models import AuditLog
 from audit.serializers import AuditLogSerializer
 from core.permissions import IsTenantUser, roles_required
@@ -23,7 +24,7 @@ class AuditLogViewSet(
 
     serializer_class = AuditLogSerializer
     permission_classes = [IsAuthenticated, IsTenantUser, roles_required(Role.ORG_ADMIN)]
-    filterset_fields = ["action", "resource_type", "resource_id"]
+    filterset_class = AuditLogFilter
     search_fields = ["action", "resource_type", "resource_id", "actor__email"]
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]

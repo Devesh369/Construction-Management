@@ -9,11 +9,40 @@ from decimal import Decimal
 
 from audit.models import AuditLog
 
+SENSITIVE_KEYS = {
+    "password",
+    "password_hash",
+    "token",
+    "token_hash",
+    "access",
+    "refresh",
+    "secret",
+    "bank_account_number",
+    "id_proof_number",
+}
+
+
+def _mask_sensitive(key: str, value):
+    """Mask sensitive values (passwords, tokens, bank accounts, ID numbers)."""
+    if value is None:
+        return None
+    key_lower = key.lower()
+    if any(s in key_lower for s in SENSITIVE_KEYS):
+        val_str = str(value)
+        if len(val_str) > 4:
+            return f"***{val_str[-4:]}"
+        return "***REDACTED***"
+    return value
+
 
 def _make_json_safe(data):
-    """Recursively convert Decimals, dates, and non-primitives to JSON-serializable types."""
+    """Recursively convert Decimals, dates, and non-primitives to JSON-serializable types with sensitive masking."""
     if isinstance(data, dict):
-        return {k: _make_json_safe(v) for k, v in data.items()}
+        cleaned = {}
+        for k, v in data.items():
+            masked_v = _mask_sensitive(k, v)
+            cleaned[k] = _make_json_safe(masked_v)
+        return cleaned
     elif isinstance(data, list):
         return [_make_json_safe(item) for item in data]
     elif isinstance(data, Decimal):
