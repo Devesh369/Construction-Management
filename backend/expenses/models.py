@@ -61,9 +61,13 @@ class Vendor(TenantModel):
         from django.db.models import Sum
 
         credit_expenses = self.expenses.filter(
-            status=ExpenseStatus.APPROVED, payment_mode=PaymentMode.CREDIT
+            status=ExpenseStatus.APPROVED,
+            payment_mode=PaymentMode.CREDIT,
+            deleted_at__isnull=True,
         ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-        payments = self.payments.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        payments = self.payments.filter(deleted_at__isnull=True).aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0.00")
         return q2(credit_expenses - payments)
 
 
@@ -157,6 +161,7 @@ class RunningCostBaseline(TenantModel):
 
     class Meta:
         unique_together = ("project", "utility_type")
+        ordering = ["id"]
 
     def __str__(self):
         return f"{self.project.code} {self.utility_type} baseline: {self.monthly_baseline}"
