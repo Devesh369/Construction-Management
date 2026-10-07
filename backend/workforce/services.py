@@ -100,9 +100,8 @@ def update_employee(employee: Employee, data: dict, user, request=None) -> Emplo
             setattr(employee, field, value)
 
         # Validate rates
-        if (
-            employee.employment_type == EmploymentType.DAILY_WAGE
-            and employee.daily_rate <= Decimal("0.00")
+        if employee.employment_type == EmploymentType.DAILY_WAGE and employee.daily_rate <= Decimal(
+            "0.00"
         ):
             # Only enforce if rate was explicitly supplied
             if "daily_rate" in data:

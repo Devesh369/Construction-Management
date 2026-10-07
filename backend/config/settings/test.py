@@ -6,6 +6,7 @@ from .base import *  # noqa: F403
 from .base import REST_FRAMEWORK  # noqa: F401
 
 DEBUG = False
+ALLOWED_HOSTS = ["*"]
 SECRET_KEY = "django-insecure-test-key-for-running-pytest-suite-only-12345"
 
 # Password hashing speedup for tests
