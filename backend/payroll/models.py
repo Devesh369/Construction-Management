@@ -60,6 +60,9 @@ class Advance(TenantModel):
     def remaining_amount(self) -> Decimal:
         return self.amount - self.adjusted_amount
 
+    class Meta:
+        ordering = ["-advance_date", "-id"]
+
     def __str__(self):
         return f"{self.employee.employee_code} Advance: {self.amount} ({self.status})"
 
@@ -139,6 +142,9 @@ class PayrollVoucher(TenantModel):
     )
     paid_at = models.DateTimeField(null=True, blank=True)
     payment_reference = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["id"]
 
     def __str__(self):
         return f"{self.voucher_number}: {self.employee.full_name} - Net: {self.net_pay}"

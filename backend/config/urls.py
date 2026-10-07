@@ -30,6 +30,7 @@ urlpatterns = [
                 path("", include("attendance.urls")),
                 path("", include("progress.urls")),
                 path("", include("expenses.urls")),
+                path("payroll/", include("payroll.urls")),
                 path("", include("payroll.urls")),
                 path("ledger/", include("ledger.urls")),
                 path("", include("audit.urls")),
