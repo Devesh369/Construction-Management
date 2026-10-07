@@ -1,9 +1,9 @@
 import React from 'react';
-import { RefreshCw, Smartphone, Monitor, ShieldCheck, Building } from 'lucide-react';
+import { RefreshCw, Building } from 'lucide-react';
 import { useAuth, DEMO_USERS } from '../context/AuthContext';
 
 export const Topbar = ({ projects = [], selectedProjectId, setSelectedProjectId, onRefresh, isRefreshing }) => {
-  const { user, quickLogin, activeMode, setActiveMode } = useAuth();
+  const { user, quickLogin } = useAuth();
 
   return (
     <header className="topbar">
@@ -39,7 +39,7 @@ export const Topbar = ({ projects = [], selectedProjectId, setSelectedProjectId,
         )}
       </div>
 
-      {/* Right side: Persona Switcher & Mode Switch */}
+      {/* Right side: Persona Switcher */}
       <div className="topbar-right">
         {/* Persona quick switch */}
         <div className="persona-switcher" title="Instant Role Persona Switcher (Seed Data)">
@@ -60,25 +60,6 @@ export const Topbar = ({ projects = [], selectedProjectId, setSelectedProjectId,
             );
           })}
         </div>
-
-        {/* Portal vs PWA toggle button */}
-        <button
-          onClick={() => setActiveMode(activeMode === 'admin' ? 'field' : 'admin')}
-          className="btn btn-secondary btn-sm"
-          style={{ borderColor: activeMode === 'field' ? 'var(--accent-amber)' : 'var(--border-medium)' }}
-        >
-          {activeMode === 'admin' ? (
-            <>
-              <Smartphone size={14} color="var(--accent-amber)" />
-              <span>Mobile PWA</span>
-            </>
-          ) : (
-            <>
-              <Monitor size={14} color="var(--primary)" />
-              <span>Admin Portal</span>
-            </>
-          )}
-        </button>
       </div>
     </header>
   );

@@ -15,7 +15,6 @@ export const DEMO_USERS = [
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(getStoredUser());
   const [loading, setLoading] = useState(true);
-  const [activeMode, setActiveMode] = useState('admin'); // 'admin' | 'field'
 
   // Hydrate user session on mount
   useEffect(() => {
@@ -29,9 +28,6 @@ export const AuthProvider = ({ children }) => {
         const me = await api.auth.me();
         setUser(me);
         setStoredUser(me);
-        if (me.role === 'SUPERVISOR' || me.role === 'SITE_ENGINEER') {
-          setActiveMode('field');
-        }
       } catch (err) {
         console.warn('Session expired, clearing token', err);
         setToken(null);
@@ -51,11 +47,6 @@ export const AuthProvider = ({ children }) => {
       setToken(res.access);
       setUser(res.user);
       setStoredUser(res.user);
-      if (res.user.role === 'SUPERVISOR' || res.user.role === 'SITE_ENGINEER') {
-        setActiveMode('field');
-      } else {
-        setActiveMode('admin');
-      }
       return res.user;
     } finally {
       setLoading(false);
@@ -66,7 +57,6 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setUser(null);
     setStoredUser(null);
-    setActiveMode('admin');
   };
 
   const quickLogin = async (demoKey) => {
@@ -75,7 +65,6 @@ export const AuthProvider = ({ children }) => {
     return await login(target.email, target.password);
   };
 
-  const isFieldUser = user?.role === 'SUPERVISOR' || user?.role === 'SITE_ENGINEER';
   const isAdminOrPM = user?.role === 'ORG_ADMIN' || user?.role === 'PROJECT_MANAGER';
   const isFinance = user?.role === 'ORG_ADMIN' || user?.role === 'ACCOUNTANT';
 
@@ -87,12 +76,9 @@ export const AuthProvider = ({ children }) => {
         organization: user?.organization,
         isAuthenticated: Boolean(user),
         loading,
-        activeMode,
-        setActiveMode,
         login,
         logout,
         quickLogin,
-        isFieldUser,
         isAdminOrPM,
         isFinance,
       }}

@@ -621,68 +621,6 @@ select.form-control option {
   background: rgba(0, 0, 0, 0.15);
 }
 
-/* Field PWA Mobile Container */
-.field-pwa-container {
-  max-width: 520px;
-  margin: 0 auto;
-  min-height: 100vh;
-  background: var(--bg-surface);
-  border-left: 1px solid var(--border-subtle);
-  border-right: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  padding-bottom: 80px;
-}
-
-.pwa-header {
-  padding: 16px 20px;
-  background: var(--bg-surface-glass);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-subtle);
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.pwa-bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 520px;
-  background: var(--bg-card);
-  border-top: 1px solid var(--border-medium);
-  display: flex;
-  justify-content: space-around;
-  padding: 8px 6px;
-  z-index: 50;
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5);
-}
-
-.pwa-nav-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  background: transparent;
-  border: none;
-  color: var(--text-subtle);
-  font-size: 0.68rem;
-  font-weight: 600;
-  padding: 6px;
-  cursor: pointer;
-  flex: 1;
-}
-
-.pwa-nav-btn.active {
-  color: #60a5fa;
-}
-
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }

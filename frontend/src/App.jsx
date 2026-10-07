@@ -8,15 +8,15 @@ import { DashboardView } from './views/DashboardView';
 import { ProjectsView } from './views/ProjectsView';
 import { WorkforceView } from './views/WorkforceView';
 import { AttendanceView } from './views/AttendanceView';
+import { ProgressView } from './views/ProgressView';
 import { ExpensesView } from './views/ExpensesView';
 import { PayrollView } from './views/PayrollView';
 import { LedgerView } from './views/LedgerView';
 import { ReportsView } from './views/ReportsView';
 import { SettingsView } from './views/SettingsView';
-import { FieldPWAView } from './views/FieldPWAView';
 
 const AppContent = () => {
-  const { isAuthenticated, loading, activeMode } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
@@ -71,12 +71,6 @@ const AppContent = () => {
     return <LoginView />;
   }
 
-  // Render Field Worker PWA mode
-  if (activeMode === 'field') {
-    return <FieldPWAView key={refreshKey} />;
-  }
-
-  // Render Admin Web Portal
   return (
     <div className="app-container">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -106,6 +100,9 @@ const AppContent = () => {
           {activeTab === 'workforce' && <WorkforceView />}
           {activeTab === 'attendance' && (
             <AttendanceView selectedProjectId={selectedProjectId} />
+          )}
+          {activeTab === 'progress' && (
+            <ProgressView selectedProjectId={selectedProjectId} />
           )}
           {activeTab === 'expenses' && (
             <ExpensesView selectedProjectId={selectedProjectId} />

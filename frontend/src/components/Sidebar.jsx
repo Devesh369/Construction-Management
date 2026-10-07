@@ -4,12 +4,12 @@ import {
   Building2,
   Users,
   CalendarCheck,
+  Camera,
   Receipt,
   Wallet,
   BookOpen,
   FileText,
   Settings,
-  Smartphone,
   LogOut,
   HardHat,
 } from 'lucide-react';
@@ -17,14 +17,15 @@ import { useAuth } from '../context/AuthContext';
 import { Badge } from './Badge';
 
 export const Sidebar = ({ activeTab, setActiveTab }) => {
-  const { user, role, organization, logout, activeMode, setActiveMode } = useAuth();
+  const { user, role, organization, logout } = useAuth();
 
   const navItems = [
     { id: 'dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT', 'AUDITOR'] },
-    { id: 'projects', label: 'Projects & Sites', icon: Building2, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT', 'AUDITOR'] },
-    { id: 'workforce', label: 'Workforce & Gangs', icon: Users, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'] },
-    { id: 'attendance', label: 'Site Attendance', icon: CalendarCheck, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'] },
-    { id: 'expenses', label: 'Spend & Vendors', icon: Receipt, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'] },
+    { id: 'projects', label: 'Projects & Sites', icon: Building2, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR', 'ACCOUNTANT', 'AUDITOR'] },
+    { id: 'workforce', label: 'Workforce & Gangs', icon: Users, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SUPERVISOR', 'ACCOUNTANT'] },
+    { id: 'attendance', label: 'Site Attendance', icon: CalendarCheck, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SUPERVISOR', 'ACCOUNTANT'] },
+    { id: 'progress', label: 'DPR & Progress', icon: Camera, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR'] },
+    { id: 'expenses', label: 'Spend & Vendors', icon: Receipt, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR', 'ACCOUNTANT'] },
     { id: 'payroll', label: 'Payroll & Wages', icon: Wallet, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'] },
     { id: 'ledger', label: 'Financial Ledger', icon: BookOpen, roles: ['ORG_ADMIN', 'ACCOUNTANT', 'AUDITOR'] },
     { id: 'reports', label: 'Reports & Exports', icon: FileText, roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'] },
@@ -48,7 +49,7 @@ export const Sidebar = ({ activeTab, setActiveTab }) => {
 
       {/* Navigation List */}
       <nav className="sidebar-nav">
-        <div className="nav-section-title">Operations & Finance</div>
+        <div className="nav-section-title">Navigation Menu</div>
         {allowedNav.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -63,21 +64,6 @@ export const Sidebar = ({ activeTab, setActiveTab }) => {
             </button>
           );
         })}
-
-        {/* Quick Switch to Field PWA */}
-        <div className="nav-section-title" style={{ marginTop: '16px' }}>Site Field Mode</div>
-        <button
-          onClick={() => setActiveMode('field')}
-          className="nav-item"
-          style={{
-            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.05))',
-            color: '#fbbf24',
-            border: '1px solid rgba(245, 158, 11, 0.3)',
-          }}
-        >
-          <Smartphone size={19} />
-          <span>Launch Field PWA</span>
-        </button>
       </nav>
 
       {/* User Footer Profile */}
