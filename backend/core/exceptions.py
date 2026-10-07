@@ -77,6 +77,12 @@ class AccountLockedError(APIException):
     )
 
 
+class RowLimitExceededError(APIException):
+    status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+    default_code = "row_limit_exceeded"
+    default_detail = "Report exceeds maximum allowed limit of 10,000 rows. Please refine your date range or filters."
+
+
 def api_exception_handler(exc, context):
     """
     Standard DRF exception handler formatted as:

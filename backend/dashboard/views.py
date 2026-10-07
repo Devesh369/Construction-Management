@@ -1,50 +1,45 @@
 """
-Dashboard analytics views.
+Dashboard executive and project-level KPI views.
 """
 
 from rest_framework import status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.exceptions import NotFoundError
 from core.permissions import IsTenantUser, roles_required
 from core.roles import Role
+from dashboard.services import get_dashboard_overview, get_project_dashboard
 from projects.models import Project
-from workforce.models import Employee
 
 
 class DashboardOverviewView(views.APIView):
+    """
+    GET /api/v1/dashboard/overview
+    Returns executive KPIs and alerts.
+    Scoped by tenant organization, and for site-level roles (PM, ENG, SUP) scoped to assigned projects.
+    Cached for 60 seconds unless ?refresh=true is provided.
+    """
+
     permission_classes = [IsAuthenticated, IsTenantUser]
 
     def get(self, request):
-        org = request.user.organization
-        active_projects_count = Project.objects.filter(organization=org, status="ACTIVE").count()
-        active_workers_count = Employee.objects.filter(organization=org, is_active=True).count()
-
-        return Response(
-            {
-                "active_projects": active_projects_count,
-                "active_workers": active_workers_count,
-                "workers_on_site_today": 0,
-                "month_expenditure": "0.00",
-                "total_budget": "0.00",
-                "total_spend": "0.00",
-                "budget_utilization_percent": "0.00",
-                "burn_rate_daily": "0.00",
-                "pending_approvals": {
-                    "expenses": 0,
-                    "dpr": 0,
-                    "attendance_days_unlocked": 0,
-                    "payroll_runs": 0,
-                },
-                "spend_by_category": [],
-                "attendance_trend": [],
-                "alerts": [],
-                "projects": [],
-            }
+        force_refresh = request.query_params.get("refresh", "").lower() in ["true", "1"]
+        data = get_dashboard_overview(
+            org=request.user.organization,
+            user=request.user,
+            force_refresh=force_refresh,
         )
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class DashboardProjectDetailView(views.APIView):
+    """
+    GET /api/v1/dashboard/projects/{id}
+    Returns project-level drill-down analytics, budget status, spend breakdown, and recent DPRs.
+    Accessible to ORG_ADMIN, PROJECT_MANAGER (assigned), and ACCOUNTANT.
+    """
+
     permission_classes = [
         IsAuthenticated,
         IsTenantUser,
@@ -53,21 +48,11 @@ class DashboardProjectDetailView(views.APIView):
 
     def get(self, request, pk=None):
         try:
-            project = Project.objects.get(organization=request.user.organization, id=pk)
-        except Project.DoesNotExist:
-            return Response(
-                {"error": {"code": "not_found", "message": "Project not found."}},
-                status=status.HTTP_404_NOT_FOUND,
+            project = Project.objects.get(
+                organization=request.user.organization, id=pk, deleted_at__isnull=True
             )
+        except Project.DoesNotExist:
+            raise NotFoundError("Project not found.")
 
-        return Response(
-            {
-                "project_id": project.id,
-                "name": project.name,
-                "budget": str(project.estimated_budget),
-                "actual_spend": str(project.actual_spend),
-                "progress_percent": str(project.progress_percent),
-                "spend_by_category": [],
-                "latest_dprs": [],
-            }
-        )
+        data = get_project_dashboard(project=project, user=request.user)
+        return Response(data, status=status.HTTP_200_OK)
