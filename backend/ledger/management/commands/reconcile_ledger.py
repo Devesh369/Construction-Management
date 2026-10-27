@@ -24,10 +24,16 @@ class Command(BaseCommand):
             action="store_true",
             help="Display verbose output including detailed entry lists.",
         )
+        parser.add_argument(
+            "--fix",
+            action="store_true",
+            help="Automatically fix reconcilable discrepancies by posting missing double-entry journal entries.",
+        )
 
     def handle(self, *args, **options):
         org_filter = options.get("org")
         verbose = options.get("verbose")
+        auto_fix = options.get("fix")
 
         if org_filter:
             if org_filter.isdigit():
@@ -37,7 +43,7 @@ class Command(BaseCommand):
             if not orgs.exists():
                 raise CommandError(f"No organization found matching '{org_filter}'.")
         else:
-            orgs = Organization.objects.filter(deleted_at__isnull=True).order_by("id")
+            orgs = Organization.objects.filter(is_active=True).order_by("id")
 
         if not orgs.exists():
             self.stdout.write(self.style.WARNING("No organizations found in the database."))
@@ -56,6 +62,51 @@ class Command(BaseCommand):
             self.stdout.write("-" * 60)
 
             result = reconcile_ledger(org)
+
+            # Auto-fix unlinked advances if requested
+            if auto_fix and not result["subledger_reconciliation"]["worker_advances"]["is_reconciled"]:
+                from payroll.models import Advance
+                from ledger.services import post_journal_entry
+                from ledger.models import Side, ReferenceType
+
+                unlinked_advances = Advance.objects.filter(
+                    organization=org,
+                    journal_entry__isnull=True,
+                    deleted_at__isnull=True,
+                )
+                for unlinked in unlinked_advances:
+                    credit_acct = "1001" if unlinked.payment_mode == "CASH" else "1002"
+                    lines = [
+                        {
+                            "account_code": "1100",
+                            "side": Side.DR,
+                            "amount": unlinked.amount,
+                            "memo": f"Advance to {unlinked.employee.employee_code} ({unlinked.employee.full_name})",
+                        },
+                        {
+                            "account_code": credit_acct,
+                            "side": Side.CR,
+                            "amount": unlinked.amount,
+                            "memo": f"Advance disbursement via {unlinked.payment_mode}",
+                        },
+                    ]
+                    je = post_journal_entry(
+                        org=org,
+                        date=unlinked.advance_date,
+                        description=f"Advance #{unlinked.id} to {unlinked.employee.employee_code}",
+                        lines=lines,
+                        reference_type=ReferenceType.ADVANCE,
+                        reference_id=unlinked.id,
+                        user=unlinked.given_by,
+                        project=unlinked.project,
+                    )
+                    unlinked.journal_entry = je
+                    unlinked.save(update_fields=["journal_entry"])
+                    self.stdout.write(self.style.SUCCESS(f"  [FIXED] Posted journal entry {je.entry_number} for Advance #{unlinked.id}."))
+
+                # Re-run after fix
+                result = reconcile_ledger(org)
+
             is_healthy = result["is_healthy"]
 
             # 1. Journal Entries

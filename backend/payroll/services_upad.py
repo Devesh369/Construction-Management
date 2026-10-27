@@ -137,22 +137,22 @@ class UpadPaymentService:
             # 9. Sync into Advance model so worker balance and payroll runs reflect it immediately
             if pay_type in [PaymentType.ADVANCE, PaymentType.WITHDRAWAL] and not description.startswith("[ADV-"):
                 try:
-                    from payroll.models import Advance, AdvanceStatus
+                    from payroll.services import record_advance
                     from projects.models import Project
                     proj = payment.project or employee.primary_project or employee.assigned_projects.first()
                     if not proj:
                         proj = Project.objects.filter(organization=organization).first()
                     if proj:
-                        Advance.objects.create(
-                            organization=organization,
-                            employee=employee,
-                            project=proj,
-                            amount=amount,
-                            advance_date=date_from or timezone.now().date(),
-                            reason=f"[UPAD-{payment.id}] {description}".strip(),
-                            payment_mode=method.upper(),
-                            given_by=user,
-                            status=AdvanceStatus.OPEN,
+                        record_advance(
+                            user=user,
+                            data={
+                                "employee": employee,
+                                "project": proj,
+                                "amount": amount,
+                                "advance_date": date_from or timezone.now().date(),
+                                "reason": f"[UPAD-{payment.id}] {description}".strip(),
+                                "payment_mode": "CASH" if method == "cash" else "BANK_TRANSFER",
+                            },
                         )
                 except Exception:
                     pass
@@ -276,23 +276,24 @@ class UpadPaymentService:
         # Sync into Advance model if not already synced
         if payment.type in [PaymentType.ADVANCE, PaymentType.WITHDRAWAL] and not payment.description.startswith("[ADV-"):
             try:
-                from payroll.models import Advance, AdvanceStatus
+                from payroll.models import Advance
+                from payroll.services import record_advance
                 from projects.models import Project
                 if not Advance.objects.filter(reason__contains=f"[UPAD-{payment.id}]").exists():
                     proj = payment.project or payment.employee.primary_project or payment.employee.assigned_projects.first()
                     if not proj:
                         proj = Project.objects.filter(organization=organization).first()
                     if proj:
-                        Advance.objects.create(
-                            organization=organization,
-                            employee=payment.employee,
-                            project=proj,
-                            amount=payment.amount,
-                            advance_date=payment.date_from or timezone.now().date(),
-                            reason=f"[UPAD-{payment.id}] {payment.description}".strip(),
-                            payment_mode=payment.method.upper(),
-                            given_by=user,
-                            status=AdvanceStatus.OPEN,
+                        record_advance(
+                            user=user,
+                            data={
+                                "employee": payment.employee,
+                                "project": proj,
+                                "amount": payment.amount,
+                                "advance_date": payment.date_from or timezone.now().date(),
+                                "reason": f"[UPAD-{payment.id}] {payment.description}".strip(),
+                                "payment_mode": "CASH" if payment.method == "cash" else "BANK_TRANSFER",
+                            },
                         )
             except Exception:
                 pass
