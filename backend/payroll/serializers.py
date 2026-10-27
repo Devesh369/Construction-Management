@@ -10,6 +10,9 @@ from payroll.models import Advance, PayrollRun, PayrollVoucher
 
 
 class AdvanceSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True)
+    advance_date = serializers.DateField(required=True)
+    reason = serializers.CharField(max_length=255, required=True, allow_blank=False)
     employee_code = serializers.CharField(source="employee.employee_code", read_only=True)
     employee_name = serializers.CharField(source="employee.full_name", read_only=True)
     given_by_name = serializers.CharField(source="given_by.name", read_only=True)
@@ -110,6 +113,10 @@ class PayrollVoucherSerializer(serializers.ModelSerializer):
 
 
 class PayrollVoucherUpdateSerializer(serializers.ModelSerializer):
+    advances_deducted = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.00"), required=False
+    )
+
     class Meta:
         model = PayrollVoucher
         fields = ["advances_deducted", "payment_mode"]
@@ -163,8 +170,26 @@ class PayrollRunSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def validate(self, attrs):
+        start = attrs.get("period_start", getattr(self.instance, "period_start", None))
+        end = attrs.get("period_end", getattr(self.instance, "period_end", None))
+        if start and end and end < start:
+            raise serializers.ValidationError(
+                {"period_end": "Period end date cannot be earlier than period start date."}
+            )
+        return attrs
+
 
 class PayrollRunCreateSerializer(serializers.Serializer):
-    project_id = serializers.IntegerField()
-    period_start = serializers.DateField()
-    period_end = serializers.DateField()
+    project_id = serializers.IntegerField(required=True)
+    period_start = serializers.DateField(required=True)
+    period_end = serializers.DateField(required=True)
+
+    def validate(self, attrs):
+        start = attrs.get("period_start")
+        end = attrs.get("period_end")
+        if start and end and end < start:
+            raise serializers.ValidationError(
+                {"period_end": "Period end date cannot be earlier than period start date."}
+            )
+        return attrs

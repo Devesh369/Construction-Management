@@ -2111,7 +2111,6 @@ export const AttendanceView = ({ selectedProjectId }) => {
                 </label>
                 <input
                   type="date"
-                  required
                   value={holidayForm.date}
                   onChange={(e) =>
                     setHolidayForm((prev) => ({ ...prev, date: e.target.value }))
@@ -2126,7 +2125,6 @@ export const AttendanceView = ({ selectedProjectId }) => {
                 </label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. Diwali, Independence Day"
                   value={holidayForm.name}
                   onChange={(e) =>

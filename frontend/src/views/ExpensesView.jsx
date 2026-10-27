@@ -139,19 +139,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
 
   const handleCreateExpense = async (e) => {
     e.preventDefault();
-
-    // Credit mode validation checks
-    if (expenseForm.payment_mode === 'CREDIT') {
-      if (!expenseForm.vendor) {
-        alert('Please select an assigned vendor for Vendor Credit (Pay Later) purchase. If the vendor is not in the list, click "+ Add Vendor" to register them.');
-        return;
-      }
-      if (!expenseForm.due_date) {
-        alert('Please specify a credit due date for Vendor Credit purchases.');
-        return;
-      }
-    }
-
     setSubmitting(true);
     try {
       const formData = new FormData();
@@ -206,10 +193,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
 
   const handleCreateVendor = async (e) => {
     e.preventDefault();
-    if (!vendorForm.name.trim()) {
-      alert('Please enter a Vendor / Company Name.');
-      return;
-    }
     setSubmitting(true);
     try {
       const newVendor = await api.expenses.createVendor(vendorForm);
@@ -704,7 +687,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
           <div className="form-group">
             <label className="form-label">Site Project *</label>
             <select
-              required
               className="form-control"
               value={expenseForm.project}
               onChange={(e) => setExpenseForm({ ...expenseForm, project: e.target.value })}
@@ -738,7 +720,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
               <input
                 type="number"
                 step="0.01"
-                required
                 className="form-control"
                 placeholder="25000.00"
                 value={expenseForm.amount}
@@ -808,7 +789,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
             <label className="form-label">Description *</label>
             <input
               type="text"
-              required
               className="form-control"
               placeholder="e.g. 500 bags of OPC 53 Grade Cement"
               value={expenseForm.description}
@@ -844,7 +824,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
                 </button>
               </div>
               <select
-                required={expenseForm.payment_mode === 'CREDIT'}
                 className="form-control"
                 value={expenseForm.vendor}
                 onChange={(e) => setExpenseForm({ ...expenseForm, vendor: e.target.value })}
@@ -867,7 +846,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
               <label className="form-label">Credit Due Date *</label>
               <input
                 type="date"
-                required
                 className="form-control"
                 value={expenseForm.due_date}
                 onChange={(e) => setExpenseForm({ ...expenseForm, due_date: e.target.value })}
@@ -902,7 +880,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
           <div className="form-group">
             <label className="form-label">Project Allocation *</label>
             <select
-              required
               className="form-control"
               value={paymentForm.project}
               onChange={(e) => setPaymentForm({ ...paymentForm, project: e.target.value })}
@@ -919,7 +896,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
             <input
               type="number"
               step="0.01"
-              required
               max={selectedVendor?.outstanding_balance}
               className="form-control"
               placeholder={selectedVendor?.outstanding_balance}
@@ -944,7 +920,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
               <label className="form-label">Bank Reference / UTR *</label>
               <input
                 type="text"
-                required
                 className="form-control"
                 placeholder="e.g. RTGS-AXIS-99210"
                 value={paymentForm.reference}
@@ -980,7 +955,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
           <div className="form-group">
             <label className="form-label">Project *</label>
             <select
-              required
               className="form-control"
               value={runningCostForm.project}
               onChange={(e) => setRunningCostForm({ ...runningCostForm, project: e.target.value })}
@@ -997,7 +971,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
               <label className="form-label">Date *</label>
               <input
                 type="date"
-                required
                 max={new Date().toISOString().split('T')[0]}
                 className="form-control"
                 value={runningCostForm.date}
@@ -1010,7 +983,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
                 type="number"
                 step="0.01"
                 min="0.01"
-                required
                 className="form-control"
                 placeholder="2500.00"
                 value={runningCostForm.amount}
@@ -1038,7 +1010,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
             <label className="form-label">Expense Description *</label>
             <input
               type="text"
-              required
               className="form-control"
               placeholder="e.g. 5 bags cement, fuel for mixer, snacks for labor"
               value={runningCostForm.description}
@@ -1064,7 +1035,6 @@ export const ExpensesView = ({ selectedProjectId }) => {
             <label className="form-label">Vendor / Company Name *</label>
             <input
               type="text"
-              required
               className="form-control"
               placeholder="e.g. Mahalaxmi Cement & Steels"
               value={vendorForm.name}

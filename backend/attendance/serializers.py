@@ -27,6 +27,12 @@ class AttendanceSerializer(serializers.ModelSerializer):
     )
     earning = serializers.SerializerMethodField()
     project_name = serializers.CharField(source="project.name", read_only=True)
+    worked_hours = serializers.DecimalField(
+        max_digits=4, decimal_places=2, min_value=Decimal("0.00"), max_value=Decimal("24.00"), required=False
+    )
+    ot_hours = serializers.DecimalField(
+        max_digits=4, decimal_places=2, min_value=Decimal("0.00"), max_value=Decimal("24.00"), required=False
+    )
 
     class Meta:
         model = Attendance
@@ -98,7 +104,7 @@ class BatchRecordItemSerializer(serializers.Serializer):
         choices=AttendanceStatus.choices, default=AttendanceStatus.PRESENT
     )
     ot_hours = serializers.DecimalField(
-        max_digits=5, decimal_places=2, default=Decimal("0.00"), required=False
+        max_digits=5, decimal_places=2, min_value=Decimal("0.00"), default=Decimal("0.00"), required=False
     )
     remarks = serializers.CharField(required=False, allow_blank=True, default="")
 
@@ -128,9 +134,16 @@ class ApproveAttendanceSerializer(serializers.Serializer):
     date_to = serializers.DateField(required=False, allow_null=True)
 
     def validate(self, attrs):
-        if not attrs.get("date") and not (attrs.get("date_from") and attrs.get("date_to")):
+        date = attrs.get("date")
+        date_from = attrs.get("date_from")
+        date_to = attrs.get("date_to")
+        if not date and not (date_from and date_to):
             raise serializers.ValidationError(
                 "Either 'date' or both 'date_from' and 'date_to' must be provided."
+            )
+        if date_from and date_to and date_to < date_from:
+            raise serializers.ValidationError(
+                {"date_to": "date_to cannot be earlier than date_from."}
             )
         return attrs
 
@@ -147,6 +160,8 @@ class CloseDaySerializer(serializers.Serializer):
 
 
 class HolidaySerializer(serializers.ModelSerializer):
+    name = serializers.CharField(max_length=100, required=True, allow_blank=False)
+    date = serializers.DateField(required=True)
     project_name = serializers.CharField(source="project.name", read_only=True)
 
     class Meta:

@@ -20,6 +20,7 @@ from expenses.models import (
 
 
 class VendorSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(max_length=200, required=True, allow_blank=False)
     outstanding_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     phone = serializers.CharField(required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
@@ -62,6 +63,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source="created_by.name", read_only=True)
     approved_by_name = serializers.CharField(source="approved_by.name", read_only=True)
     spike_warning = serializers.SerializerMethodField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True)
+    description = serializers.CharField(required=True, allow_blank=False)
+    expense_date = serializers.DateField(required=True)
 
     class Meta:
         model = Expense
@@ -237,6 +241,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
 
 class VendorPaymentSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True)
+    payment_date = serializers.DateField(required=True)
+    reference = serializers.CharField(max_length=100, required=True, allow_blank=False)
     vendor_name = serializers.CharField(source="vendor.name", read_only=True)
     paid_by_name = serializers.CharField(source="paid_by.name", read_only=True)
 

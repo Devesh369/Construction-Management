@@ -65,32 +65,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      toast.error('Project Name is required');
-      return;
-    }
-    if (!formData.location.trim()) {
-      toast.error('Location is required');
-      return;
-    }
-    if (!formData.description.trim()) {
-      toast.error('Project Description is required');
-      return;
-    }
-    if (!formData.client_name.trim()) {
-      toast.error('Client Name is required');
-      return;
-    }
-    const cleanPhone = formData.client_phone.replace(/\D/g, '');
-    if (!cleanPhone) {
-      toast.error('Client Mobile Number is required');
-      return;
-    }
-    if (cleanPhone.length !== 10) {
-      toast.error('Client Mobile Number must be exactly 10 digits');
-      return;
-    }
-
     setSubmitting(true);
     try {
       // Auto-generate code if empty
@@ -305,7 +279,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Project Name *"
-              required
               placeholder="e.g. Marina Bay Highrise"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -321,7 +294,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Location *"
-              required
               icon={MapPin}
               placeholder="e.g. Plot 42, Sector 18, Navi Mumbai"
               value={formData.location}
@@ -341,7 +313,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Client Name *"
-              required
               icon={User}
               placeholder="e.g. Lodha Developers Ltd"
               value={formData.client_name}
@@ -349,7 +320,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
             />
             <Input
               label="Client Mobile Number *"
-              required
               icon={Phone}
               type="tel"
               inputMode="numeric"
@@ -379,7 +349,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
               Project Description *
             </label>
             <textarea
-              required
               rows={3}
               placeholder="Describe scope of work, key structural milestones, architecture, and contractual timelines..."
               value={formData.description}

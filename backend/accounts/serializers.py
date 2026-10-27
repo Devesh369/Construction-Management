@@ -49,7 +49,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False, min_length=6)
+    name = serializers.CharField(max_length=150, required=True, allow_blank=False)
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        min_length=6,
+        error_messages={"min_length": "Password must be at least 6 characters long."},
+    )
 
     def validate_phone(self, value):
         from core.validators import validate_mobile_10_digits
@@ -71,12 +78,26 @@ class InvitationSerializer(serializers.ModelSerializer):
 
 
 class CreateInvitationSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=True)
     name = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
-    role = serializers.ChoiceField(choices=Role.choices)
+    role = serializers.ChoiceField(choices=Role.choices, required=True)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(max_length=200, required=True, allow_blank=False)
+    workday_hours = serializers.DecimalField(
+        max_digits=4, decimal_places=2, min_value=Decimal("0.50"), max_value=Decimal("24.00"), required=False
+    )
+    half_day_hours = serializers.DecimalField(
+        max_digits=4, decimal_places=2, min_value=Decimal("0.50"), max_value=Decimal("24.00"), required=False
+    )
+    overtime_after_hours = serializers.DecimalField(
+        max_digits=4, decimal_places=2, min_value=Decimal("0.50"), max_value=Decimal("24.00"), required=False
+    )
+    expense_approval_limit = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.00"), required=False
+    )
+
     def validate_contact_phone(self, value):
         from core.validators import validate_mobile_10_digits
         if value:

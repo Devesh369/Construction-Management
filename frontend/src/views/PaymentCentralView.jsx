@@ -207,16 +207,6 @@ export const PaymentCentralView = () => {
   const handleRecordSubmit = async (e) => {
     if (e) e.preventDefault();
 
-    const amt = Number(recordForm.amount);
-    if (!amt || amt <= 0) {
-      toast.error('Please enter a valid amount');
-      return;
-    }
-    if (!recordForm.party_name.trim()) {
-      toast.error('Please specify the person or party name');
-      return;
-    }
-
     setSubmitting(true);
     try {
       const isOutgoing = recordForm.type === 'outgoing';
@@ -224,12 +214,12 @@ export const PaymentCentralView = () => {
         type: recordForm.type,
         category: recordForm.category,
         date: recordForm.date,
-        payer_name: isOutgoing ? (organization?.name || 'Company Account') : recordForm.party_name.trim(),
-        payee_name: isOutgoing ? recordForm.party_name.trim() : (organization?.name || 'Company Account'),
-        amount: amt.toFixed(2),
+        payer_name: isOutgoing ? (organization?.name || 'Company Account') : (recordForm.party_name?.trim() || ''),
+        payee_name: isOutgoing ? (recordForm.party_name?.trim() || '') : (organization?.name || 'Company Account'),
+        amount: recordForm.amount,
         method: recordForm.method,
         status: recordForm.status,
-        description: recordForm.description.trim(),
+        description: recordForm.description?.trim() || '',
       });
 
       toast.success('Transaction confirmed and recorded in central ledger!');
@@ -871,7 +861,6 @@ export const PaymentCentralView = () => {
                   </label>
                   <input
                     type="date"
-                    required
                     max={todayStr}
                     value={recordForm.date}
                     onChange={(e) => setRecordForm({ ...recordForm, date: e.target.value })}
@@ -889,7 +878,6 @@ export const PaymentCentralView = () => {
                   </label>
                   <input
                     type="text"
-                    required
                     placeholder="Select Employee / Recipient..."
                     value={recordForm.party_name}
                     onChange={(e) => setRecordForm({ ...recordForm, party_name: e.target.value })}
@@ -943,7 +931,6 @@ export const PaymentCentralView = () => {
                     </label>
                     <input
                       type="number"
-                      required
                       min="0.01"
                       step="0.01"
                       placeholder="0.00"

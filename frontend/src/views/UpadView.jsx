@@ -880,7 +880,6 @@ export const UpadView = ({ selectedProjectId }) => {
                     Employee *
                   </label>
                   <select
-                    required
                     value={processForm.employee_id}
                     onChange={(e) =>
                       setProcessForm({ ...processForm, employee_id: e.target.value })
@@ -937,7 +936,6 @@ export const UpadView = ({ selectedProjectId }) => {
                     Project *
                   </label>
                   <select
-                    required
                     value={processForm.project_id}
                     onChange={(e) =>
                       setProcessForm({ ...processForm, project_id: e.target.value })
@@ -961,7 +959,6 @@ export const UpadView = ({ selectedProjectId }) => {
                     </label>
                     <input
                       type="number"
-                      required
                       min="1"
                       step="1"
                       placeholder="e.g. 2000"
@@ -979,7 +976,6 @@ export const UpadView = ({ selectedProjectId }) => {
                     </label>
                     <input
                       type="date"
-                      required
                       max={todayStr}
                       value={processForm.date}
                       onChange={(e) =>
@@ -1048,7 +1044,6 @@ export const UpadView = ({ selectedProjectId }) => {
                   </label>
                   <input
                     type="text"
-                    required
                     placeholder="e.g. GPY કર્યા દવા માટે, કાળું એ લીધા"
                     value={processForm.description}
                     onChange={(e) =>

@@ -190,26 +190,8 @@ export const WorkforceView = () => {
 
   const handleAddEmployee = async (e) => {
     e.preventDefault();
-    if (!addForm.full_name.trim()) {
-      toast.error('Full Name is required');
-      return;
-    }
-    const cleanPhone = addForm.phone.replace(/\D/g, '');
-    if (!cleanPhone) {
-      toast.error('Mobile number is required');
-      return;
-    }
-    if (cleanPhone.length !== 10) {
-      toast.error('Mobile number must be exactly 10 digits');
-      return;
-    }
-    if (addForm.emergency_contact) {
-      const cleanEmerg = addForm.emergency_contact.replace(/\D/g, '');
-      if (cleanEmerg.length !== 10) {
-        toast.error('Emergency contact number must be exactly 10 digits');
-        return;
-      }
-    }
+    const cleanPhone = addForm.phone ? addForm.phone.replace(/\D/g, '') : '';
+    const cleanEmerg = addForm.emergency_contact ? addForm.emergency_contact.replace(/\D/g, '') : '';
 
     try {
       const payload = {
@@ -220,7 +202,7 @@ export const WorkforceView = () => {
         trade: addForm.role.toUpperCase(),
         daily_rate: addForm.daily_rate || '800.00',
         address: addForm.address.trim(),
-        emergency_contact: addForm.emergency_contact.trim(),
+        emergency_contact: cleanEmerg,
         joining_date: addForm.joining_date || null,
         bank_account_number: addForm.bank_account_number.trim(),
         bank_ifsc: addForm.bank_ifsc.trim(),
@@ -253,22 +235,8 @@ export const WorkforceView = () => {
     e.preventDefault();
     if (!selectedEmployee) return;
 
-    const cleanPhone = editForm.phone.replace(/\D/g, '');
-    if (!cleanPhone) {
-      toast.error('Mobile number is required');
-      return;
-    }
-    if (cleanPhone.length !== 10) {
-      toast.error('Mobile number must be exactly 10 digits');
-      return;
-    }
-    if (editForm.emergency_contact) {
-      const cleanEmerg = editForm.emergency_contact.replace(/\D/g, '');
-      if (cleanEmerg.length !== 10) {
-        toast.error('Emergency contact number must be exactly 10 digits');
-        return;
-      }
-    }
+    const cleanPhone = editForm.phone ? editForm.phone.replace(/\D/g, '') : '';
+    const cleanEmerg = editForm.emergency_contact ? editForm.emergency_contact.replace(/\D/g, '') : '';
 
     try {
       const payload = {
@@ -279,7 +247,7 @@ export const WorkforceView = () => {
         trade: editForm.role.toUpperCase(),
         daily_rate: editForm.daily_rate || '800.00',
         address: editForm.address.trim(),
-        emergency_contact: editForm.emergency_contact.trim(),
+        emergency_contact: cleanEmerg,
         joining_date: editForm.joining_date || null,
         bank_account_number: editForm.bank_account_number.trim(),
         bank_ifsc: editForm.bank_ifsc.trim(),
@@ -422,15 +390,11 @@ export const WorkforceView = () => {
 
   const handleCreateGang = async (e) => {
     e.preventDefault();
-    if (!gangForm.name.trim() || !gangForm.project) {
-      toast.error('Gang name and project are required');
-      return;
-    }
     setSubmittingGang(true);
     try {
       await api.workforce.createLaborGroup({
         name: gangForm.name.trim(),
-        project: Number(gangForm.project),
+        project: gangForm.project ? Number(gangForm.project) : null,
         leader: gangForm.leader ? Number(gangForm.leader) : null,
       });
       toast.success('Labor gang created successfully!');
@@ -503,7 +467,6 @@ export const WorkforceView = () => {
             <div>
               <Input
                 label="Full Name"
-                required
                 placeholder="Full name"
                 value={addForm.full_name}
                 onChange={(e) => setAddForm({ ...addForm, full_name: e.target.value })}
@@ -514,7 +477,6 @@ export const WorkforceView = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <Input
                 label="Mobile Number (10 digits) *"
-                required
                 type="tel"
                 maxLength={10}
                 placeholder="9876543210"
@@ -554,7 +516,6 @@ export const WorkforceView = () => {
 
               <Input
                 label="Daily Wage (₹)"
-                required
                 type="number"
                 step="0.01"
                 placeholder="800"
@@ -1051,7 +1012,6 @@ export const WorkforceView = () => {
                   label="Amount to Pay (₹) *"
                   type="number"
                   step="0.01"
-                  required
                   disabled={!hasAttendance}
                   placeholder="e.g. 3000"
                   value={payForm.amount}
@@ -1149,7 +1109,6 @@ export const WorkforceView = () => {
               label="Upad Amount (₹) *"
               type="number"
               step="0.01"
-              required
               placeholder="e.g. 1500"
               value={upadForm.amount}
               onChange={(e) => setUpadForm({ ...upadForm, amount: e.target.value })}
@@ -1158,7 +1117,6 @@ export const WorkforceView = () => {
             <Input
               label="Advance Date"
               type="date"
-              required
               max={todayStr}
               value={upadForm.advance_date}
               onChange={(e) => setUpadForm({ ...upadForm, advance_date: e.target.value })}
@@ -1281,13 +1239,11 @@ export const WorkforceView = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Full Name *"
-                required
                 value={editForm.full_name}
                 onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
               />
               <Input
                 label="Mobile Number (10 digits) *"
-                required
                 type="tel"
                 maxLength={10}
                 placeholder="9876543210"
@@ -1320,7 +1276,6 @@ export const WorkforceView = () => {
                 label={userRole === 'SUPERVISOR' ? 'Daily Wage (₹) (Read-only for Supervisors)' : 'Daily Wage (₹) *'}
                 type="number"
                 step="0.01"
-                required
                 disabled={userRole === 'SUPERVISOR'}
                 value={editForm.daily_rate}
                 onChange={(e) => setEditForm({ ...editForm, daily_rate: e.target.value })}
@@ -1615,12 +1570,10 @@ export const WorkforceView = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Input
                 placeholder="Gang Name (e.g. Masonry Team 1)"
-                required
                 value={gangForm.name}
                 onChange={(e) => setGangForm({ ...gangForm, name: e.target.value })}
               />
               <select
-                required
                 value={gangForm.project}
                 onChange={(e) => setGangForm({ ...gangForm, project: e.target.value })}
                 className="w-full rounded-xl border border-gray-300 dark:border-[var(--border-default)] bg-white dark:bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-primary)]"

@@ -1,11 +1,16 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from core.roles import Role
+from projects.models import Project
 from workforce.models import Employee, LaborGroup
 from workforce.services import get_employee_financials
 
 
 class LaborGroupSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(max_length=100, required=True, allow_blank=False)
+    project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all(), required=True)
     leader_name = serializers.CharField(source="leader.full_name", read_only=True)
     member_count = serializers.IntegerField(source="members.count", read_only=True)
 
@@ -16,6 +21,8 @@ class LaborGroupSerializer(serializers.ModelSerializer):
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(max_length=150, required=True, allow_blank=False)
+    phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
     employee_code = serializers.CharField(required=False, allow_blank=True, default="")
     effective_daily_rate = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     role = serializers.CharField(required=False, allow_blank=True, default="Karigar")
@@ -23,7 +30,15 @@ class EmployeeSerializer(serializers.ModelSerializer):
     address = serializers.CharField(required=False, allow_blank=True, default="")
     emergency_contact = serializers.CharField(required=False, allow_blank=True, default="")
     bank_name = serializers.CharField(required=False, allow_blank=True, default="")
-    daily_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=800.00)
+    daily_rate = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=Decimal("0.00"), required=False, default=Decimal("800.00")
+    )
+    ot_hourly_rate = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=Decimal("0.00"), required=False, default=Decimal("0.00")
+    )
+    monthly_salary = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=Decimal("0.00"), required=False, default=Decimal("0.00")
+    )
     primary_project_name = serializers.CharField(source="primary_project.name", read_only=True)
     trade = serializers.CharField(required=False, default="HELPER")
 

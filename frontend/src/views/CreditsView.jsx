@@ -454,7 +454,6 @@ export const CreditsView = () => {
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Credit Amount *"
-              required
               type="number"
               step="0.01"
               icon={IndianRupee}
@@ -465,7 +464,6 @@ export const CreditsView = () => {
             <Input
               label="Credit Date *"
               type="date"
-              required
               value={creditForm.transaction_date}
               onChange={(e) => setCreditForm({ ...creditForm, transaction_date: e.target.value })}
             />
@@ -501,7 +499,6 @@ export const CreditsView = () => {
             </label>
             <input
               type="text"
-              required
               placeholder="e.g. Site Petty Cash Advance - Week 43"
               value={creditForm.description}
               onChange={(e) => setCreditForm({ ...creditForm, description: e.target.value })}
@@ -544,7 +541,6 @@ export const CreditsView = () => {
           <div className="grid grid-cols-2 gap-3">
             <Input
               label="Expense Amount *"
-              required
               type="number"
               step="0.01"
               icon={IndianRupee}
@@ -556,7 +552,6 @@ export const CreditsView = () => {
             <Input
               label="Date *"
               type="date"
-              required
               value={expenseForm.date}
               onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
             />
@@ -568,7 +563,6 @@ export const CreditsView = () => {
             </label>
             <input
               type="text"
-              required
               placeholder="e.g. Urgent hardware fasteners / Site lunch for emergency crew"
               value={expenseForm.description}
               onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}

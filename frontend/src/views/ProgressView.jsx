@@ -156,19 +156,6 @@ export const ProgressView = ({ selectedProjectId }) => {
   const handleCreateWorkEntry = async (e) => {
     if (e) e.preventDefault();
 
-    if (!entryProject) {
-      toast.error('Please select a project');
-      return;
-    }
-    if (!entryDate) {
-      toast.error('Please select a date');
-      return;
-    }
-    if (!entryDescription.trim()) {
-      toast.error("Please enter today's work description");
-      return;
-    }
-
     setSubmitting(true);
     try {
       await api.workEntries.create({
@@ -383,7 +370,6 @@ export const ProgressView = ({ selectedProjectId }) => {
                   </label>
                   <input
                     type="date"
-                    required
                     value={entryDate}
                     onChange={(e) => setEntryDate(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-default)] text-[var(--text-primary)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all cursor-pointer"
@@ -396,7 +382,6 @@ export const ProgressView = ({ selectedProjectId }) => {
                     Project
                   </label>
                   <select
-                    required
                     value={entryProject}
                     onChange={(e) => setEntryProject(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-default)] text-[var(--text-primary)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all cursor-pointer"
@@ -509,7 +494,6 @@ export const ProgressView = ({ selectedProjectId }) => {
                 </label>
                 <textarea
                   rows={4}
-                  required
                   placeholder="Describe today's work..."
                   value={entryDescription}
                   onChange={(e) => setEntryDescription(e.target.value)}
@@ -887,7 +871,6 @@ export const ProgressView = ({ selectedProjectId }) => {
                 </label>
                 <input
                   type="text"
-                  required
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-default)] text-[var(--text-primary)] text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all"

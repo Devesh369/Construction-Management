@@ -90,28 +90,6 @@ export const ProjectDetailModal = ({
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    if (!editForm.name.trim()) {
-      toast.error('Project Name is required');
-      return;
-    }
-    if (!editForm.location.trim()) {
-      toast.error('Location is required');
-      return;
-    }
-    if (!editForm.client_name.trim()) {
-      toast.error('Client Name is required');
-      return;
-    }
-    const cleanPhone = editForm.client_phone.replace(/\D/g, '');
-    if (!cleanPhone) {
-      toast.error('Client Mobile Number is required');
-      return;
-    }
-    if (cleanPhone.length !== 10) {
-      toast.error('Client Mobile Number must be exactly 10 digits');
-      return;
-    }
-
     setSaving(true);
     try {
       const payload = {
@@ -218,13 +196,11 @@ export const ProjectDetailModal = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Input
                   label="Project Name *"
-                  required
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                 />
                 <Input
                   label="Project Code *"
-                  required
                   value={editForm.code}
                   onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
                 />
@@ -249,7 +225,6 @@ export const ProjectDetailModal = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="Location *"
-                  required
                   icon={MapPin}
                   value={editForm.location}
                   onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
@@ -267,14 +242,12 @@ export const ProjectDetailModal = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="Client Name *"
-                  required
                   icon={User}
                   value={editForm.client_name}
                   onChange={(e) => setEditForm({ ...editForm, client_name: e.target.value })}
                 />
                 <Input
                   label="Client Mobile Number *"
-                  required
                   icon={Phone}
                   type="tel"
                   inputMode="numeric"
@@ -304,7 +277,6 @@ export const ProjectDetailModal = ({
                   Project Description *
                 </label>
                 <textarea
-                  required
                   rows={3}
                   value={editForm.description}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}

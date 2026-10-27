@@ -122,21 +122,6 @@ export const SettingsView = () => {
   // Direct User Creation
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    if (!userForm.name.trim() || !userForm.email.trim()) {
-      toast.error('Name and Email are required');
-      return;
-    }
-    if (userForm.password.length < 6) {
-      toast.error('Password must be at least 6 characters long');
-      return;
-    }
-
-    const cleanPhone = (userForm.phone || '').replace(/\D/g, '');
-    if (cleanPhone && cleanPhone.length !== 10) {
-      toast.error('Mobile number must be exactly 10 digits');
-      return;
-    }
-
     setSaving(true);
     try {
       await api.users.create({
@@ -426,7 +411,6 @@ export const SettingsView = () => {
                 </label>
                 <input
                   type="text"
-                  required
                   value={orgForm.name}
                   onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
@@ -439,7 +423,6 @@ export const SettingsView = () => {
                 </label>
                 <input
                   type="email"
-                  required
                   value={orgForm.contact_email}
                   onChange={(e) => setOrgForm({ ...orgForm, contact_email: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
@@ -455,7 +438,6 @@ export const SettingsView = () => {
                 <input
                   type="number"
                   step="0.5"
-                  required
                   value={orgForm.workday_hours}
                   onChange={(e) => setOrgForm({ ...orgForm, workday_hours: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
@@ -469,7 +451,6 @@ export const SettingsView = () => {
                 <input
                   type="number"
                   step="0.5"
-                  required
                   value={orgForm.half_day_hours}
                   onChange={(e) => setOrgForm({ ...orgForm, half_day_hours: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
@@ -483,7 +464,6 @@ export const SettingsView = () => {
                 <input
                   type="number"
                   step="0.5"
-                  required
                   value={orgForm.overtime_after_hours}
                   onChange={(e) => setOrgForm({ ...orgForm, overtime_after_hours: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
@@ -498,7 +478,6 @@ export const SettingsView = () => {
               <input
                 type="number"
                 step="100.00"
-                required
                 value={orgForm.expense_approval_limit}
                 onChange={(e) => setOrgForm({ ...orgForm, expense_approval_limit: e.target.value })}
                 className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
@@ -600,7 +579,6 @@ export const SettingsView = () => {
             </label>
             <input
               type="text"
-              required
               placeholder="e.g. Ramesh Patel"
               value={userForm.name}
               onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
@@ -614,7 +592,6 @@ export const SettingsView = () => {
             </label>
             <input
               type="email"
-              required
               placeholder="ramesh@construction.com"
               value={userForm.email}
               onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
@@ -645,8 +622,6 @@ export const SettingsView = () => {
             </label>
             <input
               type="password"
-              required
-              minLength={6}
               placeholder="••••••••••••"
               value={userForm.password}
               onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
@@ -702,7 +677,6 @@ export const SettingsView = () => {
             </label>
             <input
               type="text"
-              required
               placeholder="e.g. Rahul Verma"
               value={inviteForm.name}
               onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
@@ -716,7 +690,6 @@ export const SettingsView = () => {
             </label>
             <input
               type="email"
-              required
               placeholder="rahul@company.com"
               value={inviteForm.email}
               onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}

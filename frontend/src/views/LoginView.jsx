@@ -173,7 +173,6 @@ export const LoginView = () => {
                   </div>
                   <input
                     type="text"
-                    required
                     placeholder="e.g. Shree Ram Construction"
                     value={setupForm.org_name}
                     onChange={(e) => setSetupForm({ ...setupForm, org_name: e.target.value })}
@@ -198,7 +197,6 @@ export const LoginView = () => {
                   </div>
                   <input
                     type="text"
-                    required
                     placeholder="e.g. Naresh Patel"
                     value={setupForm.name}
                     onChange={(e) => setSetupForm({ ...setupForm, name: e.target.value })}
@@ -223,7 +221,6 @@ export const LoginView = () => {
                   </div>
                   <input
                     type="email"
-                    required
                     placeholder="admin@construction.com"
                     value={setupForm.email}
                     onChange={(e) => setSetupForm({ ...setupForm, email: e.target.value })}
@@ -248,8 +245,6 @@ export const LoginView = () => {
                   </div>
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={6}
                     placeholder="••••••••••••"
                     value={setupForm.password}
                     onChange={(e) => setSetupForm({ ...setupForm, password: e.target.value })}
@@ -312,7 +307,6 @@ export const LoginView = () => {
                   <input
                     id="login-email"
                     type="email"
-                    required
                     autoFocus
                     autoComplete="username"
                     placeholder="name@company.com"
@@ -343,7 +337,6 @@ export const LoginView = () => {
                   <input
                     id="login-password"
                     type={showPassword ? 'text' : 'password'}
-                    required
                     autoComplete="current-password"
                     placeholder="••••••••••••"
                     value={password}
