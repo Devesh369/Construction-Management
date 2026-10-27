@@ -19,6 +19,8 @@ class ProjectStatus(models.TextChoices):
 
 
 class Project(TenantModel):
+    """Construction site project entity tracking budget, spend, and progress."""
+
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=30)
     client_name = models.CharField(max_length=200, blank=True)
@@ -43,6 +45,8 @@ class Project(TenantModel):
     )
 
     class Meta:
+        verbose_name = "Project"
+        verbose_name_plural = "Projects"
         ordering = ["-created_at"]
         unique_together = ("organization", "code")
         indexes = [
@@ -63,6 +67,8 @@ class ProjectMembership(TenantModel):
     site_role = models.CharField(max_length=50, blank=True)
 
     class Meta:
+        verbose_name = "Project Membership"
+        verbose_name_plural = "Project Memberships"
         ordering = ["-created_at"]
         unique_together = ("project", "user")
 
@@ -78,6 +84,8 @@ class BudgetCategory(TenantModel):
     allocated_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
 
     class Meta:
+        verbose_name = "Budget Category"
+        verbose_name_plural = "Budget Categories"
         ordering = ["-created_at"]
         unique_together = ("project", "name")
 

@@ -29,6 +29,8 @@ class VoucherStatus(models.TextChoices):
 
 
 class Advance(TenantModel):
+    """Cash advance given to a worker, later deducted via FIFO against payroll vouchers."""
+
     employee = models.ForeignKey(
         "workforce.Employee", on_delete=models.CASCADE, related_name="advances"
     )
@@ -61,6 +63,8 @@ class Advance(TenantModel):
         return self.amount - self.adjusted_amount
 
     class Meta:
+        verbose_name = "Advance"
+        verbose_name_plural = "Advances"
         ordering = ["-advance_date", "-id"]
 
     def __str__(self):
@@ -68,6 +72,8 @@ class Advance(TenantModel):
 
 
 class PayrollRun(TenantModel):
+    """Periodic payroll run for a project aggregating vouchers and posting ledger journal."""
+
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="payroll_runs"
     )
@@ -102,6 +108,8 @@ class PayrollRun(TenantModel):
     notes = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "Payroll Run"
+        verbose_name_plural = "Payroll Runs"
         ordering = ["-period_end"]
 
     def __str__(self):
@@ -111,6 +119,8 @@ class PayrollRun(TenantModel):
 
 
 class PayrollVoucher(TenantModel):
+    """Itemized pay voucher for an individual employee during a payroll run."""
+
     run = models.ForeignKey(PayrollRun, on_delete=models.CASCADE, related_name="vouchers")
     employee = models.ForeignKey(
         "workforce.Employee", on_delete=models.CASCADE, related_name="payroll_vouchers"
@@ -142,6 +152,8 @@ class PayrollVoucher(TenantModel):
     payment_reference = models.CharField(max_length=100, blank=True)
 
     class Meta:
+        verbose_name = "Payroll Voucher"
+        verbose_name_plural = "Payroll Vouchers"
         ordering = ["id"]
 
     def __str__(self):
@@ -219,6 +231,8 @@ class Payment(TenantModel):
     transaction_id = models.CharField(max_length=100, blank=True, help_text="Linked central ledger transaction ID")
 
     class Meta:
+        verbose_name = "Payment"
+        verbose_name_plural = "Payments"
         ordering = ["-created_at", "-id"]
         indexes = [
             models.Index(fields=["organization", "employee", "created_at"]),

@@ -46,6 +46,8 @@ class UtilityType(models.TextChoices):
 
 
 class Vendor(TenantModel):
+    """External vendor or supplier supplying materials, equipment, or services."""
+
     name = models.CharField(max_length=200)
     contact_person = models.CharField(max_length=150, blank=True)
     phone = models.CharField(max_length=50, blank=True)
@@ -53,6 +55,11 @@ class Vendor(TenantModel):
     address = models.TextField(blank=True)
     tax_id = models.CharField(max_length=50, blank=True)
     is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Vendor"
+        verbose_name_plural = "Vendors"
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
@@ -74,6 +81,8 @@ class Vendor(TenantModel):
 
 
 class Expense(TenantModel):
+    """Site expense record tracking approvals, invoices, and ledger integration."""
+
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="expenses"
     )
@@ -119,11 +128,18 @@ class Expense(TenantModel):
         related_name="linked_expenses",
     )
 
+    class Meta:
+        verbose_name = "Expense"
+        verbose_name_plural = "Expenses"
+        ordering = ["-expense_date", "-id"]
+
     def __str__(self):
         return f"{self.project.code} - {self.category}: {self.amount} ({self.status})"
 
 
 class VendorPayment(TenantModel):
+    """Payment record disbursed to a vendor against outstanding credit or invoices."""
+
     vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name="payments")
     project = models.ForeignKey(
         "projects.Project",
@@ -150,11 +166,18 @@ class VendorPayment(TenantModel):
         related_name="linked_vendor_payments",
     )
 
+    class Meta:
+        verbose_name = "Vendor Payment"
+        verbose_name_plural = "Vendor Payments"
+        ordering = ["-payment_date", "-id"]
+
     def __str__(self):
         return f"Payment to {self.vendor.name}: {self.amount}"
 
 
 class RunningCostBaseline(TenantModel):
+    """Monthly utility budget baseline per project."""
+
     project = models.ForeignKey(
         "projects.Project", on_delete=models.CASCADE, related_name="running_cost_baselines"
     )
@@ -162,6 +185,8 @@ class RunningCostBaseline(TenantModel):
     monthly_baseline = models.DecimalField(max_digits=12, decimal_places=2)
 
     class Meta:
+        verbose_name = "Running Cost Baseline"
+        verbose_name_plural = "Running Cost Baselines"
         unique_together = ("project", "utility_type")
         ordering = ["id"]
 
@@ -191,6 +216,8 @@ class RunningCost(TenantModel):
     payment_method = models.CharField(max_length=30, choices=PaymentMode.choices, default=PaymentMode.CASH)
 
     class Meta:
+        verbose_name = "Running Cost"
+        verbose_name_plural = "Running Costs"
         ordering = ["-date", "-created_at", "-id"]
         indexes = [
             models.Index(fields=["organization", "project", "date"]),
@@ -243,6 +270,8 @@ class CreditLog(TenantModel):
         super().save(*args, **kwargs)
 
     class Meta:
+        verbose_name = "Credit Log"
+        verbose_name_plural = "Credit Logs"
         ordering = ["transaction_date", "id"]
         indexes = [
             models.Index(fields=["organization", "credited_by", "status"]),
@@ -267,6 +296,8 @@ class CreditLogExpense(TenantModel):
     transaction_id = models.CharField(max_length=100, blank=True, help_text="Linked Transaction ID")
 
     class Meta:
+        verbose_name = "Credit Log Expense"
+        verbose_name_plural = "Credit Log Expenses"
         ordering = ["date", "id"]
 
     def __str__(self):

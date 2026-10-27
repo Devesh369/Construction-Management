@@ -28,6 +28,8 @@ class AuditLog(ImmutableTenantModel):
     user_agent = models.CharField(max_length=255, blank=True)
 
     class Meta:
+        verbose_name = "Audit Log"
+        verbose_name_plural = "Audit Logs"
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["organization", "created_at"]),

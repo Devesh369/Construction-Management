@@ -42,6 +42,8 @@ class Holiday(TenantModel):
     is_paid = models.BooleanField(default=True)
 
     class Meta:
+        verbose_name = "Holiday"
+        verbose_name_plural = "Holidays"
         ordering = ["date"]
         unique_together = ("organization", "project", "date")
 
@@ -91,6 +93,8 @@ class Attendance(TenantModel):
     settled_by_payment_id = models.CharField(max_length=100, null=True, blank=True)
 
     class Meta:
+        verbose_name = "Attendance"
+        verbose_name_plural = "Attendance Records"
         ordering = ["-date", "-id"]
         unique_together = ("organization", "employee", "date")
         indexes = [

@@ -34,12 +34,16 @@ class Side(models.TextChoices):
 
 
 class Account(TenantModel):
+    """Standard Chart of Accounts entity classified by account type."""
+
     code = models.CharField(max_length=10)
     name = models.CharField(max_length=100)
     type = models.CharField(max_length=20, choices=AccountType.choices)
     is_active = models.BooleanField(default=True)
 
     class Meta:
+        verbose_name = "Account"
+        verbose_name_plural = "Accounts"
         ordering = ["code"]
         unique_together = ("organization", "code")
         indexes = [
@@ -52,6 +56,8 @@ class Account(TenantModel):
 
 
 class JournalEntry(ImmutableTenantModel):
+    """Immutable double-entry journal entry recording balanced debits and credits."""
+
     entry_number = models.CharField(max_length=30)
     date = models.DateField()
     description = models.TextField()
@@ -85,6 +91,8 @@ class JournalEntry(ImmutableTenantModel):
     reversal_reason = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "Journal Entry"
+        verbose_name_plural = "Journal Entries"
         ordering = ["-date", "-created_at"]
         indexes = [
             models.Index(fields=["organization", "date"]),
@@ -96,6 +104,8 @@ class JournalEntry(ImmutableTenantModel):
 
 
 class JournalLine(ImmutableTenantModel):
+    """Individual debit or credit posting leg within an immutable journal entry."""
+
     entry = models.ForeignKey(JournalEntry, on_delete=models.CASCADE, related_name="lines")
     account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="lines")
     side = models.CharField(max_length=2, choices=Side.choices)
@@ -107,6 +117,8 @@ class JournalLine(ImmutableTenantModel):
     memo = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "Journal Line"
+        verbose_name_plural = "Journal Lines"
         ordering = ["id"]
         indexes = [
             models.Index(fields=["entry", "account"]),
@@ -170,6 +182,8 @@ class Transaction(TenantModel):
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
+        verbose_name = "Transaction"
+        verbose_name_plural = "Transactions"
         ordering = ["-date", "-created_at", "-id"]
         indexes = [
             models.Index(fields=["organization", "type"]),
