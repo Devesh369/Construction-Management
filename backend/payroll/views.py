@@ -40,7 +40,11 @@ class AdvanceViewSet(ProjectScopedMixin, TenantViewSet):
 
     queryset = Advance.objects.all()
     serializer_class = AdvanceSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(Role.ACCOUNTANT, Role.PROJECT_MANAGER, Role.ORG_ADMIN, Role.SUPERVISOR),
+    ]
     filterset_fields = ["project", "employee", "status", "payment_mode"]
     search_fields = ["employee__full_name", "employee__employee_code", "reason"]
 

@@ -12,7 +12,86 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.models import Invitation, User
+from django.db import transaction
+from accounts.models import Invitation, Organization, User
+
+
+class SystemStatusView(views.APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({"initialized": User.objects.exists()})
+
+
+class SetupAdminView(views.APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        if User.objects.exists():
+            return Response(
+                {"error": {"code": "already_initialized", "message": "System has already been initialized."}},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        org_name = request.data.get("org_name", "").strip() or "BuildSphere Construction"
+        name = request.data.get("name", "").strip()
+        email = request.data.get("email", "").lower().strip()
+        password = request.data.get("password", "").strip()
+
+        if not name or not email or not password:
+            return Response(
+                {"error": {"code": "validation_error", "message": "Full Name, Work Email, and Password are required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(password) < 6:
+            return Response(
+                {"error": {"code": "validation_error", "message": "Password must be at least 6 characters."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from ledger.services import create_default_chart_of_accounts
+
+        with transaction.atomic():
+            org, _ = Organization.objects.get_or_create(
+                name=org_name,
+                defaults={"contact_email": email, "currency": "INR"},
+            )
+            create_default_chart_of_accounts(org)
+
+            user = User.objects.create_user(
+                email=email,
+                password=password,
+                name=name,
+                organization=org,
+                role=Role.ORG_ADMIN,
+                is_staff=True,
+                is_active=True,
+            )
+
+        user, tokens = login_user(email=email, password=password, request=request)
+        user_data = {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role,
+            "organization": {
+                "id": user.organization.id if user.organization else None,
+                "name": user.organization.name if user.organization else None,
+            },
+        }
+
+        response = Response(
+            {
+                "access": tokens["access"],
+                "user": user_data,
+                "message": "System initialized and admin account created successfully!",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+        set_refresh_cookie(response, tokens["refresh"])
+        return response
+
+
 from accounts.serializers import (
     AcceptInviteSerializer,
     ChangePasswordSerializer,
@@ -228,6 +307,25 @@ class UserViewSet(TenantViewSet):
         return User.objects.filter(
             organization=self.request.user.organization,
             deleted_at__isnull=True,
+        ).order_by("-created_at")
+
+    def perform_create(self, serializer):
+        password = serializer.validated_data.pop("password", None) or "Pass@12345"
+        role = serializer.validated_data.get("role", Role.PROJECT_MANAGER)
+        user = serializer.save(
+            organization=self.request.user.organization,
+            is_staff=(role == Role.ORG_ADMIN),
+            is_active=True,
+        )
+        user.set_password(password)
+        user.save()
+
+        log_action(
+            user=self.request.user,
+            action=AuditAction.USER_CREATED,
+            obj=user,
+            request=self.request,
+            organization=self.request.user.organization,
         )
 
     def perform_update(self, serializer):
@@ -347,7 +445,7 @@ class InvitationViewSet(TenantViewSet):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Invitation.objects.none()
-        return Invitation.objects.filter(organization=self.request.user.organization)
+        return Invitation.objects.filter(organization=self.request.user.organization).order_by("-created_at")
 
     def create(self, request, *args, **kwargs):
         serializer = CreateInvitationSerializer(data=request.data)

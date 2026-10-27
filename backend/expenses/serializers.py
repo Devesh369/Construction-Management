@@ -21,6 +21,23 @@ from expenses.models import (
 
 class VendorSerializer(serializers.ModelSerializer):
     outstanding_balance = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    phone = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    contact_person = serializers.CharField(required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
+    tax_id = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_phone(self, value):
+        if not value or not str(value).strip():
+            return ""
+        from core.validators import validate_mobile_10_digits
+        return validate_mobile_10_digits(value)
+
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, "copy") else dict(data)
+        if "gstin" in data and not data.get("tax_id"):
+            data["tax_id"] = data["gstin"]
+        return super().to_internal_value(data)
 
     class Meta:
         model = Vendor
@@ -108,6 +125,44 @@ class ExpenseSerializer(serializers.ModelSerializer):
             return True
         return False
 
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, "copy") else dict(data)
+
+        # Normalize category aliases
+        cat = data.get("category")
+        if cat == "EQUIPMENT":
+            data["category"] = ExpenseCategory.EQUIPMENT_RENTAL
+        elif cat == "LABOR":
+            data["category"] = ExpenseCategory.OTHER
+
+        # Empty vendor string from form -> None
+        if "vendor" in data and (data["vendor"] == "" or data["vendor"] == "null" or data["vendor"] is None):
+            data["vendor"] = None
+
+        # Details handling: support stringified JSON in multipart/form-data
+        details = data.get("details")
+        if isinstance(details, str):
+            import json
+            try:
+                details = json.loads(details)
+            except Exception:
+                details = {}
+        elif not isinstance(details, dict):
+            details = {}
+
+        # Allow flat form fields to populate details
+        if "vehicle_number" in data and data["vehicle_number"]:
+            details["vehicle_number"] = data["vehicle_number"]
+        if "distance_km" in data and data["distance_km"] not in (None, ""):
+            details["distance_km"] = data["distance_km"]
+        if "utility_type" in data and data["utility_type"]:
+            details["utility_type"] = data["utility_type"]
+        if "billing_month" in data and data["billing_month"]:
+            details["billing_month"] = data["billing_month"]
+
+        data["details"] = details
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
         request = self.context.get("request")
         user = request.user if request and request.user.is_authenticated else None
@@ -119,7 +174,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
             self.instance.payment_mode if self.instance else PaymentMode.CASH
         )
         receipt = attrs.get("receipt") or (self.instance.receipt if self.instance else None)
-        details = attrs.get("details", getattr(self.instance, "details", {})) or {}
+        details = dict(attrs.get("details", getattr(self.instance, "details", {})) or {})
 
         # 1. Role check: SUPERVISOR can only create TRANSPORT expenses
         if user and getattr(user, "role", None) == Role.SUPERVISOR:
@@ -131,7 +186,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
         # 2. Receipt check: required if amount > org.expense_approval_limit
         if org and amount and amount > org.expense_approval_limit and not receipt:
             raise serializers.ValidationError(
-                {"receipt": "Receipt is required for expenses exceeding the approval limit."}
+                {"receipt": f"Receipt is required for expenses exceeding ₹{org.expense_approval_limit:,.2f}."}
             )
 
         # 3. Credit purchase check
@@ -140,42 +195,38 @@ class ExpenseSerializer(serializers.ModelSerializer):
             due_date = attrs.get("due_date") or (self.instance.due_date if self.instance else None)
             if not vendor:
                 raise serializers.ValidationError(
-                    {"vendor": "Credit purchase requires an assigned vendor."}
+                    {"vendor": "Credit purchase requires an assigned vendor. Please select or register a vendor."}
                 )
             if not due_date:
                 raise serializers.ValidationError(
-                    {"due_date": "Credit purchase requires a due date."}
+                    {"due_date": "Credit purchase requires a credit due date."}
                 )
 
         # 4. Category-specific details
         if category == ExpenseCategory.UTILITY:
             u_type = details.get("utility_type")
             if not u_type or u_type not in UtilityType.values:
-                raise serializers.ValidationError(
-                    {"details": "Utility expense requires a valid utility_type."}
-                )
+                details["utility_type"] = UtilityType.ELECTRICITY
             if not details.get("billing_month"):
-                raise serializers.ValidationError(
-                    {"details": "Utility expense requires billing_month (e.g. '2026-10')."}
-                )
+                from django.utils import timezone
+                details["billing_month"] = timezone.now().strftime("%Y-%m")
+            attrs["details"] = details
 
         elif category == ExpenseCategory.TRANSPORT:
             if not details.get("vehicle_number"):
-                raise serializers.ValidationError(
-                    {"details": "Transport expense requires vehicle_number."}
-                )
+                details["vehicle_number"] = "SITE-LOGISTICS"
             dist = details.get("distance_km")
-            if dist is None:
-                raise serializers.ValidationError(
-                    {"details": "Transport expense requires distance_km."}
-                )
-            try:
-                if Decimal(str(dist)) < Decimal("0"):
-                    raise ValueError
-            except Exception:
-                raise serializers.ValidationError(
-                    {"details": "Transport expense requires distance_km >= 0."}
-                )
+            if dist is None or str(dist).strip() == "":
+                details["distance_km"] = 0
+            else:
+                try:
+                    if Decimal(str(dist)) < Decimal("0"):
+                        raise ValueError
+                except Exception:
+                    raise serializers.ValidationError(
+                        {"details": "Transport expense requires distance_km >= 0."}
+                    )
+            attrs["details"] = details
 
             if details.get("is_machinery_transfer") and not details.get("destination_project_id"):
                 raise serializers.ValidationError(

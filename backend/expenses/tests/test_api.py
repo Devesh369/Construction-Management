@@ -295,3 +295,51 @@ class TestExpensesAPI:
         )
         res_exp = self.client.get(f"/api/v1/expenses/{exp.id}")
         assert res_exp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_transport_expense_auto_defaults_details_via_api(self):
+        """Site user can log a transport expense without crashing on missing details."""
+        self.client.force_authenticate(user=self.eng)
+        payload = {
+            "project": self.project.id,
+            "category": "TRANSPORT",
+            "description": "Local site transport",
+            "amount": "333.00",
+            "expense_date": "2026-10-23",
+            "payment_mode": "CASH",
+        }
+        res = self.client.post("/api/v1/expenses", data=payload, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        assert res.data["details"]["vehicle_number"] == "SITE-LOGISTICS"
+        assert res.data["details"]["distance_km"] == 0
+
+    def test_credit_expense_missing_vendor_rejected_with_clear_message(self):
+        """Credit purchase without vendor returns specific validation message."""
+        self.client.force_authenticate(user=self.eng)
+        payload = {
+            "project": self.project.id,
+            "category": "TRANSPORT",
+            "description": "Vendor credit transport",
+            "amount": "333.00",
+            "expense_date": "2026-10-23",
+            "payment_mode": "CREDIT",
+            "due_date": "2026-10-31",
+            "vendor": "",
+        }
+        res = self.client.post("/api/v1/expenses", data=payload, format="json")
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert "vendor" in res.data["error"]["details"]
+
+    def test_vendor_new_entry_by_site_engineer(self):
+        """Site Engineer can register a new vendor."""
+        self.client.force_authenticate(user=self.eng)
+        payload = {
+            "name": "Mahalaxmi Cement Traders",
+            "contact_person": "Ramesh Patel",
+            "phone": "9825123456",
+            "tax_id": "24AAACH7409R1ZZ",
+        }
+        res = self.client.post("/api/v1/vendors", data=payload, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        assert res.data["name"] == "Mahalaxmi Cement Traders"
+        assert res.data["phone"] == "9825123456"
+

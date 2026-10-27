@@ -22,7 +22,9 @@ class Project(TenantModel):
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=30)
     client_name = models.CharField(max_length=200, blank=True)
+    client_phone = models.CharField(max_length=30, blank=True)
     location = models.TextField(blank=True)
+    description = models.TextField(blank=True)
     status = models.CharField(
         max_length=20,
         choices=ProjectStatus.choices,

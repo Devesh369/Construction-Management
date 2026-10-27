@@ -27,8 +27,23 @@ class AddMemberSerializer(serializers.Serializer):
 
 
 class ProjectSerializer(serializers.ModelSerializer):
+    code = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
+    estimated_budget = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True, default=Decimal("0.00")
+    )
     budget_categories = BudgetCategorySerializer(many=True, read_only=True)
     warning = serializers.CharField(read_only=True, required=False)
+
+    def validate_estimated_budget(self, value):
+        if value is None or value == "":
+            return Decimal("0.00")
+        return value
+
+    def validate_client_phone(self, value):
+        from core.validators import validate_mobile_10_digits
+        if value:
+            return validate_mobile_10_digits(value)
+        return value
 
     class Meta:
         model = Project
@@ -37,7 +52,9 @@ class ProjectSerializer(serializers.ModelSerializer):
             "name",
             "code",
             "client_name",
+            "client_phone",
             "location",
+            "description",
             "status",
             "start_date",
             "expected_end_date",

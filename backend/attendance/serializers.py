@@ -21,6 +21,11 @@ class HolidaySerializer(serializers.ModelSerializer):
 class AttendanceSerializer(serializers.ModelSerializer):
     employee_code = serializers.CharField(source="employee.employee_code", read_only=True)
     employee_name = serializers.CharField(source="employee.full_name", read_only=True)
+    employee_trade = serializers.CharField(source="employee.trade", read_only=True)
+    employee_phone = serializers.CharField(source="employee.phone", read_only=True)
+    employee_role = serializers.SerializerMethodField()
+    daily_rate = serializers.DecimalField(source="employee.daily_rate", max_digits=10, decimal_places=2, read_only=True)
+    earning = serializers.SerializerMethodField()
     project_name = serializers.CharField(source="project.name", read_only=True)
 
     class Meta:
@@ -30,6 +35,11 @@ class AttendanceSerializer(serializers.ModelSerializer):
             "employee",
             "employee_code",
             "employee_name",
+            "employee_trade",
+            "employee_phone",
+            "employee_role",
+            "daily_rate",
+            "earning",
             "project",
             "project_name",
             "date",
@@ -53,6 +63,38 @@ class AttendanceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "is_locked", "locked_at", "locked_by", "marked_by"]
 
+    def validate_date(self, value):
+        from django.utils import timezone
+        if value and value > timezone.localdate():
+            raise serializers.ValidationError("Cannot mark attendance for upcoming days. Attendance can only be recorded for today or past dates.")
+        return value
+
+    def get_employee_role(self, obj):
+        trade = (obj.employee.trade or "").upper()
+        if trade in ["MASON", "CARPENTER", "ELECTRICIAN", "PLUMBER", "WELDER"]:
+            return "KARIGAR"
+        return "LABOUR"
+
+    def get_earning(self, obj):
+        rate = obj.employee.daily_rate or Decimal("0.00")
+        if obj.status == AttendanceStatus.PRESENT:
+            base = rate
+        elif obj.status == AttendanceStatus.HALF_DAY:
+            base = rate * Decimal("0.5")
+        else:
+            base = Decimal("0.00")
+        ot_rate = obj.employee.ot_hourly_rate or Decimal("0.00")
+        ot_pay = (obj.ot_hours or Decimal("0.00")) * ot_rate
+        return float(base + ot_pay)
+
+    def validate_date(self, value):
+        from django.utils import timezone
+        if value > timezone.localdate():
+            raise serializers.ValidationError(
+                "Cannot mark attendance for upcoming days. Only present and past dates are allowed."
+            )
+        return value
+
 
 class CheckInSerializer(serializers.Serializer):
     employee_id = serializers.IntegerField(required=True)
@@ -72,6 +114,10 @@ class CheckOutSerializer(serializers.Serializer):
 
 class BatchRecordItemSerializer(serializers.Serializer):
     employee_id = serializers.IntegerField(required=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
+    shift_type = serializers.ChoiceField(
+        choices=ShiftType.choices, default=ShiftType.DAY, required=False
+    )
     status = serializers.ChoiceField(
         choices=AttendanceStatus.choices, default=AttendanceStatus.PRESENT
     )
@@ -82,7 +128,7 @@ class BatchRecordItemSerializer(serializers.Serializer):
 
 
 class BatchAttendanceSerializer(serializers.Serializer):
-    project_id = serializers.IntegerField(required=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
     date = serializers.DateField(required=True)
     shift_type = serializers.ChoiceField(choices=ShiftType.choices, default=ShiftType.DAY)
     group_id = serializers.IntegerField(required=False, allow_null=True)
@@ -90,6 +136,14 @@ class BatchAttendanceSerializer(serializers.Serializer):
         choices=AttendanceStatus.choices, required=False, allow_null=True
     )
     records = BatchRecordItemSerializer(many=True, required=False, default=list)
+
+    def validate_date(self, value):
+        from django.utils import timezone
+        if value > timezone.localdate():
+            raise serializers.ValidationError(
+                "Cannot mark attendance for upcoming days. Only present and past dates are allowed."
+            )
+        return value
 
 
 class ApproveAttendanceSerializer(serializers.Serializer):
@@ -150,6 +204,14 @@ class NightShiftCreateSerializer(serializers.Serializer):
     )
     safety_checklist_signed = serializers.BooleanField(required=True)
     checklist_notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_shift_date(self, value):
+        from django.utils import timezone
+        if value > timezone.localdate():
+            raise serializers.ValidationError(
+                "Cannot create night shift session for upcoming days. Only present and past dates are allowed."
+            )
+        return value
 
 
 class NightShiftCompleteSerializer(serializers.Serializer):

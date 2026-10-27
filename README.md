@@ -7,49 +7,47 @@ A multi-tenant SaaS backend for construction companies built with **Django 5.2 L
 ## 1. Quick Start
 
 ### Prerequisites
-- Python 3.12
-- PostgreSQL 15+ or Docker Compose
+- Python 3.12+
+- Node.js 18+ & npm
+- PostgreSQL 15+ (or SQLite fallback via `USE_SQLITE=True`)
 
-### Step 1: Virtual Environment & Dependencies
+### Step 1: Backend Setup
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r backend/requirements.txt
+pip install -r requirements.txt
 
-# Copy environment variables
+# Configure environment variables
 cp .env.example .env
-```
+# Optional: Set USE_SQLITE=True in .env to run locally without PostgreSQL!
 
-### Step 2: Database Setup
-Using Docker Compose:
-```bash
-docker compose up -d db
-```
-Or use a local PostgreSQL instance with database `construction_db` and user `postgres`.
-
-### Step 3: Run Database Migrations
-```bash
+# Run database migrations
 cd backend
-python manage.py makemigrations
 python manage.py migrate
-```
 
-### Step 4: Run Tests
-```bash
-pytest -q
-pytest --cov=.
-```
+# Optional: Seed demo data (admin, users, sample construction projects)
+python manage.py seed_all
 
-### Step 5: Start API Server & OpenAPI Docs
-```bash
+# Start backend server (port 8000)
 python manage.py runserver
 ```
-- Interactive Swagger UI: [http://localhost:8000/api/docs/](http://localhost:8000/api/docs/)
+
+### Step 2: Frontend Setup
+In a new terminal:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open **[http://localhost:3000](http://localhost:3000)** in your browser.
+
+- Interactive Swagger API UI: [http://localhost:8000/api/docs/](http://localhost:8000/api/docs/)
 - OpenAPI 3.0 Schema: [http://localhost:8000/api/schema/](http://localhost:8000/api/schema/)
 - Redoc Documentation: [http://localhost:8000/api/redoc/](http://localhost:8000/api/redoc/)
+- Complete Setup Guide PDF: `Documents/Local_Setup_and_Migration_Guide.pdf`
 
 ---
 

@@ -11,15 +11,17 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from attendance.models import Attendance, AttendanceStatus
 from core.exceptions import BusinessRuleError
 from core.permissions import IsTenantUser, roles_required
 from core.roles import Role
 from core.views import ProjectScopedMixin, TenantViewSet
-from progress.models import DailyProgressReport, DPRStatus, SitePhoto
+from progress.models import DailyProgressReport, DPRStatus, SitePhoto, WorkEntry
 from progress.serializers import (
     DailyProgressReportSerializer,
     RejectDPRSerializer,
     SitePhotoSerializer,
+    WorkEntrySerializer,
 )
 from progress.services import reject_dpr, verify_dpr
 
@@ -41,6 +43,22 @@ class DailyProgressReportViewSet(ProjectScopedMixin, TenantViewSet):
             .prefetch_related("tasks", "materials", "photos")
         )
 
+    def perform_create(self, serializer):
+        if self.request.user.role not in [
+            Role.ORG_ADMIN,
+            Role.PROJECT_MANAGER,
+            Role.SITE_ENGINEER,
+            Role.SUPERVISOR,
+        ]:
+            raise BusinessRuleError(
+                "Your role does not have permission to submit site progress reports.",
+                code="permission_denied",
+            )
+        serializer.save(
+            organization=self.request.user.organization,
+            submitted_by=self.request.user,
+        )
+
     def perform_update(self, serializer):
         instance = serializer.instance
         if instance.status == DPRStatus.VERIFIED:
@@ -55,6 +73,20 @@ class DailyProgressReportViewSet(ProjectScopedMixin, TenantViewSet):
             raise BusinessRuleError("You can only edit your own DPRs.", code="permission_denied")
 
         serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.status == DPRStatus.VERIFIED:
+            raise BusinessRuleError("Verified DPRs cannot be deleted.", code="report_verified")
+        user = self.request.user
+        if instance.submitted_by != user and user.role not in [
+            Role.ORG_ADMIN,
+            Role.PROJECT_MANAGER,
+        ]:
+            raise BusinessRuleError(
+                "Only managers or the report submitter can delete unverified DPRs.",
+                code="permission_denied",
+            )
+        super().perform_destroy(instance)
 
     @action(
         detail=True,
@@ -145,3 +177,102 @@ class DailyProgressReportViewSet(ProjectScopedMixin, TenantViewSet):
             )
         photo.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WorkEntryViewSet(ProjectScopedMixin, TenantViewSet):
+    """
+    Work Management API:
+    - Lists, creates, updates, and deletes daily work entries
+    - Fetches present employees from Attendance for given date & project
+    - Computes role breakdowns (Karigar, Labour, etc.)
+    """
+
+    queryset = WorkEntry.objects.all()
+    serializer_class = WorkEntrySerializer
+    permission_classes = [IsAuthenticated, IsTenantUser]
+    filterset_fields = ["project", "date", "department"]
+    search_fields = ["description", "department", "project__name", "project__code"]
+    ordering_fields = ["date", "created_at"]
+    ordering = ["-date", "-id"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        qs = (
+            self.filter_project_scope(qs)
+            .select_related("project", "created_by")
+            .prefetch_related("employees")
+        )
+        date_from = self.request.query_params.get("from_date") or self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("to_date") or self.request.query_params.get("date_to")
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(
+            organization=self.request.user.organization,
+            created_by=self.request.user,
+        )
+
+    @action(detail=False, methods=["get"], url_path="present-employees")
+    def present_employees(self, request):
+        """
+        Fetch all employees who are marked PRESENT or HALF_DAY for a given project and date.
+        Returns detailed list and role grouped structure.
+        """
+        project_id = request.query_params.get("project")
+        date_str = request.query_params.get("date")
+
+        if not date_str:
+            return Response(
+                {"error": {"code": "missing_date", "message": "Date parameter is required."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        org = request.user.organization
+        att_qs = Attendance.objects.filter(
+            organization=org,
+            date=date_str,
+            status__in=[AttendanceStatus.PRESENT, AttendanceStatus.HALF_DAY],
+        ).select_related("employee", "project")
+
+        if project_id and project_id != "all":
+            att_qs = att_qs.filter(project_id=project_id)
+
+        employees = []
+        by_role = {}
+        seen_ids = set()
+
+        for att in att_qs:
+            emp = att.employee
+            if emp.id in seen_ids:
+                continue
+            seen_ids.add(emp.id)
+
+            role_name = emp.role or emp.trade or "Labour"
+            emp_data = {
+                "id": emp.id,
+                "full_name": emp.full_name,
+                "employee_code": emp.employee_code,
+                "role": role_name,
+                "trade": emp.trade,
+                "attendance_status": att.status,
+                "project_id": att.project_id,
+                "project_name": att.project.name if att.project else "",
+            }
+            employees.append(emp_data)
+            by_role.setdefault(role_name, []).append(emp_data)
+
+        return Response(
+            {
+                "date": date_str,
+                "project": project_id,
+                "total_present": len(employees),
+                "employees": employees,
+                "by_role": by_role,
+            },
+            status=status.HTTP_200_OK,
+        )
+

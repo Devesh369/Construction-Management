@@ -188,9 +188,10 @@ def check_in_worker(
 
     today = timezone.localdate()
     # Duplicate check for same worker, date, and shift
-    if Attendance.objects.filter(
+    existing = Attendance.all_objects.filter(
         organization=org, employee=employee, date=today, shift_type=shift_type
-    ).exists():
+    ).first()
+    if existing and existing.deleted_at is None:
         raise ConflictError(
             f"Worker '{employee.employee_code}' is already checked in for shift {shift_type} today.",
             code="duplicate_attendance",
@@ -198,6 +199,21 @@ def check_in_worker(
 
     now = timezone.now()
     marked_user = user or org.users.first()
+    if existing:
+        existing.deleted_at = None
+        existing.project = project
+        existing.status = AttendanceStatus.PRESENT
+        existing.check_in_time = now
+        existing.check_out_time = None
+        existing.latitude = Decimal(str(latitude))
+        existing.longitude = Decimal(str(longitude))
+        existing.distance_m = q2(Decimal(str(distance)))
+        existing.is_geofence_verified = True
+        existing.method = AttendanceMethod.GPS
+        existing.marked_by = marked_user
+        existing.save()
+        return existing
+
     return Attendance.objects.create(
         organization=org,
         employee=employee,
@@ -274,8 +290,8 @@ def check_out_worker(
 def batch_mark_attendance(
     user,
     org: Organization,
-    project_id: int,
-    date_val: date,
+    project_id: int | None = None,
+    date_val: date | None = None,
     shift_type: str = ShiftType.DAY,
     records: list[dict] | None = None,
     group_id: int | None = None,
@@ -285,10 +301,20 @@ def batch_mark_attendance(
     UC-12: Batch mark attendance for labor gang members or explicit employee list.
     Upserts unlocked rows; skips locked rows.
     """
-    try:
-        project = Project.objects.get(organization=org, id=project_id)
-    except Project.DoesNotExist:
-        raise NotFoundError("Project not found.")
+    today = timezone.localdate()
+    parsed_date = date_val if isinstance(date_val, date) else date.fromisoformat(str(date_val))
+    if parsed_date > today:
+        raise BusinessRuleError(
+            "Cannot mark attendance for upcoming days. Attendance can only be recorded for today or past dates.",
+            code="future_attendance_not_allowed",
+        )
+
+    default_project = None
+    if project_id:
+        try:
+            default_project = Project.objects.get(organization=org, id=project_id)
+        except Project.DoesNotExist:
+            raise NotFoundError("Project not found.")
 
     prepared_entries = []
 
@@ -305,6 +331,8 @@ def batch_mark_attendance(
             prepared_entries.append(
                 {
                     "employee_id": member.id,
+                    "project_id": project_id or (member.primary_project_id or group.project_id),
+                    "shift_type": shift_type,
                     "status": target_status,
                     "ot_hours": Decimal("0.00"),
                     "remarks": f"Gang batch: {group.name}",
@@ -317,6 +345,8 @@ def batch_mark_attendance(
             prepared_entries.append(
                 {
                     "employee_id": rec["employee_id"],
+                    "project_id": rec.get("project_id") or project_id,
+                    "shift_type": rec.get("shift_type") or shift_type,
                     "status": rec.get("status", AttendanceStatus.PRESENT),
                     "ot_hours": q2(Decimal(str(rec.get("ot_hours", "0.00")))),
                     "remarks": rec.get("remarks", ""),
@@ -331,32 +361,68 @@ def batch_mark_attendance(
         marked_user = user or org.users.first()
         for item in prepared_entries:
             emp_id = item["employee_id"]
-            existing = Attendance.objects.filter(
+            item_shift = item.get("shift_type") or ShiftType.DAY
+            item_proj = None
+
+            emp = Employee.objects.filter(organization=org, id=emp_id).first()
+            if not emp:
+                continue
+
+            if item.get("project_id"):
+                item_proj = Project.objects.filter(organization=org, id=item["project_id"]).first()
+            if not item_proj and default_project:
+                item_proj = default_project
+            if not item_proj:
+                if emp.primary_project:
+                    item_proj = emp.primary_project
+
+            if not item_proj:
+                emp_name = emp.full_name if emp else f"ID {emp_id}"
+                raise BusinessRuleError(
+                    f"Project allocation is required for worker '{emp_name}'. Attendance cannot be marked without an allocated project site.",
+                    code="project_allocation_required",
+                )
+
+            # Strict check: Employee MUST be registered/assigned to this project site!
+            is_registered = (
+                (emp.primary_project_id == item_proj.id)
+                or emp.assigned_projects.filter(id=item_proj.id).exists()
+            )
+            if not is_registered:
+                raise BusinessRuleError(
+                    f"Worker '{emp.full_name}' is not registered for work at '{item_proj.name}'. Attendance can only be marked at their assigned project sites.",
+                    code="worker_not_assigned_to_project",
+                )
+
+            existing = Attendance.all_objects.filter(
                 organization=org,
                 employee_id=emp_id,
-                date=date_val,
-                shift_type=shift_type,
+                date=parsed_date,
+                shift_type=item_shift,
             ).first()
 
             if existing:
-                if existing.is_locked:
+                if existing.deleted_at is None:
+                    # Once attendance is marked for any employee, it cannot be changed for that same day.
                     skipped_count += 1
                     continue
-                existing.status = item["status"]
-                existing.ot_hours = item["ot_hours"]
-                existing.remarks = item["remarks"]
-                existing.method = AttendanceMethod.MANUAL
-                existing.marked_by = marked_user
-                existing.project = project
-                existing.save()
-                updated_count += 1
+                else:
+                    existing.deleted_at = None
+                    existing.status = item["status"]
+                    existing.ot_hours = item["ot_hours"]
+                    existing.remarks = item["remarks"]
+                    existing.method = AttendanceMethod.MANUAL
+                    existing.marked_by = marked_user
+                    existing.project = item_proj
+                    existing.save()
+                    created_count += 1
             else:
                 Attendance.objects.create(
                     organization=org,
                     employee_id=emp_id,
-                    project=project,
+                    project=item_proj,
                     date=date_val,
-                    shift_type=shift_type,
+                    shift_type=item_shift,
                     status=item["status"],
                     ot_hours=item["ot_hours"],
                     remarks=item["remarks"],
@@ -478,15 +544,15 @@ def close_day_attendance(
 
     with transaction.atomic():
         for worker in active_workers:
-            has_record = Attendance.objects.filter(
+            existing = Attendance.all_objects.filter(
                 organization=org,
                 employee=worker,
                 date=date_val,
                 shift_type=ShiftType.DAY,
-            ).exists()
+            ).first()
 
-            if not has_record:
-                status = AttendanceStatus.HOLIDAY if holiday_applies else AttendanceStatus.ABSENT
+            status = AttendanceStatus.HOLIDAY if holiday_applies else AttendanceStatus.ABSENT
+            if not existing:
                 Attendance.objects.create(
                     organization=org,
                     employee=worker,
@@ -498,6 +564,19 @@ def close_day_attendance(
                     marked_by=marked_user,
                     remarks="Auto close-day mark",
                 )
+                closed_count += 1
+                if holiday_applies:
+                    holiday_count += 1
+                else:
+                    absent_count += 1
+            elif existing.deleted_at is not None:
+                existing.deleted_at = None
+                existing.project = project
+                existing.status = status
+                existing.method = AttendanceMethod.MANUAL
+                existing.marked_by = marked_user
+                existing.remarks = "Auto close-day mark"
+                existing.save()
                 closed_count += 1
                 if holiday_applies:
                     holiday_count += 1
@@ -520,6 +599,14 @@ def create_night_shift_session(
     UC-14: Run a night shift. Mandatory safety checklist signed.
     Creates NightShiftSession and NIGHT attendance rows.
     """
+    today = timezone.localdate()
+    parsed_date = shift_date if isinstance(shift_date, date) else date.fromisoformat(str(shift_date))
+    if parsed_date > today:
+        raise BusinessRuleError(
+            "Cannot create night shift session for upcoming days. Attendance can only be recorded for today or past dates.",
+            code="future_attendance_not_allowed",
+        )
+
     if not safety_checklist_signed:
         raise BusinessRuleError(
             "The supervisor must sign the safety checklist before initiating a night shift.",
@@ -545,17 +632,32 @@ def create_night_shift_session(
         )
 
         for emp_id in employee_ids:
-            Attendance.objects.create(
+            existing = Attendance.all_objects.filter(
                 organization=org,
                 employee_id=emp_id,
-                project=project,
                 date=shift_date,
                 shift_type=ShiftType.NIGHT,
-                status=AttendanceStatus.PRESENT,
-                method=AttendanceMethod.MANUAL,
-                night_shift=session,
-                marked_by=marked_user,
-            )
+            ).first()
+            if existing:
+                existing.deleted_at = None
+                existing.project = project
+                existing.status = AttendanceStatus.PRESENT
+                existing.method = AttendanceMethod.MANUAL
+                existing.night_shift = session
+                existing.marked_by = marked_user
+                existing.save()
+            else:
+                Attendance.objects.create(
+                    organization=org,
+                    employee_id=emp_id,
+                    project=project,
+                    date=shift_date,
+                    shift_type=ShiftType.NIGHT,
+                    status=AttendanceStatus.PRESENT,
+                    method=AttendanceMethod.MANUAL,
+                    night_shift=session,
+                    marked_by=marked_user,
+                )
 
     return session
 

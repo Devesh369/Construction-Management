@@ -322,3 +322,55 @@ class TestAttendanceServices:
         Attendance.objects.filter(employee=self.worker1, date=target_date).update(is_locked=True)
         summ_locked = get_attendance_summary([self.worker1.id], target_date, target_date)
         assert summ_locked[0].days_present == 1
+
+    def test_batch_mark_upcoming_date_rejected(self):
+        """Attendance cannot be marked for upcoming/future dates."""
+        future_date = timezone.localdate() + timedelta(days=2)
+        with pytest.raises(BusinessRuleError) as exc:
+            batch_mark_attendance(
+                user=self.admin,
+                org=self.org,
+                project_id=self.project.id,
+                date_val=future_date,
+                records=[
+                    {"employee_id": self.worker1.id, "status": AttendanceStatus.PRESENT},
+                ],
+            )
+        assert exc.value.code == "future_attendance_not_allowed"
+
+    def test_create_night_shift_upcoming_date_rejected(self):
+        """Night shift cannot be initiated for upcoming/future dates."""
+        future_date = timezone.localdate() + timedelta(days=1)
+        with pytest.raises(BusinessRuleError) as exc:
+            create_night_shift_session(
+                user=self.admin,
+                org=self.org,
+                project_id=self.project.id,
+                shift_date=future_date,
+                employee_ids=[self.worker1.id],
+                safety_checklist_signed=True,
+            )
+        assert exc.value.code == "future_attendance_not_allowed"
+
+    def test_batch_mark_worker_not_assigned_to_project_rejected(self):
+        """Worker cannot have attendance marked for a project they are not allocated to."""
+        other_project = create_project(
+            self.org,
+            user=self.admin,
+            data={"name": "Unauthorized Site", "code": "UNAUTH-01"},
+        )
+        with pytest.raises(BusinessRuleError) as exc:
+            batch_mark_attendance(
+                user=self.admin,
+                org=self.org,
+                date_val=timezone.localdate(),
+                records=[
+                    {
+                        "employee_id": self.worker1.id,
+                        "project_id": other_project.id,
+                        "status": AttendanceStatus.PRESENT,
+                    },
+                ],
+            )
+        assert exc.value.code == "worker_not_assigned_to_project"
+

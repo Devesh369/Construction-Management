@@ -1,7 +1,15 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from progress.models import DailyProgressReport, DPRStatus, MaterialUsage, SitePhoto, TaskProgress
+from progress.models import (
+    DailyProgressReport,
+    DPRStatus,
+    MaterialUsage,
+    SitePhoto,
+    TaskProgress,
+    WorkEntry,
+)
+from workforce.models import Employee
 
 
 class TaskProgressSerializer(serializers.ModelSerializer):
@@ -26,7 +34,7 @@ class SitePhotoSerializer(serializers.ModelSerializer):
 
 
 class DailyProgressReportSerializer(serializers.ModelSerializer):
-    tasks = TaskProgressSerializer(many=True, required=True)
+    tasks = TaskProgressSerializer(many=True, required=False, default=list)
     materials = MaterialUsageSerializer(many=True, required=False, default=list)
     photos = SitePhotoSerializer(many=True, read_only=True)
     submitted_by_name = serializers.CharField(source="submitted_by.get_full_name", read_only=True)
@@ -153,3 +161,50 @@ class DailyProgressReportSerializer(serializers.ModelSerializer):
 
 class RejectDPRSerializer(serializers.Serializer):
     reason = serializers.CharField(required=True, min_length=3)
+
+
+class WorkEntryEmployeeDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ["id", "full_name", "employee_code", "role", "trade"]
+
+
+class WorkEntrySerializer(serializers.ModelSerializer):
+    project_name = serializers.CharField(source="project.name", read_only=True)
+    project_code = serializers.CharField(source="project.code", read_only=True)
+    created_by_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
+    employee_details = WorkEntryEmployeeDetailSerializer(source="employees", many=True, read_only=True)
+    role_counts = serializers.SerializerMethodField()
+    total_workers = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorkEntry
+        fields = [
+            "id",
+            "project",
+            "project_name",
+            "project_code",
+            "date",
+            "description",
+            "department",
+            "employees",
+            "employee_details",
+            "role_counts",
+            "total_workers",
+            "created_by",
+            "created_by_name",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_by", "created_at", "updated_at"]
+
+    def get_role_counts(self, obj):
+        counts = {}
+        for emp in obj.employees.all():
+            r = emp.role or emp.trade or "Labour"
+            counts[r] = counts.get(r, 0) + 1
+        return counts
+
+    def get_total_workers(self, obj):
+        return obj.employees.count()
+

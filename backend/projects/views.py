@@ -56,13 +56,59 @@ class ProjectViewSet(ProjectScopedMixin, TenantViewSet):
         )
         return Response(ProjectSerializer(project).data, status=status.HTTP_201_CREATED)
 
+    def update(self, request, *args, **kwargs):
+        # Update project is permitted for ORG_ADMIN and PROJECT_MANAGER
+        if request.user.role not in [Role.ORG_ADMIN, Role.PROJECT_MANAGER]:
+            return Response(
+                {
+                    "error": {
+                        "code": "permission_denied",
+                        "message": "Only ORG_ADMIN and PROJECT_MANAGER can update projects.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        project = update_project(
+            project=instance,
+            data=serializer.validated_data,
+            user=request.user,
+            request=request,
+        )
+
+        # Invalidate dashboard overview cache for tenant
+        from django.core.cache import cache
+        org_id = getattr(request.user, "organization_id", None)
+        if org_id:
+            cache.delete(f"dashboard_overview_{org_id}_all")
+            cache.delete(f"dashboard_overview_{org_id}_{project.id}")
+
+        return Response(ProjectSerializer(project).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        if request.user.role != Role.ORG_ADMIN:
+            return Response(
+                {
+                    "error": {
+                        "code": "permission_denied",
+                        "message": "Only ORG_ADMIN can delete projects.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
+
     def perform_update(self, serializer):
-        update_project(
-            project=self.get_object(),
+        project = update_project(
+            project=serializer.instance,
             data=serializer.validated_data,
             user=self.request.user,
             request=self.request,
         )
+        serializer.instance = project
 
     @action(
         detail=True,

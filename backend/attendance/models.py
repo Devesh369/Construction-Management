@@ -150,6 +150,12 @@ class Attendance(TenantModel):
         related_name="locked_attendance",
     )
 
+    # Financial settlement (cleared against UPAD / Salary payments)
+    is_settled = models.BooleanField(default=False)
+    settled_at = models.DateTimeField(null=True, blank=True)
+    settled_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    settled_by_payment_id = models.CharField(max_length=100, null=True, blank=True)
+
     class Meta:
         ordering = ["-date", "-id"]
         unique_together = ("organization", "employee", "date", "shift_type")

@@ -11,6 +11,9 @@ from core.money import q2
 
 
 class Trade(models.TextChoices):
+    KARIGAR = "KARIGAR", "Karigar"
+    LABOUR = "LABOUR", "Labour"
+    SUPERVISOR = "SUPERVISOR", "Supervisor"
     MASON = "MASON", "Mason"
     CARPENTER = "CARPENTER", "Carpenter"
     ELECTRICIAN = "ELECTRICIAN", "Electrician"
@@ -103,6 +106,11 @@ class Employee(TenantModel):
         on_delete=models.SET_NULL,
         related_name="employees",
     )
+    assigned_projects = models.ManyToManyField(
+        "projects.Project",
+        blank=True,
+        related_name="assigned_employees",
+    )
     group = models.ForeignKey(
         LaborGroup,
         null=True,
@@ -110,6 +118,13 @@ class Employee(TenantModel):
         on_delete=models.SET_NULL,
         related_name="members",
     )
+
+    # Contact & Profile extensions
+    email = models.EmailField(blank=True)
+    role = models.CharField(max_length=50, blank=True, default="Karigar")
+    address = models.TextField(blank=True)
+    emergency_contact = models.CharField(max_length=50, blank=True)
+    bank_name = models.CharField(max_length=150, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

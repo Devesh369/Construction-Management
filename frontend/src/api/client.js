@@ -80,10 +80,38 @@ export async function apiRequest(endpoint, options = {}) {
   }
 
   if (!response.ok) {
-    const errorMsg =
-      data?.error?.message ||
-      data?.detail ||
-      (typeof data === 'object' ? JSON.stringify(data) : 'API request failed');
+    let errorMsg = '';
+    // Extract specific field validation errors if provided by backend
+    if (data?.error?.details) {
+      if (typeof data.error.details === 'object' && !Array.isArray(data.error.details)) {
+        const detailsArr = Object.entries(data.error.details)
+          .map(([key, val]) => {
+            let strVal = val;
+            if (Array.isArray(val)) {
+              strVal = val.join(', ');
+            } else if (typeof val === 'object' && val !== null) {
+              strVal = JSON.stringify(val);
+            }
+            return `${key}: ${strVal}`;
+          })
+          .filter(Boolean);
+        if (detailsArr.length > 0) {
+          errorMsg = detailsArr.join(' | ');
+        }
+      } else if (typeof data.error.details === 'string') {
+        errorMsg = data.error.details;
+      }
+    }
+
+    if (!errorMsg) {
+      errorMsg =
+        data?.error?.message ||
+        data?.detail ||
+        (typeof data === 'object' ? JSON.stringify(data) : 'API request failed');
+    } else if (data?.error?.message && data.error.message !== 'Validation failed.') {
+      errorMsg = `${data.error.message} (${errorMsg})`;
+    }
+
     const err = new Error(errorMsg);
     err.status = response.status;
     err.data = data;
@@ -97,6 +125,12 @@ export async function apiRequest(endpoint, options = {}) {
 export const api = {
   // Authentication & Session
   auth: {
+    getSystemStatus: () => apiRequest('/auth/system-status'),
+    setupAdmin: (data) =>
+      apiRequest('/auth/setup-admin', {
+        method: 'POST',
+        body: data,
+      }),
     login: (email, password) =>
       apiRequest('/auth/login', {
         method: 'POST',
@@ -143,13 +177,38 @@ export const api = {
       const q = new URLSearchParams(params).toString();
       return apiRequest(`/employees${q ? `?${q}` : ''}`);
     },
+    getEmployee: (id) => apiRequest(`/employees/${id}`),
     createEmployee: (data) => apiRequest('/employees', { method: 'POST', body: data }),
     updateEmployee: (id, data) => apiRequest(`/employees/${id}`, { method: 'PATCH', body: data }),
+    deleteEmployee: (id) => apiRequest(`/employees/${id}`, { method: 'DELETE' }),
+    assignProject: (id, projectId) =>
+      apiRequest(`/employees/${id}/assign-project`, {
+        method: 'POST',
+        body: { project_id: projectId },
+      }),
+    unassignProject: (id, projectId) =>
+      apiRequest(`/employees/${id}/unassign-project`, {
+        method: 'POST',
+        body: { project_id: projectId },
+      }),
+    payEmployee: (id, data) =>
+      apiRequest(`/employees/${id}/pay`, {
+        method: 'POST',
+        body: data,
+      }),
+    recordUpad: (id, data) =>
+      apiRequest(`/employees/${id}/upad`, {
+        method: 'POST',
+        body: data,
+      }),
+    getPaymentHistory: (id) => apiRequest(`/employees/${id}/payment-history`),
+    getFinancials: (id) => apiRequest(`/employees/${id}/financials`),
     listLaborGroups: (params = {}) => {
       const q = new URLSearchParams(params).toString();
       return apiRequest(`/labor-groups${q ? `?${q}` : ''}`);
     },
     createLaborGroup: (data) => apiRequest('/labor-groups', { method: 'POST', body: data }),
+    deleteLaborGroup: (id) => apiRequest(`/labor-groups/${id}`, { method: 'DELETE' }),
     addGangMembers: (id, employeeIds) =>
       apiRequest(`/labor-groups/${id}/members`, {
         method: 'POST',
@@ -173,6 +232,18 @@ export const api = {
       const q = new URLSearchParams(params).toString();
       return apiRequest(`/attendance${q ? `?${q}` : ''}`);
     },
+    delete: (id) =>
+      apiRequest(`/attendance/${id}`, {
+        method: 'DELETE',
+      }),
+    summary: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/attendance/summary${q ? `?${q}` : ''}`);
+    },
+    report: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/attendance/report${q ? `?${q}` : ''}`);
+    },
     approveDay: (projectId, date) =>
       apiRequest('/attendance/approve', {
         method: 'POST',
@@ -188,9 +259,22 @@ export const api = {
         body: data,
       }),
     endNightShift: (id, data) =>
-      apiRequest(`/night-shifts/${id}/end_shift`, {
+      apiRequest(`/night-shifts/${id}/complete`, {
+        method: 'PATCH',
+        body: data,
+      }),
+    listHolidays: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/holidays${q ? `?${q}` : ''}`);
+    },
+    createHoliday: (data) =>
+      apiRequest('/holidays', {
         method: 'POST',
         body: data,
+      }),
+    deleteHoliday: (id) =>
+      apiRequest(`/holidays/${id}`, {
+        method: 'DELETE',
       }),
   },
 
@@ -212,6 +296,22 @@ export const api = {
         method: 'POST',
         body: { reason },
       }),
+  },
+
+  // Work Management (Daily work entries by project and employee)
+  workEntries: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/work-entries${q ? `?${q}` : ''}`);
+    },
+    get: (id) => apiRequest(`/work-entries/${id}`),
+    create: (data) => apiRequest('/work-entries', { method: 'POST', body: data }),
+    update: (id, data) => apiRequest(`/work-entries/${id}`, { method: 'PATCH', body: data }),
+    delete: (id) => apiRequest(`/work-entries/${id}`, { method: 'DELETE' }),
+    getPresentEmployees: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/work-entries/present-employees${q ? `?${q}` : ''}`);
+    },
   },
 
   // Expenses & Vendors
@@ -271,6 +371,7 @@ export const api = {
         method: 'POST',
         body: { payment_reference: ref },
       }),
+    downloadVoucherPdf: (id) => apiRequest(`/payroll/vouchers/${id}/pdf`),
     listAdvances: (params = {}) => {
       const q = new URLSearchParams(params).toString();
       return apiRequest(`/payroll/advances${q ? `?${q}` : ''}`);
@@ -312,6 +413,17 @@ export const api = {
     resendInvitation: (id) => apiRequest(`/org/invitations/${id}/resend`, { method: 'POST' }),
   },
 
+  // Users (Team Member Management)
+  users: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/users${q ? `?${q}` : ''}`);
+    },
+    create: (data) => apiRequest('/users', { method: 'POST', body: data }),
+    update: (id, data) => apiRequest(`/users/${id}`, { method: 'PATCH', body: data }),
+    delete: (id) => apiRequest(`/users/${id}`, { method: 'DELETE' }),
+  },
+
   // Reports
   reports: {
     exportPayrollPDF: (data) =>
@@ -326,5 +438,74 @@ export const api = {
       apiRequest('/reports/trial-balance/pdf', { method: 'POST', body: data }),
     exportProfitLossPDF: (data) =>
       apiRequest('/reports/profit-loss/pdf', { method: 'POST', body: data }),
+  },
+
+  // UPAD Module (Advance & Salary Payments to Workers)
+  payments: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/payments${q ? `?${q}` : ''}`);
+    },
+    get: (id) => apiRequest(`/payments/${id}`),
+    create: (data) => apiRequest('/payments', { method: 'POST', body: data }),
+    batch: (data) => apiRequest('/payments/batch', { method: 'POST', body: data }),
+    approve: (id) => apiRequest(`/payments/${id}/approve`, { method: 'PATCH' }),
+    reject: (id, reason = '') =>
+      apiRequest(`/payments/${id}/reject`, { method: 'PATCH', body: { reason } }),
+    process: (id) => apiRequest(`/payments/${id}/process`, { method: 'PATCH' }),
+    update: (id, data) => apiRequest(`/payments/${id}`, { method: 'PATCH', body: data }),
+    delete: (id) => apiRequest(`/payments/${id}`, { method: 'DELETE' }),
+    summary: () => apiRequest('/payments/summary'),
+    calculateSalary: (params) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/payments/calculate-salary?${q}`);
+    },
+    remainingSalary: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/payments/remaining-salary${q ? `?${q}` : ''}`);
+    },
+  },
+
+  // Payment Central (Central Unified Transaction Ledger)
+  transactions: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/transactions${q ? `?${q}` : ''}`);
+    },
+    get: (id) => apiRequest(`/transactions/${id}`),
+    create: (data) => apiRequest('/transactions', { method: 'POST', body: data }),
+    update: (id, data) => apiRequest(`/transactions/${id}`, { method: 'PATCH', body: data }),
+    delete: (id) => apiRequest(`/transactions/${id}`, { method: 'DELETE' }),
+    summary: () => apiRequest('/transactions/summary'),
+  },
+
+  // Credits Module (Cash Credit Management & FIFO Deductions)
+  creditLogs: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/credit-logs${q ? `?${q}` : ''}`);
+    },
+    get: (id) => apiRequest(`/credit-logs/${id}`),
+    create: (data) => apiRequest('/credit-logs', { method: 'POST', body: data }),
+    delete: (id) => apiRequest(`/credit-logs/${id}`, { method: 'DELETE' }),
+    summary: () => apiRequest('/credit-logs/summary'),
+    addExpense: (id, data) =>
+      apiRequest(`/credit-logs/${id}/expenses`, { method: 'POST', body: data }),
+    removeExpense: (id, expenseId) =>
+      apiRequest(`/credit-logs/${id}/expenses/${expenseId}`, { method: 'DELETE' }),
+  },
+
+  // Running Costs Module (Site Expenses)
+  runningCosts: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/running-costs${q ? `?${q}` : ''}`);
+    },
+    create: (data) => apiRequest('/running-costs', { method: 'POST', body: data }),
+    delete: (id) => apiRequest(`/running-costs/${id}`, { method: 'DELETE' }),
+    summary: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/running-costs/summary${q ? `?${q}` : ''}`);
+    },
   },
 };

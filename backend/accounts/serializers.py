@@ -36,6 +36,12 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    def validate_phone(self, value):
+        from core.validators import validate_mobile_10_digits
+        if value:
+            return validate_mobile_10_digits(value)
+        return value
+
     class Meta:
         model = User
         fields = ["id", "email", "name", "phone", "role"]
@@ -43,10 +49,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, min_length=6)
+
+    def validate_phone(self, value):
+        from core.validators import validate_mobile_10_digits
+        if value:
+            return validate_mobile_10_digits(value)
+        return value
+
     class Meta:
         model = User
-        fields = ["id", "email", "name", "phone", "role", "is_active", "created_at"]
-        read_only_fields = ["id", "email", "created_at"]
+        fields = ["id", "email", "name", "phone", "role", "password", "is_active", "created_at"]
+        read_only_fields = ["id", "created_at"]
 
 
 class InvitationSerializer(serializers.ModelSerializer):
@@ -63,6 +77,12 @@ class CreateInvitationSerializer(serializers.Serializer):
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    def validate_contact_phone(self, value):
+        from core.validators import validate_mobile_10_digits
+        if value:
+            return validate_mobile_10_digits(value)
+        return value
+
     class Meta:
         model = Organization
         fields = [

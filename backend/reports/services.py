@@ -4,6 +4,7 @@ Generates in-memory PDF (ReportLab) and Excel (openpyxl) documents.
 Layer 7: Read-only consumer of workforce, attendance, progress, expenses, payroll, ledger.
 """
 
+import os
 from decimal import Decimal
 from io import BytesIO
 
@@ -27,6 +28,34 @@ from progress.models import DailyProgressReport
 from projects.models import Project
 
 ROW_LIMIT_CAP = 10000
+
+LETTERHEAD_PORTRAIT = os.path.join(
+    os.path.dirname(__file__), "assets", "buildsphere_letterhead.png"
+)
+LETTERHEAD_LANDSCAPE = os.path.join(
+    os.path.dirname(__file__), "assets", "buildsphere_letterhead_landscape.png"
+)
+
+
+def draw_letterhead_background(canvas_obj, doc):
+    """
+    Draws the official BuildSphere AI letterhead on every page background.
+    Uses landscape-proportioned letterhead for landscape pages and
+    portrait letterhead for portrait pages.
+    """
+    canvas_obj.saveState()
+    page_w, page_h = doc.pagesize
+    img_path = LETTERHEAD_LANDSCAPE if page_w > page_h else LETTERHEAD_PORTRAIT
+    if os.path.exists(img_path):
+        canvas_obj.drawImage(
+            img_path,
+            0,
+            0,
+            width=page_w,
+            height=page_h,
+            preserveAspectRatio=False,
+        )
+    canvas_obj.restoreState()
 
 
 def get_user_display_name(user) -> str:
@@ -65,19 +94,15 @@ class NumberedCanvas(canvas.Canvas):
 
     def draw_page_decorations(self, total_pages: int):
         self.saveState()
-        self.setFont("Helvetica", 8)
-        self.setFillColor(colors.HexColor("#64748B"))
+        self.setFont("Helvetica-Bold", 8)
+        self.setFillColor(colors.white)
 
         page_w = self._pagesize[0]
-        # Top rule
-        self.setStrokeColor(colors.HexColor("#CBD5E1"))
-        self.setLineWidth(0.5)
 
-        # Footer text
+        # Running footer text cleanly positioned on the official letterhead base wave
         footer_text = f"Page {self._pageNumber} of {total_pages}"
-        self.drawRightString(page_w - 36, 20, footer_text)
-        self.drawString(36, 20, "Confidential - Construction Management Portal")
-        self.line(36, 32, page_w - 36, 32)
+        self.drawRightString(page_w - 36, 16, footer_text)
+        self.drawString(36, 16, "BuildSphere AI • Confidential • Building Smarter. Shaping Tomorrow.")
 
         self.restoreState()
 
@@ -170,8 +195,8 @@ def generate_payroll_pdf(
         pagesize=landscape(A4),
         leftMargin=36,
         rightMargin=36,
-        topMargin=36,
-        bottomMargin=42,
+        topMargin=120,
+        bottomMargin=65,
     )
 
     styles = getSampleStyleSheet()
@@ -300,7 +325,12 @@ def generate_payroll_pdf(
     )
 
     story.append(table)
-    doc.build(story, canvasmaker=NumberedCanvas)
+    doc.build(
+        story,
+        canvasmaker=NumberedCanvas,
+        onFirstPage=draw_letterhead_background,
+        onLaterPages=draw_letterhead_background,
+    )
     buffer.seek(0)
     return buffer, row_count
 
@@ -711,11 +741,11 @@ def generate_profit_loss_pdf(
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=letter,
-        leftMargin=40,
-        rightMargin=40,
-        topMargin=40,
-        bottomMargin=42,
+        pagesize=A4,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=142,
+        bottomMargin=65,
     )
 
     styles = getSampleStyleSheet()
@@ -885,8 +915,12 @@ def generate_profit_loss_pdf(
         )
     )
     story.append(t_sum)
-
-    doc.build(story, canvasmaker=NumberedCanvas)
+    doc.build(
+        story,
+        canvasmaker=NumberedCanvas,
+        onFirstPage=draw_letterhead_background,
+        onLaterPages=draw_letterhead_background,
+    )
     buffer.seek(0)
     return buffer, len(pnl_data.get("revenue_accounts", [])) + len(
         pnl_data.get("expense_accounts", [])
@@ -914,11 +948,11 @@ def generate_trial_balance_pdf(org, user, as_of=None, project_id=None) -> tuple[
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=letter,
-        leftMargin=40,
-        rightMargin=40,
-        topMargin=40,
-        bottomMargin=42,
+        pagesize=A4,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=142,
+        bottomMargin=65,
     )
 
     styles = getSampleStyleSheet()
@@ -1026,6 +1060,11 @@ def generate_trial_balance_pdf(org, user, as_of=None, project_id=None) -> tuple[
     )
 
     story.append(table)
-    doc.build(story, canvasmaker=NumberedCanvas)
+    doc.build(
+        story,
+        canvasmaker=NumberedCanvas,
+        onFirstPage=draw_letterhead_background,
+        onLaterPages=draw_letterhead_background,
+    )
     buffer.seek(0)
     return buffer, len(tb_data.get("accounts", []))

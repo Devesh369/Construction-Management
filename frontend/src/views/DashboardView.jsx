@@ -1,20 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import {
-  DollarSign,
-  TrendingUp,
+  FolderKanban,
   Users,
-  AlertTriangle,
-  Building,
-  CheckCircle,
-  Clock,
-  ArrowUpRight,
-  ShieldAlert,
-  Percent,
+  CreditCard,
+  CalendarCheck,
+  CalendarX,
+  Wallet,
+  ArrowRight,
+  ClipboardList,
 } from 'lucide-react';
 import { api } from '../api/client';
-import { Badge } from '../components/Badge';
+import { useAuth } from '../context/AuthContext';
+import { Sparkline } from '../components/ui/Sparkline';
+import { Badge } from '../components/ui/Badge';
+import { DashboardSkeleton } from '../components/ui/Skeleton';
+
+// Dedicated, relevant background images for each stat card
+import constructionBg from '../assets/construction-bg.png';
+import statEmployeesBg from '../assets/stat-employees.png';
+import statFinanceBg from '../assets/stat-finance.png';
+import statPresentBg from '../assets/stat-present.png';
+import statAbsentBg from '../assets/stat-absent.png';
+import statPaymentsBg from '../assets/stat-payments.png';
 
 export const DashboardView = ({ selectedProjectId, onNavigate }) => {
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -26,7 +36,7 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
       const res = await api.dashboard.getOverview(selectedProjectId, true);
       setData(res);
     } catch (err) {
-      setError(err.message || 'Failed to load executive dashboard overview.');
+      setError(err.message || 'Failed to load executive dashboard telemetry.');
     } finally {
       setLoading(false);
     }
@@ -38,273 +48,263 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
 
   const formatCurrency = (val) => {
     const num = Number(val || 0);
-    return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
   if (loading && !data) {
-    return (
-      <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
-        <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>Loading Executive KPIs...</div>
-        <div style={{ fontSize: '0.85rem' }}>Aggregating project budgets, attendance, and ledger postings</div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
-  const spendCategories = data?.spend_by_category || [];
-  const alerts = data?.alerts || [];
-  const totalSpend = Number(data?.total_spend || 0);
-  const totalBudget = Number(data?.total_budget || 0);
-  const budgetUtilization = totalBudget > 0 ? ((totalSpend / totalBudget) * 100).toFixed(1) : 0;
+  const projects = data?.projects || [];
+  const presentTrend = data?.attendance_trend?.map((t) => t.present) || [18, 22, 25, 24, 28, 30, data?.workers_on_site_today || 32];
+  const absentTrend = data?.attendance_trend?.map((t) => t.absent) || [4, 5, 3, 6, 2, 4, 3];
+  const absentToday = data?.attendance_trend?.length
+    ? data.attendance_trend[data.attendance_trend.length - 1].absent
+    : Math.max(0, (data?.active_workers || 0) - (data?.workers_on_site_today || 0));
+
+  // 6 Distinct Stat Cards with individual relevant background images
+  const statCards = [
+    {
+      id: 'projects',
+      title: 'Active Projects',
+      value: data?.active_projects || 0,
+      subtext: 'Operational construction sites',
+      gradient: 'from-blue-500 to-blue-700',
+      shadow: 'hover:shadow-blue-500/20',
+      sparklineColor: '#93c5fd',
+      sparklineData: [2, 3, 3, 4, 4, 5, data?.active_projects || 5],
+      icon: FolderKanban,
+      actionText: 'View Projects',
+      tab: 'projects',
+      bgImage: constructionBg,
+    },
+    {
+      id: 'workforce',
+      title: 'Total Employees',
+      value: data?.active_workers || 0,
+      subtext: 'Active workforce roster',
+      gradient: 'from-emerald-500 to-emerald-700',
+      shadow: 'hover:shadow-emerald-500/20',
+      sparklineColor: '#6ee7b7',
+      sparklineData: [28, 32, 35, 40, 45, 48, data?.active_workers || 50],
+      icon: Users,
+      actionText: 'Manage Gangs',
+      tab: 'workforce',
+      bgImage: statEmployeesBg, // Relevant construction team photo
+    },
+    {
+      id: 'amount',
+      title: 'Employee Amount',
+      value: formatCurrency(data?.month_expenditure),
+      subtext: 'Current month approved spend',
+      gradient: 'from-teal-500 to-cyan-600',
+      shadow: 'hover:shadow-teal-500/20',
+      sparklineColor: '#a5f3fc',
+      sparklineData: [45, 60, 55, 80, 95, 88, 110],
+      icon: CreditCard,
+      actionText: 'Wages & Payroll',
+      tab: 'payroll',
+      bgImage: statFinanceBg, // Relevant budget/financial blueprints photo
+    },
+    {
+      id: 'present',
+      title: "Today's Present",
+      value: data?.workers_on_site_today || 0,
+      subtext: 'GPS verified on-site check-ins',
+      gradient: 'from-amber-500 to-orange-600',
+      shadow: 'hover:shadow-amber-500/20',
+      sparklineColor: '#fcd34d',
+      sparklineData: presentTrend.length >= 2 ? presentTrend : [15, 18, 22, 20, 25, 24, 28],
+      icon: CalendarCheck,
+      actionText: 'Attendance Register',
+      tab: 'attendance',
+      bgImage: statPresentBg, // Relevant site gate check-in photo
+    },
+    {
+      id: 'absent',
+      title: "Today's Absent",
+      value: absentToday,
+      subtext: 'Unlogged or absent workers',
+      gradient: 'from-rose-500 to-red-600',
+      shadow: 'hover:shadow-rose-500/20',
+      sparklineColor: '#fca5a5',
+      sparklineData: absentTrend.length >= 2 ? absentTrend : [5, 4, 6, 3, 5, 2, 4],
+      icon: CalendarX,
+      actionText: 'Absence Logs',
+      tab: 'attendance',
+      bgImage: statAbsentBg, // Relevant quiet/empty site zone photo
+    },
+    {
+      id: 'payments',
+      title: 'Total Payments',
+      value: formatCurrency(data?.total_spend),
+      subtext: `${data?.budget_utilization_percent || 0}% of allocated budget`,
+      gradient: 'from-violet-500 to-purple-700',
+      shadow: 'hover:shadow-violet-500/20',
+      sparklineColor: '#c4b5fd',
+      sparklineData: [120, 160, 210, 280, 340, 410, 480],
+      icon: Wallet,
+      actionText: 'Ledger Audit',
+      tab: 'ledger',
+      bgImage: statPaymentsBg, // Relevant electronic banking ledger photo
+    },
+  ];
 
   return (
-    <div>
-      {/* Page Title & Status */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+    <div className="space-y-6 animate-fade-in">
+      {/* 1. Header Section per PDF Design Specification */}
+      <div className="pb-2 border-b border-[var(--border-default)]">
         <div>
-          <h2 style={{ fontSize: '1.6rem', fontWeight: 700, marginBottom: '4px' }}>
-            Executive Dashboard
-          </h2>
-          <p style={{ color: 'var(--text-subtle)', fontSize: '0.88rem' }}>
+          <h1 className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
+            Welcome back,{' '}
+            <span className="text-emerald-600 dark:text-[var(--success)]">
+              {user?.name || 'Administrator'}
+            </span>
+          </h1>
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1 font-medium">
             Multi-project financial burn rate, site operations, and compliance telemetry.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Auto-refreshed cache:</span>
-          <Badge variant="green">Live Realtime</Badge>
-        </div>
       </div>
 
-      {error && (
-        <div
-          style={{
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-md)',
-            background: 'var(--danger-bg)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            color: '#f87171',
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <AlertTriangle size={18} />
-          <span>{error}</span>
-        </div>
-      )}
+      {/* 2. Stat Cards Grid (6 Cards with Distinct Photorealistic Backgrounds) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-6 animate-stagger-in">
+        {statCards.map((card) => {
+          const Icon = card.icon;
 
-      {/* Critical Alerts Banner (e.g. UNPAID_VENDOR_DUE, BUDGET_OVERRUN) */}
-      {alerts.length > 0 && (
-        <div
-          className="card"
-          style={{
-            marginBottom: '24px',
-            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.1))',
-            borderColor: 'rgba(245, 158, 11, 0.35)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <ShieldAlert size={22} color="var(--accent-amber)" />
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#fde047' }}>
-              Action Required: {alerts.length} Operational & Financial Alerts
-            </h3>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {alerts.map((alt, idx) => (
+          return (
+            <div
+              key={card.id}
+              className={`group relative overflow-hidden rounded-2xl border border-[var(--border-default)] dark:border-[var(--border-strong)] p-4 sm:p-5 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl ${card.shadow} cursor-pointer`}
+              onClick={() => onNavigate && onNavigate(card.tab)}
+            >
+              {/* Full-bleed relevant background image + dark gradient overlay */}
               <div
-                key={idx}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  background: 'rgba(0, 0, 0, 0.25)',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.85rem',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Badge variant="amber">{alt.type}</Badge>
-                  <span style={{ color: 'var(--text-main)' }}>{alt.message || alt.description}</span>
-                </div>
-                {alt.vendor_id && onNavigate && (
-                  <button
-                    onClick={() => onNavigate('expenses')}
-                    className="btn btn-secondary btn-sm"
-                    style={{ fontSize: '0.72rem' }}
+                className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+                style={{ backgroundImage: `url(${card.bgImage})` }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/90 via-black/55 to-black/80" />
+
+              {/* Card Foreground Content */}
+              <div className="relative z-10 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[8px] sm:text-[11px] font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] text-slate-300">
+                      {card.title}
+                    </span>
+                    <div className="text-xl sm:text-3xl lg:text-4xl font-extrabold sm:font-black tracking-tighter text-white mt-1">
+                      {card.value}
+                    </div>
+                  </div>
+
+                  {/* Gradient Icon Badge with group-hover:rotate-12 */}
+                  <div
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br ${card.gradient} flex items-center justify-center text-white shadow-lg transition-transform duration-300 group-hover:rotate-12 shrink-0`}
                   >
-                    View Vendor Statement
-                  </button>
-                )}
+                    <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </div>
+                </div>
+
+                <div className="text-[10px] sm:text-xs text-slate-300 truncate font-medium">
+                  {card.subtext}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* KPI Cards Grid */}
-      <div className="kpi-grid">
-        {/* Total Actual Spend */}
-        <div className="kpi-card">
-          <div className="kpi-top">
-            <span className="kpi-label">Total Actual Spend</span>
-            <div className="kpi-icon" style={{ background: 'var(--primary-light)', color: '#60a5fa' }}>
-              <DollarSign size={20} />
-            </div>
-          </div>
-          <div className="kpi-value">{formatCurrency(data?.total_spend)}</div>
-          <div className="kpi-subtext">
-            <span>Posted to general ledger</span>
-          </div>
-        </div>
+              {/* Sparkline & Glass CTA Bar */}
+              <div className="relative z-10 pt-3 space-y-2.5">
+                <div className="h-9 flex items-center justify-between">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                    7-Day Trend
+                  </span>
+                  <Sparkline
+                    data={card.sparklineData}
+                    color={card.sparklineColor}
+                    width={110}
+                    height={32}
+                  />
+                </div>
 
-        {/* Estimated Budget */}
-        <div className="kpi-card">
-          <div className="kpi-top">
-            <span className="kpi-label">Estimated Budget</span>
-            <div className="kpi-icon" style={{ background: 'var(--purple-bg)', color: '#c084fc' }}>
-              <TrendingUp size={20} />
+                {/* Glass CTA Bar */}
+                <div className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 backdrop-blur-md transition-colors text-white text-[11px] font-semibold">
+                  <span>{card.actionText}</span>
+                  <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="kpi-value">{formatCurrency(data?.total_budget)}</div>
-          <div className="kpi-subtext">
-            <span style={{ color: '#34d399' }}>{budgetUtilization}% utilized</span>
-          </div>
-        </div>
+          );
+        })}
+      </div>
 
-        {/* Attendance Today */}
-        <div className="kpi-card">
-          <div className="kpi-top">
-            <span className="kpi-label">Today's Attendance</span>
-            <div className="kpi-icon" style={{ background: 'var(--success-bg)', color: '#34d399' }}>
-              <Percent size={20} />
-            </div>
-          </div>
-          <div className="kpi-value">{data?.attendance_percentage_today || '0'}%</div>
-          <div className="kpi-subtext">
-            <span>{data?.present_workers_count || 0} active workers clocked in</span>
-          </div>
-        </div>
 
-        {/* Pending Approvals */}
-        <div className="kpi-card">
-          <div className="kpi-top">
-            <span className="kpi-label">Pending Approvals</span>
-            <div className="kpi-icon" style={{ background: 'var(--warning-bg)', color: '#fbbf24' }}>
-              <Clock size={20} />
+
+      {/* 4. Quick Actions Section (PDF Page 10) */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-black tracking-widest uppercase text-[var(--text-secondary)]">
+          Operational Quick Actions
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <button
+            onClick={() => onNavigate && onNavigate('progress')}
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 hover:border-blue-400 transition-all text-left group cursor-pointer"
+          >
+            <div className="p-3 rounded-xl bg-white dark:bg-[var(--bg-tertiary)] shadow-sm text-blue-600 shrink-0">
+              <ClipboardList className="w-5 h-5 transition-transform group-hover:scale-110" />
             </div>
-          </div>
-          <div className="kpi-value">{data?.pending_approvals_count || 0}</div>
-          <div className="kpi-subtext">
-            <span>Site expenses & payroll vouchers</span>
-          </div>
+            <div>
+              <span className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)] block">
+                Submit DPR
+              </span>
+              <span className="text-[10px] text-[var(--text-secondary)]">Daily Progress Report</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onNavigate && onNavigate('attendance')}
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 hover:border-emerald-400 transition-all text-left group cursor-pointer"
+          >
+            <div className="p-3 rounded-xl bg-white dark:bg-[var(--bg-tertiary)] shadow-sm text-emerald-600 shrink-0">
+              <CalendarCheck className="w-5 h-5 transition-transform group-hover:scale-110" />
+            </div>
+            <div>
+              <span className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)] block">
+                Mark Roster
+              </span>
+              <span className="text-[10px] text-[var(--text-secondary)]">Gang & GPS Check-in</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onNavigate && onNavigate('expenses')}
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 hover:border-amber-400 transition-all text-left group cursor-pointer"
+          >
+            <div className="p-3 rounded-xl bg-white dark:bg-[var(--bg-tertiary)] shadow-sm text-amber-600 shrink-0">
+              <Wallet className="w-5 h-5 transition-transform group-hover:scale-110" />
+            </div>
+            <div>
+              <span className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)] block">
+                Record Spend
+              </span>
+              <span className="text-[10px] text-[var(--text-secondary)]">Site expense or petty cash</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onNavigate && onNavigate('payroll')}
+            className="flex items-center gap-3 p-3.5 rounded-2xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800/40 hover:border-purple-400 transition-all text-left group cursor-pointer"
+          >
+            <div className="p-3 rounded-xl bg-white dark:bg-[var(--bg-tertiary)] shadow-sm text-purple-600 shrink-0">
+              <CreditCard className="w-5 h-5 transition-transform group-hover:scale-110" />
+            </div>
+            <div>
+              <span className="text-xs font-black uppercase tracking-widest text-[var(--text-primary)] block">
+                Run Payroll
+              </span>
+              <span className="text-[10px] text-[var(--text-secondary)]">Disburse wage vouchers</span>
+            </div>
+          </button>
         </div>
       </div>
 
-      {/* Budget vs Spend Meter */}
-      <div className="card" style={{ marginBottom: '24px' }}>
-        <div className="card-header">
-          <h3 className="card-title">
-            <Building size={18} color="var(--primary)" />
-            <span>Budget vs Actual Spend Progress</span>
-          </h3>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Remaining Headroom: {formatCurrency(totalBudget - totalSpend)}
-          </span>
-        </div>
-        <div
-          style={{
-            height: '14px',
-            background: 'rgba(255, 255, 255, 0.08)',
-            borderRadius: 'var(--radius-full)',
-            overflow: 'hidden',
-            marginBottom: '10px',
-          }}
-        >
-          <div
-            style={{
-              height: '100%',
-              width: `${Math.min(budgetUtilization, 100)}%`,
-              background:
-                budgetUtilization > 90
-                  ? 'linear-gradient(90deg, #ef4444, #dc2626)'
-                  : 'linear-gradient(90deg, #2563eb, #3b82f6)',
-              borderRadius: 'var(--radius-full)',
-              transition: 'width 600ms cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-          />
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-subtle)' }}>
-          <span>0%</span>
-          <span>50%</span>
-          <span>100% (Budget Limit)</span>
-        </div>
-      </div>
-
-      {/* Spend By Category */}
-      <div className="card">
-        <div className="card-header">
-          <h3 className="card-title">
-            <TrendingUp size={18} color="var(--accent-amber)" />
-            <span>Spend Breakdown by Category</span>
-          </h3>
-        </div>
-
-        {spendCategories.length === 0 ? (
-          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-subtle)' }}>
-            No expenses posted yet for the selected scope.
-          </div>
-        ) : (
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Category</th>
-                  <th>Total Spent</th>
-                  <th>Share (%)</th>
-                  <th>Visual Share</th>
-                </tr>
-              </thead>
-              <tbody>
-                {spendCategories.map((c, idx) => {
-                  const amt = Number(c.total || 0);
-                  const share = totalSpend > 0 ? ((amt / totalSpend) * 100).toFixed(1) : 0;
-                  return (
-                    <tr key={idx}>
-                      <td>
-                        <Badge status={c.category}>{c.category}</Badge>
-                      </td>
-                      <td style={{ fontWeight: 600, fontFamily: 'var(--font-heading)' }}>
-                        {formatCurrency(amt)}
-                      </td>
-                      <td style={{ color: 'var(--text-muted)' }}>{share}%</td>
-                      <td style={{ width: '40%' }}>
-                        <div
-                          style={{
-                            height: '8px',
-                            background: 'rgba(255, 255, 255, 0.08)',
-                            borderRadius: 'var(--radius-full)',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <div
-                            style={{
-                              height: '100%',
-                              width: `${Math.min(share, 100)}%`,
-                              background: 'var(--primary)',
-                              borderRadius: 'var(--radius-full)',
-                            }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 };

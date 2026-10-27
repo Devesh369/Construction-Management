@@ -105,3 +105,37 @@ class SitePhoto(TenantModel):
 
     def __str__(self):
         return f"Photo for DPR {self.report_id}"
+
+
+class WorkEntry(TenantModel):
+    """
+    Daily work entry by project, date, description, and participating present employees.
+    Matches the Work Management Module specification.
+    """
+
+    project = models.ForeignKey(
+        "projects.Project", on_delete=models.CASCADE, related_name="work_entries"
+    )
+    date = models.DateField()
+    description = models.TextField()
+    department = models.CharField(max_length=100, blank=True, default="")
+    employees = models.ManyToManyField("workforce.Employee", related_name="work_entries", blank=True)
+    created_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_work_entries",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+        indexes = [
+            models.Index(fields=["organization", "project", "date"]),
+        ]
+
+    def __str__(self):
+        return f"WorkEntry {self.date} - {self.project.name}"
+

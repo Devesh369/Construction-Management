@@ -11,6 +11,8 @@ from accounts.views import (
     OrganizationCurrentView,
     RefreshView,
     ResetPasswordView,
+    SetupAdminView,
+    SystemStatusView,
     UserProfileView,
     UserViewSet,
 )
@@ -21,6 +23,8 @@ router.register(r"org/invitations", InvitationViewSet, basename="org-invitations
 
 urlpatterns = [
     # Auth endpoints
+    path("auth/system-status", SystemStatusView.as_view(), name="auth-system-status"),
+    path("auth/setup-admin", SetupAdminView.as_view(), name="auth-setup-admin"),
     path("auth/login", LoginView.as_view(), name="auth-login"),
     path("auth/refresh", RefreshView.as_view(), name="auth-refresh"),
     path("auth/logout", LogoutView.as_view(), name="auth-logout"),

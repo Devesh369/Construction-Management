@@ -148,3 +148,85 @@ class PayrollVoucher(TenantModel):
 
     def __str__(self):
         return f"{self.voucher_number}: {self.employee.full_name} - Net: {self.net_pay}"
+
+
+class PaymentType(models.TextChoices):
+    SALARY = "salary", "Salary"
+    ADVANCE = "advance", "Advance"
+    WITHDRAWAL = "withdrawal", "Withdrawal"
+
+
+class PaymentMethod(models.TextChoices):
+    CASH = "cash", "Cash"
+    BANK_TRANSFER = "bank_transfer", "Bank Transfer"
+    UPI = "upi", "UPI"
+    CHEQUE = "cheque", "Cheque"
+
+
+class PaymentLifecycleStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    PAID = "paid", "Paid"
+    REJECTED = "rejected", "Rejected"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class Payment(TenantModel):
+    """
+    UPAD Module: Advance Payments, Salary Disbursements, and Worker Withdrawals.
+    Corresponds directly to Section 1 of the Module Architecture & Workflow Specification.
+    """
+    employee = models.ForeignKey(
+        "workforce.Employee", on_delete=models.CASCADE, related_name="upad_payments"
+    )
+    project = models.ForeignKey(
+        "projects.Project", null=True, blank=True, on_delete=models.SET_NULL, related_name="upad_payments"
+    )
+    type = models.CharField(
+        max_length=20, choices=PaymentType.choices, default=PaymentType.ADVANCE
+    )
+    base_salary = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(Decimal("0.00"))]
+    )
+    expenses = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(Decimal("0.00"))]
+    )
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
+    )
+    method = models.CharField(
+        max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.CASH
+    )
+    status = models.CharField(
+        max_length=20, choices=PaymentLifecycleStatus.choices, default=PaymentLifecycleStatus.PENDING
+    )
+    date_from = models.DateField(null=True, blank=True)
+    date_to = models.DateField(null=True, blank=True)
+    description = models.CharField(max_length=500, blank=True)
+
+    approved_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="approved_upad_payments"
+    )
+    approved_by_admin_name = models.CharField(max_length=200, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    processed_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="processed_upad_payments"
+    )
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="created_upad_payments"
+    )
+    transaction_id = models.CharField(max_length=100, blank=True, help_text="Linked central ledger transaction ID")
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["organization", "employee", "created_at"]),
+            models.Index(fields=["organization", "status"]),
+        ]
+
+    def __str__(self):
+        return f"UPAD {self.id}: {self.employee.full_name} - ₹{self.amount} ({self.status})"
+

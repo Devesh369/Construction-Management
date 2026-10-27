@@ -14,9 +14,11 @@ from core.money import q2
 class ExpenseCategory(models.TextChoices):
     MATERIAL = "MATERIAL", "Material"
     EQUIPMENT_RENTAL = "EQUIPMENT_RENTAL", "Equipment Rental"
+    EQUIPMENT = "EQUIPMENT", "Equipment"
     FUEL = "FUEL", "Fuel"
     TRANSPORT = "TRANSPORT", "Transport"
     UTILITY = "UTILITY", "Utility"
+    LABOR = "LABOR", "Labor"
     PETTY_CASH = "PETTY_CASH", "Petty Cash"
     OTHER = "OTHER", "Other"
 
@@ -165,3 +167,108 @@ class RunningCostBaseline(TenantModel):
 
     def __str__(self):
         return f"{self.project.code} {self.utility_type} baseline: {self.monthly_baseline}"
+
+
+class RunningCost(TenantModel):
+    """
+    Running Costs Module: Day-to-day site operational non-salary costs
+    (materials, fuel, equipment rental, food, cement, consumables).
+    Directly corresponds to Section 3 of Module Architecture & Workflow Specification.
+    """
+    date = models.DateField()
+    project = models.ForeignKey(
+        "projects.Project", on_delete=models.CASCADE, related_name="running_costs"
+    )
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
+    )
+    description = models.TextField()
+    entered_by = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="running_costs_entered"
+    )
+    user_name = models.CharField(max_length=200, blank=True)
+    user_role = models.CharField(max_length=50, blank=True)
+    payment_method = models.CharField(max_length=30, choices=PaymentMode.choices, default=PaymentMode.CASH)
+
+    class Meta:
+        ordering = ["-date", "-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["organization", "project", "date"]),
+            models.Index(fields=["organization", "entered_by"]),
+        ]
+
+    def __str__(self):
+        return f"{self.project.code} Running Cost: ₹{self.amount} ({self.description[:30]})"
+
+
+class CreditLogStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    FULLY_UTILIZED = "fully_utilized", "Fully Utilized"
+    CLOSED = "closed", "Closed"
+
+
+class CreditLog(TenantModel):
+    """
+    Credits Module: Manages cash pool available to each admin for site disbursement.
+    Implements FIFO deduction and tracking across petty cash advances.
+    Directly corresponds to Section 4 of Module Architecture & Workflow Specification.
+    """
+    transaction_date = models.DateField()
+    credited_by = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="cash_credit_logs",
+        help_text="Admin who received the cash pool"
+    )
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))]
+    )
+    description = models.TextField()
+    project = models.ForeignKey(
+        "projects.Project", null=True, blank=True, on_delete=models.SET_NULL, related_name="credit_logs"
+    )
+    employee = models.ForeignKey(
+        "workforce.Employee", null=True, blank=True, on_delete=models.SET_NULL, related_name="credit_logs"
+    )
+    category = models.CharField(max_length=100, blank=True)
+    individual_name = models.CharField(max_length=200, blank=True, help_text="Individual/owner who provided cash")
+    payment_method = models.CharField(max_length=30, choices=PaymentMode.choices, default=PaymentMode.CASH)
+
+    amount_spent = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    remaining_balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    last_expense_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=CreditLogStatus.choices, default=CreditLogStatus.ACTIVE)
+
+    def save(self, *args, **kwargs):
+        if not self.id and (self.remaining_balance == Decimal("0.00") and self.amount > Decimal("0.00")):
+            self.remaining_balance = self.amount
+        super().save(*args, **kwargs)
+
+    class Meta:
+        ordering = ["transaction_date", "id"]
+        indexes = [
+            models.Index(fields=["organization", "credited_by", "status"]),
+            models.Index(fields=["organization", "transaction_date"]),
+        ]
+
+    def __str__(self):
+        return f"Credit Log #{self.id}: {self.credited_by.email} - Avail: ₹{self.remaining_balance}/{self.amount} ({self.status})"
+
+
+class CreditLogExpense(TenantModel):
+    """Sub-document record for each FIFO deduction or manual expense against a CreditLog."""
+    credit_log = models.ForeignKey(CreditLog, on_delete=models.CASCADE, related_name="expenses")
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))]
+    )
+    description = models.TextField()
+    date = models.DateField()
+    recorded_by = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="recorded_credit_expenses"
+    )
+    transaction_id = models.CharField(max_length=100, blank=True, help_text="Linked Transaction ID")
+
+    class Meta:
+        ordering = ["date", "id"]
+
+    def __str__(self):
+        return f"Credit #{self.credit_log_id} Expense: ₹{self.amount} ({self.description[:30]})"
+

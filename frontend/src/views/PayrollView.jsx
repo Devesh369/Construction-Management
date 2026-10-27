@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Wallet,
   Plus,
   CheckCircle,
   FileText,
-  DollarSign,
+  IndianRupee,
   Calendar,
   AlertCircle,
   ChevronDown,
   ChevronRight,
   Download,
+  ShieldAlert,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { Badge } from '../components/Badge';
@@ -18,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 
 export const PayrollView = ({ selectedProjectId }) => {
   const { role } = useAuth();
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [activeTab, setActiveTab] = useState('runs'); // 'runs' | 'advances'
   const [runs, setRuns] = useState([]);
   const [advances, setAdvances] = useState([]);
@@ -54,8 +56,8 @@ export const PayrollView = ({ selectedProjectId }) => {
       const [runRes, advRes, projRes, empRes] = await Promise.all([
         api.payroll.listRuns(params),
         api.payroll.listAdvances(params),
-        api.projects.list(),
-        api.workforce.listEmployees(),
+        api.projects.list({ page_size: 1000 }),
+        api.workforce.listEmployees({ page_size: 1000 }),
       ]);
       setRuns(Array.isArray(runRes) ? runRes : runRes.results || []);
       setAdvances(Array.isArray(advRes) ? advRes : advRes.results || []);
@@ -116,6 +118,22 @@ export const PayrollView = ({ selectedProjectId }) => {
     }
   };
 
+  const handleDownloadPayslip = async (voucherId, voucherNum) => {
+    try {
+      const blob = await api.payroll.downloadVoucherPdf(voucherId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Payslip_${voucherNum || voucherId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(`Could not download payslip: ${err.message}`);
+    }
+  };
+
   const handleCreateAdvance = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -150,6 +168,18 @@ export const PayrollView = ({ selectedProjectId }) => {
 
   const canApprove = role === 'ORG_ADMIN' || role === 'PROJECT_MANAGER';
 
+  if (!['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'].includes(role)) {
+    return (
+      <div className="card" style={{ maxWidth: '640px', margin: '48px auto', padding: '48px 32px', textAlign: 'center' }}>
+        <ShieldAlert className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '8px' }}>Payroll Access Restricted</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' }}>
+          Payroll generation and salary voucher management are restricted to Organization Admins, Project Managers, and Financial Accountants.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
@@ -163,14 +193,18 @@ export const PayrollView = ({ selectedProjectId }) => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => setIsAdvanceModalOpen(true)} className="btn btn-secondary">
-            <DollarSign size={16} />
-            <span>Record Advance</span>
-          </button>
-          <button onClick={() => setIsRunModalOpen(true)} className="btn btn-primary">
-            <Plus size={16} />
-            <span>Calculate Weekly Payroll</span>
-          </button>
+          {['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT', 'SUPERVISOR'].includes(role) && (
+            <button onClick={() => setIsAdvanceModalOpen(true)} className="btn btn-secondary">
+              <IndianRupee size={16} />
+              <span>Record Advance</span>
+            </button>
+          )}
+          {['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'].includes(role) && (
+            <button onClick={() => setIsRunModalOpen(true)} className="btn btn-primary">
+              <Plus size={16} />
+              <span>Calculate Weekly Payroll</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -239,7 +273,7 @@ export const PayrollView = ({ selectedProjectId }) => {
                           Total Gross
                         </div>
                         <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>
-                          {formatCurrency(r.total_gross)}
+                          {formatCurrency(Number(r.total_gross) > 0 ? r.total_gross : vouchers.reduce((acc, v) => acc + Number(v.gross_pay || 0), 0))}
                         </div>
                       </div>
                       <div>
@@ -247,7 +281,7 @@ export const PayrollView = ({ selectedProjectId }) => {
                           Advances Deducted
                         </div>
                         <div style={{ fontWeight: 700, fontSize: '1rem', color: '#f87171' }}>
-                          -{formatCurrency(r.total_advances_deducted)}
+                          -{formatCurrency(Number(r.total_advances ?? r.total_advances_deducted) > 0 ? (r.total_advances ?? r.total_advances_deducted) : vouchers.reduce((acc, v) => acc + Number(v.advances_deducted || 0), 0))}
                         </div>
                       </div>
                       <div>
@@ -255,7 +289,7 @@ export const PayrollView = ({ selectedProjectId }) => {
                           Net Payable
                         </div>
                         <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#34d399' }}>
-                          {formatCurrency(r.total_net)}
+                          {formatCurrency(Number(r.total_net) > 0 ? r.total_net : vouchers.reduce((acc, v) => acc + Number(v.net_pay || 0), 0))}
                         </div>
                       </div>
 
@@ -274,30 +308,35 @@ export const PayrollView = ({ selectedProjectId }) => {
                   {/* Vouchers Breakdown */}
                   {isExpanded && (
                     <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
-                      <h4 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '12px' }}>
-                        Itemized Worker Payslips & Deductions
-                      </h4>
-                      <div className="table-container">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                        <h4 style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                          Itemized Worker Payslips & Deductions ({vouchers.length})
+                        </h4>
+                        <span style={{ fontSize: '0.76rem', color: 'var(--text-subtle)' }}>
+                          Weekly calculations computed from biometric attendance & active FIFO cash advances
+                        </span>
+                      </div>
+                      <div className="table-container" style={{ border: '1px solid var(--border-default)' }}>
                         <table className="data-table">
                           <thead>
                             <tr>
-                              <th>Worker</th>
+                              <th style={{ width: '220px' }}>Worker</th>
                               <th>Attendance Units</th>
-                              <th>Daily Rate</th>
-                              <th>Gross Pay</th>
-                              <th>Advance Deduction</th>
-                              <th>Net Pay</th>
-                              <th>Status</th>
-                              <th>Action</th>
+                              <th style={{ textAlign: 'right', width: '110px' }}>Daily Rate</th>
+                              <th style={{ textAlign: 'right', width: '130px' }}>Gross Pay</th>
+                              <th style={{ textAlign: 'right', width: '140px' }}>Advance Deduction</th>
+                              <th style={{ textAlign: 'right', width: '130px' }}>Net Pay</th>
+                              <th style={{ textAlign: 'center', width: '100px' }}>Status</th>
+                              <th style={{ textAlign: 'center', width: '150px' }}>Action</th>
                             </tr>
                           </thead>
                           <tbody>
                             {vouchers.map((v) => (
                               <tr key={v.id}>
                                 <td>
-                                  <div style={{ fontWeight: 600 }}>{v.employee_name || `Worker #${v.employee}`}</div>
+                                  <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{v.employee_name || `Worker #${v.employee}`}</div>
                                   <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>
-                                    {v.employee_trade || 'Trade'}
+                                    {v.trade || v.employee_trade || 'Trade Worker'}
                                   </div>
                                 </td>
                                 <td>
@@ -305,33 +344,73 @@ export const PayrollView = ({ selectedProjectId }) => {
                                     {v.days_present} Present + {v.half_days} Half-day ({Number(v.ot_hours || 0)}h OT)
                                   </span>
                                 </td>
-                                <td>₹{Number(v.daily_rate).toFixed(2)}</td>
-                                <td style={{ fontWeight: 600 }}>{formatCurrency(v.gross_pay)}</td>
-                                <td style={{ color: Number(v.advances_deducted) > 0 ? '#f87171' : 'var(--text-subtle)' }}>
+                                <td style={{ textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-heading)' }}>
+                                  ₹{Number(v.daily_rate_used ?? v.daily_rate ?? 0).toFixed(2)}
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-heading)' }}>
+                                  {formatCurrency(v.gross_pay)}
+                                </td>
+                                <td style={{ textAlign: 'right', fontWeight: 600, color: Number(v.advances_deducted) > 0 ? '#f87171' : 'var(--text-subtle)' }}>
                                   -{formatCurrency(v.advances_deducted)}
                                 </td>
-                                <td style={{ fontWeight: 700, color: '#34d399' }}>{formatCurrency(v.net_pay)}</td>
-                                <td>
+                                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-heading)', color: '#34d399', fontSize: '0.95rem' }}>
+                                  {formatCurrency(v.net_pay)}
+                                </td>
+                                <td style={{ textAlign: 'center' }}>
                                   <Badge status={v.status}>{v.status}</Badge>
                                 </td>
-                                <td>
-                                  {v.status === 'DRAFT' || v.status === 'APPROVED' ? (
+                                <td style={{ textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                                     <button
-                                      onClick={() => handleMarkPaid(v.id)}
+                                      onClick={() => handleDownloadPayslip(v.id, v.voucher_number)}
                                       className="btn btn-secondary btn-sm"
-                                      style={{ fontSize: '0.72rem' }}
+                                      style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                      title="Download Official Payslip PDF with Letterhead"
                                     >
-                                      Mark Paid
+                                      <Download size={12} />
+                                      <span>Payslip</span>
                                     </button>
-                                  ) : (
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-                                      Paid ({v.payment_reference || 'UPI'})
-                                    </span>
-                                  )}
+                                    {v.status === 'DRAFT' || v.status === 'APPROVED' ? (
+                                      ['ORG_ADMIN', 'ACCOUNTANT'].includes(role) ? (
+                                        <button
+                                          onClick={() => handleMarkPaid(v.id)}
+                                          className="btn btn-primary btn-sm"
+                                          style={{ fontSize: '0.72rem' }}
+                                        >
+                                          Mark Paid
+                                        </button>
+                                      ) : (
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+                                          Pending Payment
+                                        </span>
+                                      )
+                                    ) : (
+                                      <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+                                        Paid ({v.payment_reference || 'UPI'})
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}
                           </tbody>
+                          <tfoot>
+                            <tr>
+                              <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.76rem' }}>
+                                Run Vouchers Total:
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-heading)' }}>
+                                {formatCurrency(vouchers.reduce((acc, v) => acc + Number(v.gross_pay || 0), 0))}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-heading)', color: '#f87171' }}>
+                                -{formatCurrency(vouchers.reduce((acc, v) => acc + Number(v.advances_deducted || 0), 0))}
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'var(--font-heading)', color: '#34d399', fontSize: '1rem' }}>
+                                {formatCurrency(vouchers.reduce((acc, v) => acc + Number(v.net_pay || 0), 0))}
+                              </td>
+                              <td colSpan={2}></td>
+                            </tr>
+                          </tfoot>
                         </table>
                       </div>
                     </div>
@@ -343,41 +422,63 @@ export const PayrollView = ({ selectedProjectId }) => {
         </div>
       ) : (
         /* Advances Tab */
-        <div className="card">
+        <div className="card card-table">
           <div className="table-container">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Date</th>
+                  <th style={{ width: '130px' }}>Date</th>
                   <th>Worker</th>
-                  <th>Amount</th>
-                  <th>Payment Mode</th>
+                  <th style={{ textAlign: 'right', width: '130px' }}>Amount</th>
+                  <th style={{ textAlign: 'center', width: '140px' }}>Payment Mode</th>
                   <th>Reason</th>
-                  <th>Status</th>
+                  <th style={{ textAlign: 'center', width: '120px' }}>Status</th>
                   <th>Site Project</th>
                 </tr>
               </thead>
               <tbody>
                 {advances.map((adv) => (
                   <tr key={adv.id}>
-                    <td>{adv.advance_date}</td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{adv.employee_name || `Worker #${adv.employee}`}</div>
+                      <div style={{ fontWeight: 600 }}>{adv.advance_date}</div>
                     </td>
-                    <td style={{ fontWeight: 700, fontFamily: 'var(--font-heading)', color: '#fbbf24' }}>
+                    <td>
+                      <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{adv.employee_name || `Worker #${adv.employee}`}</div>
+                      {adv.employee_code && (
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>Code: {adv.employee_code}</div>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-heading)', color: '#fbbf24', fontSize: '0.95rem' }}>
                       {formatCurrency(adv.amount)}
                     </td>
-                    <td>
+                    <td style={{ textAlign: 'center' }}>
                       <Badge status={adv.payment_mode}>{adv.payment_mode}</Badge>
                     </td>
-                    <td style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{adv.reason}</td>
-                    <td>
+                    <td style={{ fontSize: '0.84rem', color: 'var(--text-subtle)', maxWidth: '240px' }}>
+                      {adv.reason || 'Personal / emergency advance'}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
                       <Badge status={adv.status}>{adv.status}</Badge>
                     </td>
-                    <td>{adv.project_name || `Site #${adv.project}`}</td>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{adv.project_name || `Site #${adv.project}`}</div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={2} style={{ textAlign: 'right', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.76rem' }}>
+                    Total Cash Advances:
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'var(--font-heading)', color: '#fbbf24', fontSize: '1rem' }}>
+                    {formatCurrency(advances.reduce((acc, a) => acc + Number(a.amount || 0), 0))}
+                  </td>
+                  <td colSpan={4} style={{ fontSize: '0.76rem', color: 'var(--text-subtle)' }}>
+                    {advances.length} advance transactions recorded
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -407,6 +508,7 @@ export const PayrollView = ({ selectedProjectId }) => {
               <input
                 type="date"
                 required
+                max={new Date().toISOString().split('T')[0]}
                 className="form-control"
                 value={runForm.period_start}
                 onChange={(e) => setRunForm({ ...runForm, period_start: e.target.value })}
@@ -417,6 +519,7 @@ export const PayrollView = ({ selectedProjectId }) => {
               <input
                 type="date"
                 required
+                max={new Date().toISOString().split('T')[0]}
                 className="form-control"
                 value={runForm.period_end}
                 onChange={(e) => setRunForm({ ...runForm, period_end: e.target.value })}
@@ -467,12 +570,49 @@ export const PayrollView = ({ selectedProjectId }) => {
             >
               <option value="">Select Worker</option>
               {employees.map((e) => (
-                <option key={e.id} value={e.id}>{e.full_name} ({e.trade})</option>
+                <option key={e.id} value={e.id}>{e.full_name} ({e.trade || 'Worker'})</option>
               ))}
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+          {/* Live Salary & Advance Breakdown */}
+          {advanceForm.employee && (() => {
+            const worker = employees.find((e) => String(e.id) === String(advanceForm.employee));
+            if (!worker) return null;
+            const dailyWage = Number(worker.daily_rate || worker.wage_rate || 0);
+            const curBal = Number(worker.financials?.balance ?? (dailyWage || 0));
+            const entered = Number(advanceForm.amount || 0);
+            const remaining = Math.max(0, curBal - entered);
+            return (
+              <div style={{ padding: '12px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#64748B', marginBottom: '8px' }}>
+                  <span>Upad & Salary Breakdown</span>
+                  <span style={{ color: '#2563EB' }}>{worker.full_name}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
+                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 700 }}>DAILY WAGE</div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>₹{dailyWage}</div>
+                  </div>
+                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 700 }}>CURRENT BAL</div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#4F46E5', marginTop: '2px' }}>₹{curBal}</div>
+                  </div>
+                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 700 }}>REMAIN SALARY</div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#16A34A', marginTop: '2px' }}>₹{remaining}</div>
+                  </div>
+                </div>
+                {entered > 0 && (
+                  <div style={{ fontSize: '11px', textAlign: 'center', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #E2E8F0', color: '#475569', fontWeight: 600 }}>
+                    Taking <strong style={{ color: '#2563EB' }}>₹{entered}</strong> Upad from daily wage ₹{dailyWage || curBal} leaves <strong style={{ color: '#16A34A' }}>₹{remaining}</strong> remaining salary.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
             <div className="form-group">
               <label className="form-label">Advance Amount (₹) *</label>
               <input
@@ -483,6 +623,17 @@ export const PayrollView = ({ selectedProjectId }) => {
                 placeholder="1500.00"
                 value={advanceForm.amount}
                 onChange={(e) => setAdvanceForm({ ...advanceForm, amount: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Advance Date *</label>
+              <input
+                type="date"
+                required
+                max={todayStr}
+                className="form-control"
+                value={advanceForm.advance_date}
+                onChange={(e) => setAdvanceForm({ ...advanceForm, advance_date: e.target.value })}
               />
             </div>
             <div className="form-group">

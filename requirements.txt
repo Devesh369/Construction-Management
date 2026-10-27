@@ -1,0 +1,76 @@
+# ==============================================================================
+# BuildSphere AI - Python Dependencies & Local Setup Guide
+# ==============================================================================
+# Python Version: Python 3.11+ (Python 3.12 recommended)
+#
+# QUICKSTART (Local Development):
+#   1. Create & activate virtual environment:
+#      python3.12 -m venv venv
+#      source venv/bin/activate       # On Linux/macOS
+#      venv\Scripts\activate          # On Windows
+#
+#   2. Install dependencies:
+#      pip install --upgrade pip
+#      pip install -r requirements.txt
+#
+#   3. Environment setup:
+#      cp .env.example .env
+#
+#   4. Database setup (PostgreSQL 15+):
+#      docker compose up -d db        # Or run local PostgreSQL (db: construction_db)
+#
+#   5. Run migrations:
+#      cd backend
+#      python manage.py migrate
+#
+#   6. Create admin user:
+#      python manage.py create_admin --email admin@buildsphere.com --password ChangeMe#12345
+#
+#   7. Run automated test suite:
+#      pytest -v
+#
+#   8. Start backend server (Port 8000):
+#      python manage.py runserver 0.0.0.0:8000
+#
+#   9. Start frontend client (Port 3000):
+#      cd ../frontend
+#      npm install
+#      npm run dev
+# ==============================================================================
+
+# Core Web Framework & REST API
+Django>=5.2,<5.3
+djangorestframework>=3.15
+djangorestframework-simplejwt>=5.3
+django-filter>=24.1
+drf-spectacular>=0.27
+django-cors-headers>=4.3
+django-environ>=0.11
+asgiref>=3.8.1
+sqlparse>=0.5.0
+PyJWT>=2.8.0
+PyYAML>=6.0.1
+
+# Database Driver (PostgreSQL)
+psycopg2-binary>=2.9
+
+# Document, Image, PDF & Excel Processing
+Pillow>=10.3
+reportlab>=4.1
+openpyxl>=3.1
+pypdf>=4.0.0
+python-docx>=1.1.0
+
+# Production WSGI Server
+gunicorn>=22.0
+
+# Development, Testing & Code Quality
+pytest>=8.0
+pytest-django>=4.8
+pytest-cov>=5.0
+factory-boy>=3.3
+Faker>=24.0
+freezegun>=1.5
+ruff>=0.5
+black>=24.4
+coverage>=7.5

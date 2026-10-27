@@ -114,3 +114,70 @@ class JournalLine(ImmutableTenantModel):
 
     def __str__(self):
         return f"{self.side} {self.account.code}: {self.amount}"
+
+
+class TransactionType(models.TextChoices):
+    INCOMING = "incoming", "Incoming"
+    OUTGOING = "outgoing", "Outgoing"
+
+
+class TransactionCategory(models.TextChoices):
+    SALARY = "salary", "Salary"
+    VENDOR = "vendor", "Vendor"
+    CLIENT = "client", "Client Payment"
+    EXPENSE_REIMBURSEMENT = "expense_reimbursement", "Expense Reimbursement"
+    SITE_COST = "site_cost", "Site Cost"
+    OTHER = "other", "Other"
+
+
+class TransactionStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+    REFUNDED = "refunded", "Refunded"
+
+
+class TransactionMethod(models.TextChoices):
+    CASH = "cash", "Cash"
+    BANK_TRANSFER = "bank_transfer", "Bank Transfer"
+    UPI = "upi", "UPI"
+    CHEQUE = "cheque", "Cheque"
+    OTHER = "other", "Other"
+
+
+class Transaction(TenantModel):
+    """
+    Payment Central: Central Unified Transaction Ledger.
+    Records ALL monetary movements (incoming & outgoing) with full metadata,
+    role-based visibility, running net-payable enrichment, and credit-log tie-in.
+    Corresponds directly to Section 2 of Module Architecture & Workflow Specification.
+    """
+    transaction_id = models.CharField(max_length=100, unique=True, db_index=True)
+    date = models.DateField()
+    type = models.CharField(max_length=20, choices=TransactionType.choices)
+    category = models.CharField(max_length=40, choices=TransactionCategory.choices, default=TransactionCategory.OTHER)
+    payer_name = models.CharField(max_length=255)
+    payee_name = models.CharField(max_length=255)
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))]
+    )
+    method = models.CharField(max_length=30, choices=TransactionMethod.choices, default=TransactionMethod.CASH)
+    status = models.CharField(max_length=20, choices=TransactionStatus.choices, default=TransactionStatus.COMPLETED)
+    description = models.TextField(blank=True)
+    recorded_by = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="recorded_transactions"
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["organization", "type"]),
+            models.Index(fields=["organization", "category"]),
+            models.Index(fields=["organization", "date"]),
+            models.Index(fields=["organization", "payee_name"]),
+        ]
+
+    def __str__(self):
+        return f"{self.transaction_id} ({self.type.upper()}) ₹{self.amount} - {self.payee_name}"
+

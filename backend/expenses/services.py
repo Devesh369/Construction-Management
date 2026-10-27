@@ -33,9 +33,11 @@ from projects.services import update_spend
 CATEGORY_TO_ACCOUNT = {
     ExpenseCategory.MATERIAL: "5001",
     ExpenseCategory.EQUIPMENT_RENTAL: "5002",
+    ExpenseCategory.EQUIPMENT: "5002",
     ExpenseCategory.FUEL: "5003",
     ExpenseCategory.TRANSPORT: "5003",
     ExpenseCategory.UTILITY: "5004",
+    ExpenseCategory.LABOR: "5006",
     ExpenseCategory.PETTY_CASH: "5006",
     ExpenseCategory.OTHER: "5006",
 }

@@ -140,6 +140,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return f"{self.email} ({self.role})"
 
+    def get_full_name(self):
+        return self.name or self.email
+
+    def get_short_name(self):
+        return self.name or self.email
+
     def clean(self):
         super().clean()
         if self.email:

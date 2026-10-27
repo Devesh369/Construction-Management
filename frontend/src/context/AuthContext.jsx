@@ -53,6 +53,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const setupAdmin = async (data) => {
+    setLoading(true);
+    try {
+      const res = await api.auth.setupAdmin(data);
+      setToken(res.access);
+      setUser(res.user);
+      setStoredUser(res.user);
+      return res.user;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -77,6 +90,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated: Boolean(user),
         loading,
         login,
+        setupAdmin,
         logout,
         quickLogin,
         isAdminOrPM,

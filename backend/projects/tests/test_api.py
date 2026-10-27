@@ -152,3 +152,95 @@ class TestProjectsAPI(TenantIsolationTestMixin):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_beta['access']}")
         res = self.client.get(f"/api/v1/projects/{p_alpha.id}")
         assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_update_project_details_persists_to_db_and_returns_fresh_data(self):
+        """PATCH /api/v1/projects/:id updates DB and returns the updated representation."""
+        from projects.models import Project
+        from projects.services import create_project
+
+        proj = create_project(
+            self.org_alpha,
+            self.admin_alpha,
+            {
+                "name": "Original Name",
+                "code": "ORIG-01",
+                "location": "Old Location",
+                "client_name": "Old Client",
+                "client_phone": "1111111111",
+                "description": "Old Description",
+                "estimated_budget": Decimal("100000.00"),
+                "geofence_lat": Decimal("19.000000"),
+                "geofence_lng": Decimal("72.000000"),
+                "geofence_radius_m": 200,
+            },
+        )
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_alpha['access']}")
+        payload = {
+            "name": "Brand New Tower",
+            "location": "New Prime Location",
+            "client_name": "New Client Ltd",
+            "client_phone": "+91 9876543210",
+            "description": "Updated commercial description",
+            "estimated_budget": "750000.00",
+            "geofence_lat": "19.123456",
+            "geofence_lng": "72.654321",
+            "geofence_radius_m": 350,
+            "status": "ACTIVE",
+        }
+        res = self.client.patch(f"/api/v1/projects/{proj.id}", payload, format="json")
+        assert res.status_code == status.HTTP_200_OK
+
+        # Verify returned response matches updated data (no stale instance bug)
+        assert res.data["name"] == "Brand New Tower"
+        assert res.data["location"] == "New Prime Location"
+        assert res.data["client_name"] == "New Client Ltd"
+        assert res.data["client_phone"] == "9876543210"
+        assert res.data["description"] == "Updated commercial description"
+        assert res.data["estimated_budget"] == "750000.00"
+        assert res.data["geofence_lat"] == "19.123456"
+        assert res.data["geofence_lng"] == "72.654321"
+        assert res.data["geofence_radius_m"] == 350
+
+        # Verify database record updated
+        proj.refresh_from_db()
+        assert proj.name == "Brand New Tower"
+        assert proj.location == "New Prime Location"
+        assert proj.client_name == "New Client Ltd"
+        assert proj.client_phone == "9876543210"
+        assert proj.description == "Updated commercial description"
+        assert proj.estimated_budget == Decimal("750000.00")
+        assert proj.geofence_lat == Decimal("19.123456")
+        assert proj.geofence_lng == Decimal("72.654321")
+        assert proj.geofence_radius_m == 350
+
+    def test_update_project_with_empty_or_null_budget(self):
+        """Optional estimated_budget can be null or empty string, defaulting to 0.00."""
+        from projects.models import Project
+        from projects.services import create_project
+
+        proj = create_project(
+            self.org_alpha,
+            self.admin_alpha,
+            {"name": "Budget Site", "code": "BUD-01", "estimated_budget": Decimal("50000.00")},
+        )
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_alpha['access']}")
+        res = self.client.patch(f"/api/v1/projects/{proj.id}", {"estimated_budget": None}, format="json")
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["estimated_budget"] == "0.00"
+
+        proj.refresh_from_db()
+        assert proj.estimated_budget == Decimal("0.00")
+
+    def test_supervisor_cannot_update_project(self):
+        """Supervisor role gets 403 Forbidden on project update."""
+        from projects.services import create_project
+
+        proj = create_project(
+            self.org_alpha, self.admin_alpha, {"name": "Protected Site", "code": "PROT-01"}
+        )
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_sup['access']}")
+        res = self.client.patch(f"/api/v1/projects/{proj.id}", {"name": "Hacked Name"}, format="json")
+        assert res.status_code == status.HTTP_403_FORBIDDEN

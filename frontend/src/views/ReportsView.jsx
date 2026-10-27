@@ -9,8 +9,10 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { Badge } from '../components/Badge';
+import { useAuth } from '../context/AuthContext';
 
 export const ReportsView = ({ selectedProjectId }) => {
+  const { role } = useAuth();
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(selectedProjectId || '');
   const [dateFrom, setDateFrom] = useState('2026-09-01');
@@ -63,14 +65,20 @@ export const ReportsView = ({ selectedProjectId }) => {
       format: 'PDF',
       icon: FileText,
       color: '#f87171',
+      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'],
       description: 'Formal PDF payslip document with worker attendance units, overtime hours, gross earnings, advance deductions, and net payouts.',
-      action: () =>
+      action: () => {
+        if (!projectId) {
+          alert('Please create and select a project first to export the wage register.');
+          return;
+        }
         handleDownload(
           'wage_pdf',
           `Wage_Register_${projectId || 'All'}.pdf`,
           api.reports.exportPayrollPDF,
           { project_id: Number(projectId), period_start: dateFrom, period_end: dateTo }
-        ),
+        );
+      },
     },
     {
       id: 'dpr_excel',
@@ -78,6 +86,7 @@ export const ReportsView = ({ selectedProjectId }) => {
       format: 'EXCEL',
       icon: FileSpreadsheet,
       color: '#34d399',
+      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'],
       description: 'Multi-tab workbook containing site weather summaries, cumulative task completion percentages, and tracked material usages.',
       action: () =>
         handleDownload(
@@ -93,6 +102,7 @@ export const ReportsView = ({ selectedProjectId }) => {
       format: 'EXCEL',
       icon: FileSpreadsheet,
       color: '#38bdf8',
+      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'],
       description: 'Itemized material, fuel, transport, and credit purchase records with approver audit timestamps and vendor references.',
       action: () =>
         handleDownload(
@@ -108,14 +118,20 @@ export const ReportsView = ({ selectedProjectId }) => {
       format: 'EXCEL',
       icon: FileSpreadsheet,
       color: '#fbbf24',
+      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'],
       description: 'Monthly site muster sheet with daily check-in marks (P, H, A), overtime hours, and GPS geofence compliance flags.',
-      action: () =>
+      action: () => {
+        if (!projectId) {
+          alert('Please create and select a project first to export the attendance muster.');
+          return;
+        }
         handleDownload(
           'att_excel',
           `Attendance_Muster.xlsx`,
           api.reports.exportAttendanceExcel,
           { project_id: Number(projectId), month: Number(dateFrom.split('-')[1]), year: Number(dateFrom.split('-')[0]) }
-        ),
+        );
+      },
     },
     {
       id: 'tb_pdf',
@@ -123,6 +139,7 @@ export const ReportsView = ({ selectedProjectId }) => {
       format: 'PDF',
       icon: FileText,
       color: '#c084fc',
+      roles: ['ORG_ADMIN', 'ACCOUNTANT'],
       description: 'Official double-entry trial balance verifying debits equal credits across all asset, liability, equity, revenue, and expense accounts.',
       action: () =>
         handleDownload(
@@ -138,6 +155,7 @@ export const ReportsView = ({ selectedProjectId }) => {
       format: 'PDF',
       icon: FileText,
       color: '#60a5fa',
+      roles: ['ORG_ADMIN', 'ACCOUNTANT'],
       description: 'Comprehensive financial statement showing project contract revenues against direct site material, wage, and overhead costs.',
       action: () =>
         handleDownload(
@@ -148,6 +166,8 @@ export const ReportsView = ({ selectedProjectId }) => {
         ),
     },
   ];
+
+  const allowedReportCards = reportCards.filter((rc) => !rc.roles || rc.roles.includes(role));
 
   return (
     <div>
@@ -181,6 +201,7 @@ export const ReportsView = ({ selectedProjectId }) => {
             <label className="form-label">Date From</label>
             <input
               type="date"
+              max={new Date().toISOString().split('T')[0]}
               className="form-control"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
@@ -191,6 +212,7 @@ export const ReportsView = ({ selectedProjectId }) => {
             <label className="form-label">Date To</label>
             <input
               type="date"
+              max={new Date().toISOString().split('T')[0]}
               className="form-control"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
@@ -201,7 +223,7 @@ export const ReportsView = ({ selectedProjectId }) => {
 
       {/* Report Cards Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }}>
-        {reportCards.map((rc) => {
+        {allowedReportCards.map((rc) => {
           const Icon = rc.icon;
           const isBusy = downloading === rc.id;
 

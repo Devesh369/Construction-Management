@@ -42,13 +42,15 @@ def create_project(org, user, data: dict, request=None) -> Project:
         project = Project.objects.create(
             organization=org,
             name=data["name"],
-            code=data["code"],
+            code=data.get("code") or f"PRJ-{data['name'][:6].upper().replace(' ', '')}",
             client_name=data.get("client_name", ""),
+            client_phone=data.get("client_phone", ""),
             location=data.get("location", ""),
-            status=data.get("status", "PLANNING"),
+            description=data.get("description", ""),
+            status=data.get("status", "ACTIVE"),
             start_date=data.get("start_date"),
             expected_end_date=data.get("expected_end_date"),
-            estimated_budget=q2(data.get("estimated_budget", Decimal("0.00"))),
+            estimated_budget=q2(Decimal(str(data.get("estimated_budget") or "0.00"))),
             geofence_lat=data.get("geofence_lat"),
             geofence_lng=data.get("geofence_lng"),
             geofence_radius_m=data.get("geofence_radius_m", 200),
@@ -101,9 +103,14 @@ def update_project(project: Project, data: dict, user, request=None) -> Project:
         for field, value in data.items():
             if field in ["actual_spend", "progress_percent"]:
                 continue  # read-only fields
+            if field == "code" and not value:
+                continue  # preserve existing code if empty
+            if field == "estimated_budget":
+                value = q2(Decimal(str(value if value is not None and value != "" else "0.00")))
             setattr(project, field, value)
 
         project.save()
+        project.refresh_from_db()
 
         # Audit budget changes
         if "estimated_budget" in data and q2(data["estimated_budget"]) != old_budget:

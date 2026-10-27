@@ -4,17 +4,41 @@ Single source of truth for UC-23, UC-24, and UC-25.
 """
 
 import io
+import os
 from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from accounts.models import User
+
+LETTERHEAD_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "reports",
+    "assets",
+    "buildsphere_letterhead.png",
+)
+
+
+def draw_letterhead_background(canvas_obj, doc):
+    """Draw official BuildSphere AI letterhead background for worker payslips."""
+    canvas_obj.saveState()
+    page_w, page_h = doc.pagesize
+    if os.path.exists(LETTERHEAD_PATH):
+        canvas_obj.drawImage(
+            LETTERHEAD_PATH,
+            0,
+            0,
+            width=page_w,
+            height=page_h,
+            preserveAspectRatio=False,
+        )
+    canvas_obj.restoreState()
 from attendance.models import Attendance
 from attendance.services import AttendanceSummary, get_attendance_summary
 from audit.constants import AuditAction
@@ -651,11 +675,11 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
-        pagesize=letter,
+        pagesize=A4,
         rightMargin=36,
         leftMargin=36,
-        topMargin=36,
-        bottomMargin=36,
+        topMargin=142,
+        bottomMargin=65,
     )
     styles = getSampleStyleSheet()
 
@@ -682,7 +706,7 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
 
     # 1. Header
     org_name = (
-        voucher.organization.name if voucher.organization else "Construction Management Portal"
+        voucher.organization.name if voucher.organization else "BuildSphere AI"
     )
     elements.append(Paragraph(org_name, title_style))
     elements.append(Spacer(1, 4))
@@ -726,16 +750,15 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
 
     # 3. Attendance Summary Table
     att_data = [
-        ["Days Present", "Half Days", "Paid Holidays", "Overtime (Hrs)", "Night Shifts"],
+        ["Days Present", "Half Days", "Paid Holidays", "Overtime (Hrs)"],
         [
             str(voucher.days_present),
             str(voucher.half_days),
             str(voucher.paid_holidays),
             f"{voucher.ot_hours} hrs",
-            str(voucher.night_shifts),
         ],
     ]
-    att_table = Table(att_data, colWidths=[108, 108, 108, 108, 108])
+    att_table = Table(att_data, colWidths=[135, 135, 135, 135])
     att_table.setStyle(
         TableStyle(
             [
@@ -768,12 +791,6 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
             f"{voucher.ot_hours} hrs",
             f"{voucher.ot_pay}",
         ],
-        [
-            "Night Shift Allowance",
-            f"{voucher.daily_rate_used * Decimal('0.5')}/shift",
-            f"{voucher.night_shifts} shifts",
-            f"{voucher.night_allowance}",
-        ],
         ["TOTAL GROSS WAGE", "", "", f"{voucher.gross_pay}"],
         ["Less: Worker Advance Deduction", "", "", f"-{voucher.advances_deducted}"],
         ["NET AMOUNT PAYABLE", "", "", f"{voucher.net_pay}"],
@@ -788,11 +805,11 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
                 ("ALIGN", (3, 0), (3, -1), "RIGHT"),
                 ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#CBD5E0")),
                 ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
-                ("BACKGROUND", (0, 4), (-1, 4), colors.HexColor("#EDF2F7")),
-                ("FONTNAME", (0, 4), (-1, 4), "Helvetica-Bold"),
-                ("BACKGROUND", (0, 6), (-1, 6), colors.HexColor("#C6F6D5")),
-                ("FONTNAME", (0, 6), (-1, 6), "Helvetica-Bold"),
-                ("TEXTCOLOR", (0, 6), (-1, 6), colors.HexColor("#22543D")),
+                ("BACKGROUND", (0, 3), (-1, 3), colors.HexColor("#EDF2F7")),
+                ("FONTNAME", (0, 3), (-1, 3), "Helvetica-Bold"),
+                ("BACKGROUND", (0, 5), (-1, 5), colors.HexColor("#C6F6D5")),
+                ("FONTNAME", (0, 5), (-1, 5), "Helvetica-Bold"),
+                ("TEXTCOLOR", (0, 5), (-1, 5), colors.HexColor("#22543D")),
                 ("PADDING", (0, 0), (-1, -1), 6),
             ]
         )
@@ -829,7 +846,11 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
     )
     elements.append(sig_table)
 
-    doc.build(elements)
+    doc.build(
+        elements,
+        onFirstPage=draw_letterhead_background,
+        onLaterPages=draw_letterhead_background,
+    )
     pdf_bytes = buf.getvalue()
     buf.close()
     return pdf_bytes

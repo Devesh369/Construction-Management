@@ -183,3 +183,184 @@ class TestWorkforceAPI(TenantIsolationTestMixin):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_beta['access']}")
         res = self.client.get(f"/api/v1/employees/{worker_alpha.id}")
         assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_register_employee_with_custom_role_contact_and_bank_details(self):
+        """Register worker with Full Name, Phone, Email, Role, Address, Emergency Contact, Bank Details."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_alpha['access']}")
+        data = {
+            "full_name": "Prakash Patel",
+            "phone": "+91 9898082719",
+            "email": "prakash@example.com",
+            "role": "Karigar",
+            "daily_rate": "1000.00",
+            "address": "Atladra Main Road, Vadodara",
+            "emergency_contact": "+91 9898000000",
+            "joining_date": "2026-06-29",
+            "bank_account_number": "123456789012",
+            "bank_ifsc": "SBIN0001234",
+            "bank_name": "State Bank of India",
+        }
+        res = self.client.post("/api/v1/employees", data, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        assert res.data["full_name"] == "Prakash Patel"
+        assert res.data["phone"] == "9898082719"
+        assert res.data["role"] == "Karigar"
+        assert res.data["email"] == "prakash@example.com"
+        assert res.data["address"] == "Atladra Main Road, Vadodara"
+        assert res.data["bank_name"] == "State Bank of India"
+        assert "financials" in res.data
+        assert res.data["financials"]["balance"] == "0.00"
+
+    def test_assign_and_unassign_projects_to_employee(self):
+        """Assign project to employee and unassign project."""
+        from workforce.services import create_employee
+        worker = create_employee(
+            self.org_alpha,
+            {"full_name": "Ramesh Kumar", "daily_rate": Decimal("800.00")},
+            self.admin_alpha,
+        )
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_alpha['access']}")
+        # Assign project
+        res_assign = self.client.post(
+            f"/api/v1/employees/{worker.id}/assign-project",
+            {"project_id": self.project_alpha.id},
+            format="json",
+        )
+        assert res_assign.status_code == status.HTTP_200_OK
+        assert len(res_assign.data["assigned_projects_details"]) == 1
+        assert res_assign.data["assigned_projects_details"][0]["id"] == self.project_alpha.id
+
+        # Unassign project
+        res_unassign = self.client.post(
+            f"/api/v1/employees/{worker.id}/unassign-project",
+            {"project_id": self.project_alpha.id},
+            format="json",
+        )
+        assert res_unassign.status_code == status.HTTP_200_OK
+        assert len(res_unassign.data["assigned_projects_details"]) == 0
+
+    def test_employee_pay_and_upad_actions(self):
+        """Record advance (upad) and payment (pay) for employee and verify ledger history."""
+        from workforce.services import create_employee
+        worker = create_employee(
+            self.org_alpha,
+            {"full_name": "Suresh Bhai", "daily_rate": Decimal("1000.00")},
+            self.admin_alpha,
+        )
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_alpha['access']}")
+        # 1. Record Upad
+        upad_res = self.client.post(
+            f"/api/v1/employees/{worker.id}/upad",
+            {"amount": "2000.00", "reason": "Diwali Advance", "payment_mode": "CASH"},
+            format="json",
+        )
+        assert upad_res.status_code == status.HTTP_201_CREATED
+        assert upad_res.data["financials"]["total_upad"] == "2000.00"
+
+        # 2. Attempt Pay without attendance -> HTTP 400 Bad Request
+        pay_reject = self.client.post(
+            f"/api/v1/employees/{worker.id}/pay",
+            {"amount": "3000.00", "payment_mode": "BANK_TRANSFER", "notes": "Weekly Wage"},
+            format="json",
+        )
+        assert pay_reject.status_code == status.HTTP_400_BAD_REQUEST
+        assert "attendance" in pay_reject.data["error"].lower()
+
+        # Mark attendance for worker
+        from attendance.models import Attendance, AttendanceStatus
+        from django.utils import timezone
+        Attendance.objects.create(
+            organization=self.org_alpha,
+            employee=worker,
+            project=self.project_alpha,
+            date=timezone.localdate(),
+            status=AttendanceStatus.PRESENT,
+            marked_by=self.admin_alpha,
+        )
+
+        # 3. Record Pay after attendance is marked -> HTTP 201 Created
+        pay_res = self.client.post(
+            f"/api/v1/employees/{worker.id}/pay",
+            {"amount": "3000.00", "payment_mode": "BANK_TRANSFER", "notes": "Weekly Wage"},
+            format="json",
+        )
+        assert pay_res.status_code == status.HTTP_201_CREATED
+        assert pay_res.data["financials"]["total_paid"] == "3000.00"
+
+        # 4. Check Payment History
+        hist_res = self.client.get(f"/api/v1/employees/{worker.id}/payment-history")
+        assert hist_res.status_code == status.HTTP_200_OK
+        assert len(hist_res.data) == 2
+        types = [item["type"] for item in hist_res.data]
+        assert "UPAD" in types
+        assert "PAYMENT" in types
+
+    def test_upad_800_salary_with_500_advance_leaves_300_remaining(self):
+        """
+        Verify Requirement 4:
+        When someone's salary is 800/day and takes 500 advance, remaining salary is 300.
+        Reflected across Workforce, Upad payments, and Attendance settlement.
+        """
+        from workforce.services import create_employee
+        from attendance.models import Attendance, AttendanceStatus
+        from attendance.services_settlement import AttendanceSettlementService
+        from django.utils import timezone
+
+        worker = create_employee(
+            self.org_alpha,
+            {"full_name": "Ramesh Kumar", "daily_rate": Decimal("800.00")},
+            self.admin_alpha,
+        )
+
+        # 1 day attendance present
+        today = timezone.localdate()
+        att = Attendance.objects.create(
+            organization=self.org_alpha,
+            employee=worker,
+            project=self.project_alpha,
+            date=today,
+            status=AttendanceStatus.PRESENT,
+            marked_by=self.admin_alpha,
+        )
+
+        # Initially, balance is 800.00
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_alpha['access']}")
+        res_emp = self.client.get(f"/api/v1/employees/{worker.id}")
+        assert res_emp.status_code == status.HTTP_200_OK
+        assert res_emp.data["financials"]["total_pagar"] == "800.00"
+        assert res_emp.data["financials"]["balance"] == "800.00"
+
+        # Record Upad advance of 500 via UPAD Payment module
+        pay_res = self.client.post(
+            "/api/v1/payments",
+            {
+                "employee": worker.id,
+                "project": self.project_alpha.id,
+                "type": "advance",
+                "amount": "500.00",
+                "method": "cash",
+                "status": "paid",
+                "description": "Upad advance against daily wage",
+            },
+            format="json",
+        )
+        assert pay_res.status_code == status.HTTP_201_CREATED
+
+        # Verify employee balance reflects remaining salary is 300
+        res_after = self.client.get(f"/api/v1/employees/{worker.id}")
+        assert res_after.data["financials"]["total_pagar"] == "800.00"
+        assert res_after.data["financials"]["total_upad"] == "500.00"
+        assert res_after.data["financials"]["balance"] == "300.00"
+
+        # Verify Attendance Settlement Service computes remaining salary as 300
+        rem = AttendanceSettlementService.get_remaining_salary(worker)
+        assert rem["total_earned"] == 800.0
+        assert rem["total_paid"] == 500.0
+        assert rem["remaining_salary"] == 300.0
+
+        # Verify attendance settlement has 500 settled and 300 unsettled
+        att.refresh_from_db()
+        assert att.settled_amount == Decimal("500.00")
+        assert att.is_settled is False

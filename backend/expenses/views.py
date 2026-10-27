@@ -64,7 +64,7 @@ class ExpenseViewSet(ProjectScopedMixin, TenantViewSet):
         if date_to:
             qs = qs.filter(expense_date__lte=date_to)
 
-        return qs
+        return qs.order_by("-expense_date", "-id")
 
     def create(self, request, *args, **kwargs):
         """Log an expense with receipt, credit purchase, or transport/utility slip."""
@@ -95,6 +95,19 @@ class ExpenseViewSet(ProjectScopedMixin, TenantViewSet):
             raise PermissionDenied("You do not have permission to modify this expense.")
 
         return super().update(request, *args, **kwargs)
+
+    def perform_destroy(self, instance):
+        if instance.status == ExpenseStatus.APPROVED:
+            raise BusinessRuleError(
+                "Approved expenses cannot be deleted. Cancel the expense to reverse ledger postings.",
+                code="expense_approved",
+            )
+        if (
+            self.request.user.role not in [Role.ORG_ADMIN, Role.PROJECT_MANAGER]
+            and instance.created_by_id != self.request.user.id
+        ):
+            raise PermissionDenied("You do not have permission to delete this expense.")
+        super().perform_destroy(instance)
 
     @action(
         detail=True,
@@ -147,13 +160,24 @@ class VendorViewSet(TenantViewSet):
     filterset_fields = ["is_active"]
     search_fields = ["name", "contact_person", "tax_id"]
 
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [
+                IsAuthenticated(),
+                IsTenantUser(),
+                roles_required(
+                    Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT, Role.SITE_ENGINEER
+                )(),
+            ]
+        return [IsAuthenticated(), IsTenantUser()]
+
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Vendor.objects.none()
         return Vendor.objects.filter(
             organization=self.request.user.organization,
             deleted_at__isnull=True,
-        )
+        ).order_by("name")
 
     @action(
         detail=True,

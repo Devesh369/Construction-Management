@@ -1,8 +1,3 @@
-"""
-Base settings for Construction Management Portal.
-Shared across dev, test, and production environments.
-"""
-
 from datetime import timedelta
 from pathlib import Path
 
@@ -35,21 +30,19 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 # Application definition - 12 feature modules + 1 shared core + standard django + 3rd party
 INSTALLED_APPS = [
-    # Django core apps
+
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # Third-party libraries
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "django_filters",
     "corsheaders",
     "drf_spectacular",
-    # Construction Management Portal apps (Core + 11 modules)
     "core.apps.CoreConfig",
     "accounts.apps.AccountsConfig",
     "audit.apps.AuditConfig",
@@ -99,17 +92,27 @@ ASGI_APPLICATION = "config.asgi.application"
 # Custom User Model (Must be set before the first migration)
 AUTH_USER_MODEL = "accounts.User"
 
-# Database Configuration (Default PostgreSQL via psycopg2-binary)
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("DB_NAME", default="construction_db"),
-        "USER": env("DB_USER", default="postgres"),
-        "PASSWORD": env("DB_PASSWORD", default="postgres"),
-        "HOST": env("DB_HOST", default="localhost"),
-        "PORT": env("DB_PORT", default="5432"),
+# Database Configuration (PostgreSQL by default, or SQLite when USE_SQLITE=True)
+USE_SQLITE = env.bool("USE_SQLITE", default=False)
+
+if USE_SQLITE:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": env("DB_NAME", default="construction_db"),
+            "USER": env("DB_USER", default="postgres"),
+            "PASSWORD": env("DB_PASSWORD", default="postgres"),
+            "HOST": env("DB_HOST", default="localhost"),
+            "PORT": env("DB_PORT", default="5432"),
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
