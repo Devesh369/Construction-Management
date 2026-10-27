@@ -9,6 +9,7 @@ from decimal import Decimal
 from io import BytesIO
 
 import openpyxl
+from django.conf import settings
 from django.utils import timezone
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -39,7 +40,7 @@ LETTERHEAD_LANDSCAPE = os.path.join(
 
 def draw_letterhead_background(canvas_obj, doc):
     """
-    Draws the official BuildSphere AI letterhead on every page background.
+    Draws the official BuildSphere letterhead on every page background.
     Uses landscape-proportioned letterhead for landscape pages and
     portrait letterhead for portrait pages.
     """
@@ -102,7 +103,9 @@ class NumberedCanvas(canvas.Canvas):
         # Running footer text cleanly positioned on the official letterhead base wave
         footer_text = f"Page {self._pageNumber} of {total_pages}"
         self.drawRightString(page_w - 36, 16, footer_text)
-        self.drawString(36, 16, "BuildSphere AI • Confidential • Building Smarter. Shaping Tomorrow.")
+        site_name = getattr(settings, "SITE_NAME", "BuildSphere")
+        site_tagline = getattr(settings, "SITE_TAGLINE", "Construction Management Platform")
+        self.drawString(36, 16, f"{site_name} • Confidential • {site_tagline}")
 
         self.restoreState()
 

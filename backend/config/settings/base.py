@@ -81,6 +81,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "core.context_processors.site_branding",
             ],
         },
     },
@@ -183,13 +184,18 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
+# Brand & Site Configuration
+SITE_NAME = env("SITE_NAME", default="BuildSphere")
+SITE_TAGLINE = env("SITE_TAGLINE", default="Construction Management Platform")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@buildsphere.internal")
+
 # OpenAPI / Swagger Documentation via drf-spectacular
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Construction Management Portal API",
+    "TITLE": f"{SITE_NAME} API",
     "DESCRIPTION": (
-        "Multi-tenant SaaS platform for construction companies. "
-        "Provides project management, GPS-verified attendance, DPR, expenses, "
-        "payroll calculation, double-entry ledger, and audit tracking."
+        f"Multi-tenant SaaS platform for construction companies. "
+        f"Provides project management, workforce attendance, DPR, expenses, "
+        f"payroll calculation, double-entry ledger, and audit tracking."
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,

@@ -15,6 +15,7 @@ from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from django.conf import settings
 from accounts.models import User
 
 LETTERHEAD_PATH = os.path.join(
@@ -26,7 +27,7 @@ LETTERHEAD_PATH = os.path.join(
 
 
 def draw_letterhead_background(canvas_obj, doc):
-    """Draw official BuildSphere AI letterhead background for worker payslips."""
+    """Draw official BuildSphere letterhead background for worker payslips."""
     canvas_obj.saveState()
     page_w, page_h = doc.pagesize
     if os.path.exists(LETTERHEAD_PATH):
@@ -706,7 +707,7 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
 
     # 1. Header
     org_name = (
-        voucher.organization.name if voucher.organization else "BuildSphere AI"
+        voucher.organization.name if voucher.organization else getattr(settings, "SITE_NAME", "BuildSphere")
     )
     elements.append(Paragraph(org_name, title_style))
     elements.append(Spacer(1, 4))

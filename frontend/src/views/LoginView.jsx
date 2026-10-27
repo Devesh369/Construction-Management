@@ -119,18 +119,18 @@ export const LoginView = () => {
             <div className="w-20 h-20 mx-auto mb-3 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center p-2 shadow-xl shadow-blue-500/20 border border-white/20">
               <img
                 src={buildsphereLogo}
-                alt="BuildSphere AI"
+                alt="BuildSphere"
                 className="w-full h-full object-contain drop-shadow"
               />
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-              BuildSphere <span className="text-blue-400">AI</span>
+              BuildSphere
             </h1>
             <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-blue-400 mt-1">
-              Building Smarter. Shaping Tomorrow.
+              Construction Management Platform
             </p>
             <p className="text-xs text-slate-400 mt-2 font-medium">
-              Enterprise Construction Management & Financial Intelligence Platform
+              Enterprise Construction Management & Project Accounting Platform
             </p>
           </div>
 

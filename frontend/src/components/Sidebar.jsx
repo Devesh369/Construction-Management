@@ -140,16 +140,16 @@ export const Sidebar = ({ activeTab, setActiveTab }) => {
           <div className="flex items-center gap-2.5 overflow-hidden">
             <img
               src={buildsphereLogo}
-              alt="BuildSphere AI"
+              alt="BuildSphere"
               className="w-10 h-10 object-contain shrink-0 rounded-lg p-0.5 bg-white/80 dark:bg-slate-900/80 shadow-sm"
             />
             {!sidebarCollapsed && (
               <div className="flex flex-col min-w-0">
                 <span className="text-[14px] font-black tracking-tight text-[var(--text-primary)] truncate">
-                  BuildSphere <span className="text-blue-600 dark:text-blue-400">AI</span>
+                  BuildSphere
                 </span>
                 <span className="text-[8px] font-semibold tracking-wider text-[var(--text-muted)] truncate uppercase">
-                  {organization?.name || 'Building Smarter'}
+                  {organization?.name || 'Construction Mgmt'}
                 </span>
               </div>
             )}

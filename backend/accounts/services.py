@@ -103,10 +103,11 @@ def create_organization(name: str, admin_email: str) -> tuple[Organization, Invi
 
         # Send invite email (in dev console, in prod SMTP)
         invite_url = f"{settings.FRONTEND_URL}/accept-invite?token={raw_token}"
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@buildsphere.internal")
         send_mail(
             subject=f"Welcome to {org.name} - Complete your registration",
             message=f"You have been invited to set up {org.name}.\n\nClick link to activate: {invite_url}",
-            from_email="no-reply@constructionportal.internal",
+            from_email=from_email,
             recipient_list=[admin_email],
             fail_silently=True,
         )
@@ -300,10 +301,11 @@ def request_password_reset(email: str, request=None) -> bool:
     )
 
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@buildsphere.internal")
     send_mail(
         subject="Password Reset Request",
         message=f"Hello {user.name},\n\nClick link to reset your password (valid for 1 hour):\n{reset_url}",
-        from_email="no-reply@constructionportal.internal",
+        from_email=from_email,
         recipient_list=[user.email],
         fail_silently=True,
     )
@@ -411,10 +413,11 @@ def create_user_invitation(
         )
 
         invite_url = f"{settings.FRONTEND_URL}/accept-invite?token={raw_token}"
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@buildsphere.internal")
         send_mail(
             subject=f"Invitation to join {org.name}",
             message=f"Hello,\n\nYou have been invited to join {org.name} as {role}.\n\nAccept invite:\n{invite_url}",
-            from_email="no-reply@constructionportal.internal",
+            from_email=from_email,
             recipient_list=[email_clean],
             fail_silently=True,
         )

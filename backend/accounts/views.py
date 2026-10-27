@@ -12,6 +12,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
+from django.conf import settings
 from django.db import transaction
 from accounts.models import Invitation, Organization, User
 
@@ -20,7 +21,11 @@ class SystemStatusView(views.APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        return Response({"initialized": User.objects.exists()})
+        return Response({
+            "initialized": User.objects.exists(),
+            "site_name": getattr(settings, "SITE_NAME", "BuildSphere"),
+            "site_tagline": getattr(settings, "SITE_TAGLINE", "Construction Management Platform"),
+        })
 
 
 class SetupAdminView(views.APIView):
@@ -33,7 +38,8 @@ class SetupAdminView(views.APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        org_name = request.data.get("org_name", "").strip() or "BuildSphere Construction"
+        default_org_name = f"{getattr(settings, 'SITE_NAME', 'BuildSphere')} Construction"
+        org_name = request.data.get("org_name", "").strip() or default_org_name
         name = request.data.get("name", "").strip()
         email = request.data.get("email", "").lower().strip()
         password = request.data.get("password", "").strip()

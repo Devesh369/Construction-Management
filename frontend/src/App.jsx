@@ -75,14 +75,14 @@ const AppContent = () => {
         <div className="text-center space-y-3">
           <img
             src={buildsphereLogo}
-            alt="BuildSphere AI"
+            alt="BuildSphere"
             className="w-16 h-16 mx-auto object-contain animate-pulse drop-shadow-md"
           />
           <div className="text-2xl font-black text-blue-600 dark:text-blue-400 tracking-tight">
-            BuildSphere <span className="text-blue-500 dark:text-blue-300">AI</span>
+            BuildSphere
           </div>
           <div className="text-xs uppercase tracking-widest text-[var(--text-secondary)] font-bold">
-            Building Smarter. Shaping Tomorrow.
+            Construction Management Platform
           </div>
           <div className="text-xs text-[var(--text-muted)]">
             Initializing enterprise session...
