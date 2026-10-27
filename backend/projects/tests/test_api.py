@@ -142,7 +142,6 @@ class TestProjectsAPI(TenantIsolationTestMixin):
 
     def test_update_project_details_persists_to_db_and_returns_fresh_data(self):
         """PATCH /api/v1/projects/:id updates DB and returns the updated representation."""
-        from projects.models import Project
         from projects.services import create_project
 
         proj = create_project(
@@ -191,7 +190,6 @@ class TestProjectsAPI(TenantIsolationTestMixin):
 
     def test_update_project_with_empty_or_null_budget(self):
         """Optional estimated_budget can be null or empty string, defaulting to 0.00."""
-        from projects.models import Project
         from projects.services import create_project
 
         proj = create_project(
@@ -201,7 +199,9 @@ class TestProjectsAPI(TenantIsolationTestMixin):
         )
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_alpha['access']}")
-        res = self.client.patch(f"/api/v1/projects/{proj.id}", {"estimated_budget": None}, format="json")
+        res = self.client.patch(
+            f"/api/v1/projects/{proj.id}", {"estimated_budget": None}, format="json"
+        )
         assert res.status_code == status.HTTP_200_OK
         assert res.data["estimated_budget"] == "0.00"
 
@@ -217,5 +217,7 @@ class TestProjectsAPI(TenantIsolationTestMixin):
         )
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.tok_sup['access']}")
-        res = self.client.patch(f"/api/v1/projects/{proj.id}", {"name": "Hacked Name"}, format="json")
+        res = self.client.patch(
+            f"/api/v1/projects/{proj.id}", {"name": "Hacked Name"}, format="json"
+        )
         assert res.status_code == status.HTTP_403_FORBIDDEN

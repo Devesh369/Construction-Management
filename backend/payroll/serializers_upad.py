@@ -1,12 +1,14 @@
 from decimal import Decimal
 
 from rest_framework import serializers
-from payroll.models import Payment, PaymentType, PaymentMethod, PaymentLifecycleStatus
-from workforce.serializers import EmployeeSerializer
+
+from payroll.models import Payment
 
 
 class PaymentSerializer(serializers.ModelSerializer):
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True
+    )
     description = serializers.CharField(required=True, allow_blank=False)
     employee_name = serializers.CharField(source="employee.full_name", read_only=True)
     employee_code = serializers.CharField(source="employee.employee_code", read_only=True)

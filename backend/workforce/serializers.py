@@ -31,19 +31,32 @@ class EmployeeSerializer(serializers.ModelSerializer):
     emergency_contact = serializers.CharField(required=False, allow_blank=True, default="")
     bank_name = serializers.CharField(required=False, allow_blank=True, default="")
     daily_rate = serializers.DecimalField(
-        max_digits=10, decimal_places=2, min_value=Decimal("0.00"), required=False, default=Decimal("800.00")
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        default=Decimal("800.00"),
     )
     ot_hourly_rate = serializers.DecimalField(
-        max_digits=10, decimal_places=2, min_value=Decimal("0.00"), required=False, default=Decimal("0.00")
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        default=Decimal("0.00"),
     )
     monthly_salary = serializers.DecimalField(
-        max_digits=10, decimal_places=2, min_value=Decimal("0.00"), required=False, default=Decimal("0.00")
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        default=Decimal("0.00"),
     )
     primary_project_name = serializers.CharField(source="primary_project.name", read_only=True)
     trade = serializers.CharField(required=False, default="HELPER")
 
     def validate_trade(self, value):
         from workforce.models import Trade
+
         if not value:
             return Trade.OTHER
         val_upper = str(value).upper().strip()
@@ -57,10 +70,12 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def validate_phone(self, value):
         from core.validators import validate_mobile_10_digits
+
         return validate_mobile_10_digits(value)
 
     def validate_emergency_contact(self, value):
         from core.validators import validate_mobile_10_digits
+
         if value:
             return validate_mobile_10_digits(value)
         return value

@@ -32,6 +32,7 @@ class VendorSerializer(serializers.ModelSerializer):
         if not value or not str(value).strip():
             return ""
         from core.validators import validate_mobile_10_digits
+
         return validate_mobile_10_digits(value)
 
     def to_internal_value(self, data):
@@ -63,7 +64,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source="created_by.name", read_only=True)
     approved_by_name = serializers.CharField(source="approved_by.name", read_only=True)
     spike_warning = serializers.SerializerMethodField()
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True
+    )
     description = serializers.CharField(required=True, allow_blank=False)
     expense_date = serializers.DateField(required=True)
 
@@ -140,13 +143,16 @@ class ExpenseSerializer(serializers.ModelSerializer):
             data["category"] = ExpenseCategory.OTHER
 
         # Empty vendor string from form -> None
-        if "vendor" in data and (data["vendor"] == "" or data["vendor"] == "null" or data["vendor"] is None):
+        if "vendor" in data and (
+            data["vendor"] == "" or data["vendor"] == "null" or data["vendor"] is None
+        ):
             data["vendor"] = None
 
         # Details handling: support stringified JSON in multipart/form-data
         details = data.get("details")
         if isinstance(details, str):
             import json
+
             try:
                 details = json.loads(details)
             except Exception:
@@ -190,7 +196,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
         # 2. Receipt check: required if amount > org.expense_approval_limit
         if org and amount and amount > org.expense_approval_limit and not receipt:
             raise serializers.ValidationError(
-                {"receipt": f"Receipt is required for expenses exceeding ₹{org.expense_approval_limit:,.2f}."}
+                {
+                    "receipt": f"Receipt is required for expenses exceeding ₹{org.expense_approval_limit:,.2f}."
+                }
             )
 
         # 3. Credit purchase check
@@ -199,7 +207,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
             due_date = attrs.get("due_date") or (self.instance.due_date if self.instance else None)
             if not vendor:
                 raise serializers.ValidationError(
-                    {"vendor": "Credit purchase requires an assigned vendor. Please select or register a vendor."}
+                    {
+                        "vendor": "Credit purchase requires an assigned vendor. Please select or register a vendor."
+                    }
                 )
             if not due_date:
                 raise serializers.ValidationError(
@@ -213,6 +223,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 details["utility_type"] = UtilityType.ELECTRICITY
             if not details.get("billing_month"):
                 from django.utils import timezone
+
                 details["billing_month"] = timezone.now().strftime("%Y-%m")
             attrs["details"] = details
 
@@ -241,7 +252,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
 
 class VendorPaymentSerializer(serializers.ModelSerializer):
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True
+    )
     payment_date = serializers.DateField(required=True)
     reference = serializers.CharField(max_length=100, required=True, allow_blank=False)
     vendor_name = serializers.CharField(source="vendor.name", read_only=True)

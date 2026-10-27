@@ -51,8 +51,12 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         qs = super().get_queryset()
         qs = self.filter_project_scope(qs).select_related("employee", "project")
 
-        date_from = self.request.query_params.get("date_from") or self.request.query_params.get("from_date")
-        date_to = self.request.query_params.get("date_to") or self.request.query_params.get("to_date")
+        date_from = self.request.query_params.get("date_from") or self.request.query_params.get(
+            "from_date"
+        )
+        date_to = self.request.query_params.get("date_to") or self.request.query_params.get(
+            "to_date"
+        )
         if date_from:
             qs = qs.filter(date__gte=date_from)
         if date_to:
@@ -61,6 +65,7 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         search = self.request.query_params.get("search")
         if search:
             from django.db.models import Q
+
             qs = qs.filter(
                 Q(employee__full_name__icontains=search)
                 | Q(employee__employee_code__icontains=search)
@@ -70,6 +75,7 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
 
     def perform_create(self, serializer):
         from django.utils import timezone
+
         org = self.request.user.organization
         emp = serializer.validated_data.get("employee")
         date_val = serializer.validated_data.get("date")
@@ -91,7 +97,9 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
                 serializer.instance = existing
                 return
             elif existing.is_locked:
-                raise ConflictError("Locked attendance records cannot be modified.", code="record_locked")
+                raise ConflictError(
+                    "Locked attendance records cannot be modified.", code="record_locked"
+                )
             else:
                 emp_name = emp.full_name if emp else "this employee"
                 raise ConflictError(
@@ -102,6 +110,7 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
 
     def perform_update(self, serializer):
         from django.utils import timezone
+
         if serializer.instance.is_locked:
             raise ConflictError(
                 "Locked attendance records cannot be modified.", code="record_locked"
@@ -288,7 +297,9 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
     def summary(self, request):
         """Attendance summary counts and earnings for date range and filters."""
         from decimal import Decimal
+
         from attendance.models import AttendanceStatus
+
         qs = self.get_queryset()
 
         full_days = qs.filter(status=AttendanceStatus.PRESENT).count()
@@ -306,19 +317,23 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
             ot_rate = rec.employee.ot_hourly_rate or Decimal("0.00")
             total_earnings += (rec.ot_hours or Decimal("0.00")) * ot_rate
 
-        return Response({
-            "total_present": total_present,
-            "full_days": full_days,
-            "half_days": half_days,
-            "total_absent": total_absent,
-            "total_earnings": float(total_earnings),
-        })
+        return Response(
+            {
+                "total_present": total_present,
+                "full_days": full_days,
+                "half_days": half_days,
+                "total_absent": total_absent,
+                "total_earnings": float(total_earnings),
+            }
+        )
 
     @action(detail=False, methods=["get"], url_path="report")
     def report(self, request):
         """Aggregated per-employee attendance report with wage breakdown."""
         from decimal import Decimal
+
         from attendance.models import AttendanceStatus
+
         qs = self.get_queryset()
 
         worker_map = {}
@@ -326,7 +341,11 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
             emp = rec.employee
             if emp.id not in worker_map:
                 trade = (emp.trade or "").upper()
-                role = "KARIGAR" if trade in ["MASON", "CARPENTER", "ELECTRICIAN", "PLUMBER", "WELDER"] else "LABOUR"
+                role = (
+                    "KARIGAR"
+                    if trade in ["MASON", "CARPENTER", "ELECTRICIAN", "PLUMBER", "WELDER"]
+                    else "LABOUR"
+                )
                 worker_map[emp.id] = {
                     "employee_id": emp.id,
                     "employee_code": emp.employee_code,
@@ -400,9 +419,7 @@ class HolidayViewSet(TenantViewSet):
         org = self.request.user.organization
         proj = serializer.validated_data.get("project")
         hdate = serializer.validated_data.get("date")
-        existing = Holiday.all_objects.filter(
-            organization=org, project=proj, date=hdate
-        ).first()
+        existing = Holiday.all_objects.filter(organization=org, project=proj, date=hdate).first()
         if existing:
             existing.deleted_at = None
             for attr, val in serializer.validated_data.items():

@@ -2,8 +2,8 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from expenses.views import ExpenseViewSet, RunningCostBaselineViewSet, VendorViewSet
-from expenses.views_running_costs import RunningCostViewSet
 from expenses.views_credits import CreditLogViewSet
+from expenses.views_running_costs import RunningCostViewSet
 
 router = DefaultRouter(trailing_slash=False)
 router.register(r"expenses", ExpenseViewSet, basename="expenses")

@@ -30,7 +30,6 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 # Application definition - 12 feature modules + 1 shared core + standard django + 3rd party
 INSTALLED_APPS = [
-
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -193,9 +192,9 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@buildsphere.int
 SPECTACULAR_SETTINGS = {
     "TITLE": f"{SITE_NAME} API",
     "DESCRIPTION": (
-        f"Multi-tenant SaaS platform for construction companies. "
-        f"Provides project management, workforce attendance, DPR, expenses, "
-        f"payroll calculation, double-entry ledger, and audit tracking."
+        "Multi-tenant SaaS platform for construction companies. "
+        "Provides project management, workforce attendance, DPR, expenses, "
+        "payroll calculation, double-entry ledger, and audit tracking."
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,

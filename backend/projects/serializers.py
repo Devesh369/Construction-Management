@@ -54,6 +54,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     def validate_client_phone(self, value):
         from core.validators import validate_mobile_10_digits
+
         if value:
             return validate_mobile_10_digits(value)
         return value
@@ -98,9 +99,13 @@ class ProjectSerializer(serializers.ModelSerializer):
                 {"expected_end_date": "Expected end date cannot be earlier than start date."}
             )
 
-        budget = attrs.get("estimated_budget", getattr(self.instance, "estimated_budget", Decimal("0.00")))
+        budget = attrs.get(
+            "estimated_budget", getattr(self.instance, "estimated_budget", Decimal("0.00"))
+        )
         if budget is not None and budget < Decimal("0.00"):
-            raise serializers.ValidationError({"estimated_budget": "Estimated budget cannot be negative."})
+            raise serializers.ValidationError(
+                {"estimated_budget": "Estimated budget cannot be negative."}
+            )
 
         return attrs
 

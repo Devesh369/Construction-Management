@@ -10,7 +10,9 @@ from payroll.models import Advance, PayrollRun, PayrollVoucher
 
 
 class AdvanceSerializer(serializers.ModelSerializer):
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True
+    )
     advance_date = serializers.DateField(required=True)
     reason = serializers.CharField(max_length=255, required=True, allow_blank=False)
     employee_code = serializers.CharField(source="employee.employee_code", read_only=True)

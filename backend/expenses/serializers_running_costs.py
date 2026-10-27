@@ -1,11 +1,14 @@
 from decimal import Decimal
 
 from rest_framework import serializers
+
 from expenses.models import RunningCost
 
 
 class RunningCostSerializer(serializers.ModelSerializer):
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True)
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True
+    )
     date = serializers.DateField(required=True)
     description = serializers.CharField(required=True, allow_blank=False)
     project_name = serializers.CharField(source="project.name", read_only=True)

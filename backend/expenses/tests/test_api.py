@@ -342,4 +342,3 @@ class TestExpensesAPI:
         assert res.status_code == status.HTTP_201_CREATED
         assert res.data["name"] == "Mahalaxmi Cement Traders"
         assert res.data["phone"] == "9825123456"
-

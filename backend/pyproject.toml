@@ -6,6 +6,7 @@ exclude = '''
     \.git
   | \.venv
   | venv
+  | env
   | migrations
 )/
 '''
@@ -16,7 +17,8 @@ target-version = "py312"
 exclude = [
     "migrations",
     "venv",
-    ".venv"
+    ".venv",
+    "env"
 ]
 
 [tool.ruff.lint]

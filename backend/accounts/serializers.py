@@ -38,6 +38,7 @@ class ChangePasswordSerializer(serializers.Serializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     def validate_phone(self, value):
         from core.validators import validate_mobile_10_digits
+
         if value:
             return validate_mobile_10_digits(value)
         return value
@@ -60,6 +61,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     def validate_phone(self, value):
         from core.validators import validate_mobile_10_digits
+
         if value:
             return validate_mobile_10_digits(value)
         return value
@@ -86,13 +88,25 @@ class CreateInvitationSerializer(serializers.Serializer):
 class OrganizationSerializer(serializers.ModelSerializer):
     name = serializers.CharField(max_length=200, required=True, allow_blank=False)
     workday_hours = serializers.DecimalField(
-        max_digits=4, decimal_places=2, min_value=Decimal("0.50"), max_value=Decimal("24.00"), required=False
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("0.50"),
+        max_value=Decimal("24.00"),
+        required=False,
     )
     half_day_hours = serializers.DecimalField(
-        max_digits=4, decimal_places=2, min_value=Decimal("0.50"), max_value=Decimal("24.00"), required=False
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("0.50"),
+        max_value=Decimal("24.00"),
+        required=False,
     )
     overtime_after_hours = serializers.DecimalField(
-        max_digits=4, decimal_places=2, min_value=Decimal("0.50"), max_value=Decimal("24.00"), required=False
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("0.50"),
+        max_value=Decimal("24.00"),
+        required=False,
     )
     expense_approval_limit = serializers.DecimalField(
         max_digits=12, decimal_places=2, min_value=Decimal("0.00"), required=False
@@ -100,6 +114,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     def validate_contact_phone(self, value):
         from core.validators import validate_mobile_10_digits
+
         if value:
             return validate_mobile_10_digits(value)
         return value

@@ -44,6 +44,6 @@ class TestSmokeAndInfrastructure:
         assert schema_res.status_code == 200, f"Schema endpoint failed: {schema_res.status_code}"
 
         swagger_res = client.get(swagger_url)
-        assert swagger_res.status_code == 200, (
-            f"Swagger UI endpoint failed: {swagger_res.status_code}"
-        )
+        assert (
+            swagger_res.status_code == 200
+        ), f"Swagger UI endpoint failed: {swagger_res.status_code}"

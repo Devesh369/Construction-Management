@@ -164,17 +164,24 @@ class Transaction(TenantModel):
     role-based visibility, running net-payable enrichment, and credit-log tie-in.
     Corresponds directly to Section 2 of Module Architecture & Workflow Specification.
     """
+
     transaction_id = models.CharField(max_length=100, unique=True, db_index=True)
     date = models.DateField()
     type = models.CharField(max_length=20, choices=TransactionType.choices)
-    category = models.CharField(max_length=40, choices=TransactionCategory.choices, default=TransactionCategory.OTHER)
+    category = models.CharField(
+        max_length=40, choices=TransactionCategory.choices, default=TransactionCategory.OTHER
+    )
     payer_name = models.CharField(max_length=255)
     payee_name = models.CharField(max_length=255)
     amount = models.DecimalField(
         max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))]
     )
-    method = models.CharField(max_length=30, choices=TransactionMethod.choices, default=TransactionMethod.CASH)
-    status = models.CharField(max_length=20, choices=TransactionStatus.choices, default=TransactionStatus.COMPLETED)
+    method = models.CharField(
+        max_length=30, choices=TransactionMethod.choices, default=TransactionMethod.CASH
+    )
+    status = models.CharField(
+        max_length=20, choices=TransactionStatus.choices, default=TransactionStatus.COMPLETED
+    )
     description = models.TextField(blank=True)
     recorded_by = models.ForeignKey(
         "accounts.User", on_delete=models.CASCADE, related_name="recorded_transactions"
@@ -194,4 +201,3 @@ class Transaction(TenantModel):
 
     def __str__(self):
         return f"{self.transaction_id} ({self.type.upper()}) ₹{self.amount} - {self.payee_name}"
-

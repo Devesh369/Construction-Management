@@ -152,8 +152,16 @@ class TestAttendanceServices:
         """Batch marking with explicit records list."""
         target_date = date(2026, 3, 11)
         records_data = [
-            {"employee_id": self.worker1.id, "status": AttendanceStatus.PRESENT, "ot_hours": "1.50"},
-            {"employee_id": self.worker2.id, "status": AttendanceStatus.HALF_DAY, "ot_hours": "0.00"},
+            {
+                "employee_id": self.worker1.id,
+                "status": AttendanceStatus.PRESENT,
+                "ot_hours": "1.50",
+            },
+            {
+                "employee_id": self.worker2.id,
+                "status": AttendanceStatus.HALF_DAY,
+                "ot_hours": "0.00",
+            },
         ]
         res = batch_mark_attendance(
             user=self.admin,

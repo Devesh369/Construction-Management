@@ -5,7 +5,15 @@ from projects.models import BudgetCategory, Project, ProjectMembership
 
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "organization", "status", "estimated_budget", "actual_spend", "progress_percent")
+    list_display = (
+        "name",
+        "code",
+        "organization",
+        "status",
+        "estimated_budget",
+        "actual_spend",
+        "progress_percent",
+    )
     list_filter = ("status", "organization")
     search_fields = ("name", "code", "client_name", "location")
     list_select_related = ("organization",)

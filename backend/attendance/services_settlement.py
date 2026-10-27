@@ -3,10 +3,12 @@ Attendance Settlement and Salary Calculation Services.
 Directly implements Section 1.4 A (step 7), Section 1.4 D (step 2), and Section 1.3 endpoints.
 """
 
-from decimal import Decimal
 import logging
+from decimal import Decimal
+
 from django.db import transaction
 from django.utils import timezone
+
 from attendance.models import Attendance, AttendanceStatus
 from workforce.models import Employee
 
@@ -17,17 +19,31 @@ class AttendanceSettlementService:
     @staticmethod
     def get_employee_daily_wage(employee: Employee) -> Decimal:
         """Fetch employee daily wage rate from profile or trade default."""
-        if hasattr(employee, "daily_rate") and employee.daily_rate and employee.daily_rate > Decimal("0.00"):
+        if (
+            hasattr(employee, "daily_rate")
+            and employee.daily_rate
+            and employee.daily_rate > Decimal("0.00")
+        ):
             return Decimal(str(employee.daily_rate))
-        if hasattr(employee, "wage_rate") and employee.wage_rate and employee.wage_rate > Decimal("0.00"):
+        if (
+            hasattr(employee, "wage_rate")
+            and employee.wage_rate
+            and employee.wage_rate > Decimal("0.00")
+        ):
             return Decimal(str(employee.wage_rate))
-        if hasattr(employee, "daily_wage") and employee.daily_wage and employee.daily_wage > Decimal("0.00"):
+        if (
+            hasattr(employee, "daily_wage")
+            and employee.daily_wage
+            and employee.daily_wage > Decimal("0.00")
+        ):
             return Decimal(str(employee.daily_wage))
         return Decimal("500.00")
 
     @staticmethod
     @transaction.atomic
-    def settle_by_payment_amount(employee: Employee, payment_amount: Decimal, payment_id: str) -> list:
+    def settle_by_payment_amount(
+        employee: Employee, payment_amount: Decimal, payment_id: str
+    ) -> list:
         """
         Settles unsettled attendance records for employee up to payment_amount (FIFO).
         """
@@ -54,8 +70,12 @@ class AttendanceSettlementService:
             if remaining_to_settle <= Decimal("0.00"):
                 break
 
-            day_multiplier = Decimal("0.50") if rec.status == AttendanceStatus.HALF_DAY else Decimal("1.00")
-            day_cost = (daily_rate * day_multiplier) + (Decimal(str(rec.ot_hours or "0.00")) * (daily_rate / Decimal("8.00")))
+            day_multiplier = (
+                Decimal("0.50") if rec.status == AttendanceStatus.HALF_DAY else Decimal("1.00")
+            )
+            day_cost = (daily_rate * day_multiplier) + (
+                Decimal(str(rec.ot_hours or "0.00")) * (daily_rate / Decimal("8.00"))
+            )
             if day_cost <= Decimal("0.00"):
                 day_cost = daily_rate
 
@@ -77,7 +97,14 @@ class AttendanceSettlementService:
             else:
                 rec.is_settled = False
 
-            rec.save(update_fields=["is_settled", "settled_at", "settled_amount", "settled_by_payment_id"])
+            rec.save(
+                update_fields=[
+                    "is_settled",
+                    "settled_at",
+                    "settled_amount",
+                    "settled_by_payment_id",
+                ]
+            )
             settled_records.append(rec)
             remaining_to_settle -= pay_this_rec
 
@@ -118,7 +145,9 @@ class AttendanceSettlementService:
         absent_days = records.filter(status=AttendanceStatus.ABSENT).count()
         total_ot_hours = sum((Decimal(str(r.ot_hours or "0.00")) for r in records), Decimal("0.00"))
 
-        base_pay = (Decimal(full_days) * daily_rate) + (Decimal(half_days) * (daily_rate / Decimal("2.00")))
+        base_pay = (Decimal(full_days) * daily_rate) + (
+            Decimal(half_days) * (daily_rate / Decimal("2.00"))
+        )
         ot_pay = total_ot_hours * hourly_ot_rate
         gross_salary = base_pay + ot_pay
 
@@ -167,7 +196,8 @@ class AttendanceSettlementService:
         total_earned = attendance_earnings
 
         # Total paid from UPAD / Payments module + Advances
-        from payroll.models import Payment, PaymentLifecycleStatus, Advance
+        from payroll.models import Advance, Payment, PaymentLifecycleStatus
+
         paid_payments = Payment.objects.filter(
             employee=employee,
             status__in=[PaymentLifecycleStatus.PAID, "confirmed", "approved"],

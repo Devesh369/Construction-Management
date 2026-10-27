@@ -127,7 +127,9 @@ class WorkEntry(TenantModel):
     date = models.DateField()
     description = models.TextField()
     department = models.CharField(max_length=100, blank=True, default="")
-    employees = models.ManyToManyField("workforce.Employee", related_name="work_entries", blank=True)
+    employees = models.ManyToManyField(
+        "workforce.Employee", related_name="work_entries", blank=True
+    )
     created_by = models.ForeignKey(
         "accounts.User",
         null=True,
@@ -148,4 +150,3 @@ class WorkEntry(TenantModel):
 
     def __str__(self):
         return f"WorkEntry {self.date} - {self.project.name}"
-

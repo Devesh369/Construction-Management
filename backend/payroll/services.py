@@ -8,15 +8,34 @@ import os
 from datetime import date
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, letter
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from django.conf import settings
 from accounts.models import User
+from attendance.models import Attendance
+from attendance.services import AttendanceSummary, get_attendance_summary
+from audit.constants import AuditAction
+from audit.services import log_action
+from core.exceptions import BusinessRuleError
+from core.money import q2
+from core.sequences import next_number
+from ledger.services import post_journal_entry, reverse_entry
+from payroll.models import (
+    Advance,
+    AdvanceStatus,
+    PayrollRun,
+    PayrollRunStatus,
+    PayrollVoucher,
+    VoucherStatus,
+)
+from projects.models import Project
+from projects.services import update_spend
+from workforce.models import Employee
 
 LETTERHEAD_PATH = os.path.join(
     os.path.dirname(os.path.dirname(__file__)),
@@ -40,25 +59,6 @@ def draw_letterhead_background(canvas_obj, doc):
             preserveAspectRatio=False,
         )
     canvas_obj.restoreState()
-from attendance.models import Attendance
-from attendance.services import AttendanceSummary, get_attendance_summary
-from audit.constants import AuditAction
-from audit.services import log_action
-from core.exceptions import BusinessRuleError
-from core.money import q2
-from core.sequences import next_number
-from ledger.services import post_journal_entry, reverse_entry
-from payroll.models import (
-    Advance,
-    AdvanceStatus,
-    PayrollRun,
-    PayrollRunStatus,
-    PayrollVoucher,
-    VoucherStatus,
-)
-from projects.models import Project
-from projects.services import update_spend
-from workforce.models import Employee
 
 
 def calculate_voucher(
@@ -697,7 +697,9 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
 
     # 1. Header
     org_name = (
-        voucher.organization.name if voucher.organization else getattr(settings, "SITE_NAME", "BuildSphere")
+        voucher.organization.name
+        if voucher.organization
+        else getattr(settings, "SITE_NAME", "BuildSphere")
     )
     elements.append(Paragraph(org_name, title_style))
     elements.append(Spacer(1, 4))

@@ -108,8 +108,9 @@ def update_employee(employee: Employee, data: dict, user, request=None) -> Emplo
             setattr(employee, field, value)
 
         # Validate rates
-        if employee.employment_type == EmploymentType.DAILY_WAGE and employee.daily_rate <= Decimal(
-            "0.00"
+        if (
+            employee.employment_type == EmploymentType.DAILY_WAGE
+            and employee.daily_rate <= Decimal("0.00")
         ):
             # Only enforce if rate was explicitly supplied
             if "daily_rate" in data:
@@ -205,14 +206,13 @@ def get_employee_financials(employee: Employee) -> dict:
     - balance: Remaining payable balance (e.g. 800 daily rate - 500 upad = 300 balance)
     """
     from django.db.models import Sum
-    from payroll.models import Advance, PayrollVoucher, Payment
+
     from attendance.models import Attendance, AttendanceStatus
 
     # 1. Total Pagar:
-    voucher_pagar = (
-        employee.payroll_vouchers.filter(deleted_at__isnull=True).aggregate(total=Sum("gross_pay"))["total"]
-        or Decimal("0.00")
-    )
+    voucher_pagar = employee.payroll_vouchers.filter(deleted_at__isnull=True).aggregate(
+        total=Sum("gross_pay")
+    )["total"] or Decimal("0.00")
 
     # Calculate attendance days as baseline
     daily_rate = employee.daily_rate or Decimal("0.00")
@@ -233,10 +233,9 @@ def get_employee_financials(employee: Employee) -> dict:
     total_pagar = max(voucher_pagar, attendance_pagar)
 
     # 2. Total Upad (Advances):
-    adv_sum = (
-        employee.advances.filter(deleted_at__isnull=True).aggregate(total=Sum("amount"))["total"]
-        or Decimal("0.00")
-    )
+    adv_sum = employee.advances.filter(deleted_at__isnull=True).aggregate(total=Sum("amount"))[
+        "total"
+    ] or Decimal("0.00")
     # Sum Upad Payments avoiding double-counting with synced Advance records
     upad_pay_qs = employee.upad_payments.filter(
         type__in=["advance", "withdrawal"],
@@ -253,20 +252,14 @@ def get_employee_financials(employee: Employee) -> dict:
     total_upad = q2(adv_sum + unlinked_upad)
 
     # 3. Total Paid:
-    vouch_paid = (
-        employee.payroll_vouchers.filter(status="PAID", deleted_at__isnull=True).aggregate(
-            total=Sum("net_pay")
-        )["total"]
-        or Decimal("0.00")
-    )
-    upad_sal_sum = (
-        employee.upad_payments.filter(
-            type="salary",
-            status__in=["paid", "confirmed"],
-            deleted_at__isnull=True,
-        ).aggregate(total=Sum("amount"))["total"]
-        or Decimal("0.00")
-    )
+    vouch_paid = employee.payroll_vouchers.filter(status="PAID", deleted_at__isnull=True).aggregate(
+        total=Sum("net_pay")
+    )["total"] or Decimal("0.00")
+    upad_sal_sum = employee.upad_payments.filter(
+        type="salary",
+        status__in=["paid", "confirmed"],
+        deleted_at__isnull=True,
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
     total_paid = q2(vouch_paid + upad_sal_sum)
 
     # 4. Remaining Balance: e.g. 800 wage - 500 upad = 300 balance
@@ -311,16 +304,17 @@ def record_employee_payment(
     amount: Decimal,
     payment_mode: str = "CASH",
     notes: str = "",
-    user = None,
-    request = None,
+    user=None,
+    request=None,
 ):
     """Disburse payment to employee, creating a PAID voucher."""
     from django.utils import timezone
-    from payroll.models import PayrollRun, PayrollRunStatus, PayrollVoucher, VoucherStatus
-    from projects.models import Project
-    from core.sequences import next_number
+
     from attendance.models import Attendance, AttendanceStatus
     from core.exceptions import BusinessRuleError
+    from core.sequences import next_number
+    from payroll.models import PayrollRun, PayrollRunStatus, PayrollVoucher, VoucherStatus
+    from projects.models import Project
 
     has_attendance = Attendance.objects.filter(
         employee=employee,
@@ -378,15 +372,16 @@ def record_employee_payment(
 def record_employee_upad(
     employee: Employee,
     amount: Decimal,
-    advance_date = None,
+    advance_date=None,
     reason: str = "",
     payment_mode: str = "CASH",
-    user = None,
-    request = None,
+    user=None,
+    request=None,
 ):
     """Record advance / upad given to employee and sync with UPAD Payment module."""
     from django.utils import timezone
-    from payroll.models import Advance, AdvanceStatus, Payment, PaymentType, PaymentLifecycleStatus
+
+    from payroll.models import Advance, AdvanceStatus, Payment, PaymentLifecycleStatus, PaymentType
     from projects.models import Project
 
     proj = employee.primary_project or employee.assigned_projects.first()
@@ -435,28 +430,32 @@ def get_employee_payment_history(employee: Employee) -> list:
     history = []
 
     for v in employee.payroll_vouchers.filter(status="PAID").order_by("-paid_at", "-id"):
-        history.append({
-            "id": f"pay-{v.id}",
-            "type": "PAYMENT",
-            "title": f"Wage Payment ({v.voucher_number})",
-            "amount": str(v.net_pay),
-            "date": (v.paid_at.date() if v.paid_at else v.created_at.date()).isoformat(),
-            "mode": v.payment_mode,
-            "status": "PAID",
-            "notes": v.payment_reference or "Direct wage payout",
-        })
+        history.append(
+            {
+                "id": f"pay-{v.id}",
+                "type": "PAYMENT",
+                "title": f"Wage Payment ({v.voucher_number})",
+                "amount": str(v.net_pay),
+                "date": (v.paid_at.date() if v.paid_at else v.created_at.date()).isoformat(),
+                "mode": v.payment_mode,
+                "status": "PAID",
+                "notes": v.payment_reference or "Direct wage payout",
+            }
+        )
 
     for a in employee.advances.all().order_by("-advance_date", "-id"):
-        history.append({
-            "id": f"upad-{a.id}",
-            "type": "UPAD",
-            "title": "Advance / Upad Given",
-            "amount": str(a.amount),
-            "date": a.advance_date.isoformat(),
-            "mode": a.payment_mode,
-            "status": a.status,
-            "notes": a.reason or "Worker advance",
-        })
+        history.append(
+            {
+                "id": f"upad-{a.id}",
+                "type": "UPAD",
+                "title": "Advance / Upad Given",
+                "amount": str(a.amount),
+                "date": a.advance_date.isoformat(),
+                "mode": a.payment_mode,
+                "status": a.status,
+                "notes": a.reason or "Worker advance",
+            }
+        )
 
     for p in employee.upad_payments.filter(deleted_at__isnull=True).order_by("-created_at", "-id"):
         # Avoid showing duplicate if already listed via Advance
@@ -465,16 +464,18 @@ def get_employee_payment_history(employee: Employee) -> list:
         if employee.advances.filter(reason__contains=f"[UPAD-{p.id}]").exists():
             continue
         p_date = p.date_from or (p.created_at.date() if p.created_at else None)
-        history.append({
-            "id": f"upad-pay-{p.id}",
-            "type": "UPAD" if p.type in ["advance", "withdrawal"] else "PAYMENT",
-            "title": f"Upad {p.type.title()} ({p.method.upper()})",
-            "amount": str(p.amount),
-            "date": p_date.isoformat() if p_date else "",
-            "mode": p.method.upper(),
-            "status": p.status.upper(),
-            "notes": p.description or f"Upad {p.type}",
-        })
+        history.append(
+            {
+                "id": f"upad-pay-{p.id}",
+                "type": "UPAD" if p.type in ["advance", "withdrawal"] else "PAYMENT",
+                "title": f"Upad {p.type.title()} ({p.method.upper()})",
+                "amount": str(p.amount),
+                "date": p_date.isoformat() if p_date else "",
+                "mode": p.method.upper(),
+                "status": p.status.upper(),
+                "notes": p.description or f"Upad {p.type}",
+            }
+        )
 
     history.sort(key=lambda x: x["date"], reverse=True)
     return history

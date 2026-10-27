@@ -8,6 +8,7 @@ python manage.py create_admin
 """
 
 import getpass
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
@@ -33,7 +34,9 @@ class Command(BaseCommand):
 
         # Interactive prompts if not passed via CLI flags
         if not org_name:
-            org_name = input("Enter Organization / Company Name (default: 'BuildSphere Construction'): ").strip()
+            org_name = input(
+                "Enter Organization / Company Name (default: 'BuildSphere Construction'): "
+            ).strip()
             if not org_name:
                 org_name = "BuildSphere Construction"
 
@@ -71,9 +74,15 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.SUCCESS(f"Organization '{org.name}' created."))
                     # 2. Seed default chart of accounts
                     create_default_chart_of_accounts(org)
-                    self.stdout.write(self.style.SUCCESS("Default financial chart of accounts initialized (13 accounts)."))
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            "Default financial chart of accounts initialized (13 accounts)."
+                        )
+                    )
                 else:
-                    self.stdout.write(self.style.WARNING(f"Using existing organization '{org.name}'."))
+                    self.stdout.write(
+                        self.style.WARNING(f"Using existing organization '{org.name}'.")
+                    )
 
                 # 3. Create or update Admin user
                 user = User.objects.filter(email=email).first()
@@ -85,7 +94,9 @@ class Command(BaseCommand):
                     user.is_active = True
                     user.set_password(password)
                     user.save()
-                    self.stdout.write(self.style.SUCCESS(f"Updated existing user '{email}' as ORG_ADMIN."))
+                    self.stdout.write(
+                        self.style.SUCCESS(f"Updated existing user '{email}' as ORG_ADMIN.")
+                    )
                 else:
                     user = User.objects.create_user(
                         email=email,
@@ -96,7 +107,9 @@ class Command(BaseCommand):
                         is_staff=True,
                         is_active=True,
                     )
-                    self.stdout.write(self.style.SUCCESS(f"Admin user '{email}' created successfully."))
+                    self.stdout.write(
+                        self.style.SUCCESS(f"Admin user '{email}' created successfully.")
+                    )
 
             self.stdout.write(
                 self.style.SUCCESS(

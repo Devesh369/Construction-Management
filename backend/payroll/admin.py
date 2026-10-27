@@ -5,7 +5,17 @@ from payroll.models import Advance, Payment, PayrollRun, PayrollVoucher
 
 @admin.register(Advance)
 class AdvanceAdmin(admin.ModelAdmin):
-    list_display = ("employee", "project", "amount", "adjusted_amount", "advance_date", "payment_mode", "status", "given_by", "created_at")
+    list_display = (
+        "employee",
+        "project",
+        "amount",
+        "adjusted_amount",
+        "advance_date",
+        "payment_mode",
+        "status",
+        "given_by",
+        "created_at",
+    )
     list_filter = ("status", "payment_mode", "organization", "project")
     search_fields = ("employee__full_name", "employee__employee_code", "reason")
     list_select_related = ("employee", "project", "given_by", "organization")
@@ -23,11 +33,28 @@ class PayrollVoucherInline(admin.TabularInline):
 
 @admin.register(PayrollRun)
 class PayrollRunAdmin(admin.ModelAdmin):
-    list_display = ("project", "period_start", "period_end", "status", "total_gross", "total_advances", "total_net", "created_by", "created_at")
+    list_display = (
+        "project",
+        "period_start",
+        "period_end",
+        "status",
+        "total_gross",
+        "total_advances",
+        "total_net",
+        "created_by",
+        "created_at",
+    )
     list_filter = ("status", "organization", "project")
     search_fields = ("project__name", "project__code")
     list_select_related = ("project", "created_by", "approved_by", "organization")
-    readonly_fields = ("total_gross", "total_advances", "total_net", "approved_at", "created_at", "updated_at")
+    readonly_fields = (
+        "total_gross",
+        "total_advances",
+        "total_net",
+        "approved_at",
+        "created_at",
+        "updated_at",
+    )
     inlines = [PayrollVoucherInline]
 
 
@@ -69,6 +96,18 @@ class PaymentAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("type", "status", "method", "organization", "project")
-    search_fields = ("employee__full_name", "employee__employee_code", "description", "transaction_id")
-    list_select_related = ("employee", "project", "created_by", "approved_by", "processed_by", "organization")
+    search_fields = (
+        "employee__full_name",
+        "employee__employee_code",
+        "description",
+        "transaction_id",
+    )
+    list_select_related = (
+        "employee",
+        "project",
+        "created_by",
+        "approved_by",
+        "processed_by",
+        "organization",
+    )
     readonly_fields = ("approved_at", "processed_at", "created_at", "updated_at")

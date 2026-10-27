@@ -4,8 +4,8 @@ Audits and reconciles double-entry ledger invariants, trial balance,
 balance sheet, and AP / Worker Advance subledgers across all tenants or a specified organization.
 """
 
-import sys
 from django.core.management.base import BaseCommand, CommandError
+
 from accounts.models import Organization
 from ledger.services import reconcile_ledger
 
@@ -64,10 +64,13 @@ class Command(BaseCommand):
             result = reconcile_ledger(org)
 
             # Auto-fix unlinked advances if requested
-            if auto_fix and not result["subledger_reconciliation"]["worker_advances"]["is_reconciled"]:
-                from payroll.models import Advance
+            if (
+                auto_fix
+                and not result["subledger_reconciliation"]["worker_advances"]["is_reconciled"]
+            ):
+                from ledger.models import ReferenceType, Side
                 from ledger.services import post_journal_entry
-                from ledger.models import Side, ReferenceType
+                from payroll.models import Advance
 
                 unlinked_advances = Advance.objects.filter(
                     organization=org,
@@ -102,7 +105,11 @@ class Command(BaseCommand):
                     )
                     unlinked.journal_entry = je
                     unlinked.save(update_fields=["journal_entry"])
-                    self.stdout.write(self.style.SUCCESS(f"  [FIXED] Posted journal entry {je.entry_number} for Advance #{unlinked.id}."))
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"  [FIXED] Posted journal entry {je.entry_number} for Advance #{unlinked.id}."
+                        )
+                    )
 
                 # Re-run after fix
                 result = reconcile_ledger(org)
@@ -111,44 +118,76 @@ class Command(BaseCommand):
 
             # 1. Journal Entries
             je = result["journal_entries"]
-            je_status = self.style.SUCCESS("[OK]") if len(je["invalid_entries"]) == 0 else self.style.ERROR("[FAIL]")
-            self.stdout.write(f"  {je_status} Journal Entries: {je['total_audited']} entries audited ({len(je['invalid_entries'])} invalid)")
+            je_status = (
+                self.style.SUCCESS("[OK]")
+                if len(je["invalid_entries"]) == 0
+                else self.style.ERROR("[FAIL]")
+            )
+            self.stdout.write(
+                f"  {je_status} Journal Entries: {je['total_audited']} entries audited ({len(je['invalid_entries'])} invalid)"
+            )
             if verbose and je["invalid_entries"]:
                 for inv in je["invalid_entries"]:
-                    self.stdout.write(self.style.ERROR(f"       * {inv['entry_number']}: {inv['reason']}"))
+                    self.stdout.write(
+                        self.style.ERROR(f"       * {inv['entry_number']}: {inv['reason']}")
+                    )
 
             # 2. Trial Balance
             tb = result["trial_balance"]
-            tb_status = self.style.SUCCESS("[OK]") if tb["is_balanced"] else self.style.ERROR("[FAIL]")
-            self.stdout.write(f"  {tb_status} Trial Balance: DR ₹{tb['total_debit']} | CR ₹{tb['total_credit']}")
+            tb_status = (
+                self.style.SUCCESS("[OK]") if tb["is_balanced"] else self.style.ERROR("[FAIL]")
+            )
+            self.stdout.write(
+                f"  {tb_status} Trial Balance: DR ₹{tb['total_debit']} | CR ₹{tb['total_credit']}"
+            )
 
             # 3. Balance Sheet
             bs = result["balance_sheet"]
-            bs_status = self.style.SUCCESS("[OK]") if bs["is_balanced"] else self.style.ERROR("[FAIL]")
-            self.stdout.write(f"  {bs_status} Balance Sheet: Assets ₹{bs['total_assets']} | Liab+Eq ₹{bs['total_liabilities_and_equity']}")
+            bs_status = (
+                self.style.SUCCESS("[OK]") if bs["is_balanced"] else self.style.ERROR("[FAIL]")
+            )
+            self.stdout.write(
+                f"  {bs_status} Balance Sheet: Assets ₹{bs['total_assets']} | Liab+Eq ₹{bs['total_liabilities_and_equity']}"
+            )
 
             # 4. Subledgers
             sub = result["subledger_reconciliation"]
             ap = sub["accounts_payable"]
-            ap_status = self.style.SUCCESS("[OK]") if ap["is_reconciled"] else self.style.ERROR("[FAIL]")
-            self.stdout.write(f"  {ap_status} Subledger Accounts Payable (2001): GL ₹{ap['gl_balance']} vs Subledger ₹{ap['subledger_balance']} (Diff: ₹{ap['discrepancy']})")
+            ap_status = (
+                self.style.SUCCESS("[OK]") if ap["is_reconciled"] else self.style.ERROR("[FAIL]")
+            )
+            self.stdout.write(
+                f"  {ap_status} Subledger Accounts Payable (2001): GL ₹{ap['gl_balance']} vs Subledger ₹{ap['subledger_balance']} (Diff: ₹{ap['discrepancy']})"
+            )
 
             adv = sub["worker_advances"]
-            adv_status = self.style.SUCCESS("[OK]") if adv["is_reconciled"] else self.style.ERROR("[FAIL]")
-            self.stdout.write(f"  {adv_status} Subledger Worker Advances (1100): GL ₹{adv['gl_balance']} vs Subledger ₹{adv['subledger_balance']} (Diff: ₹{adv['discrepancy']})")
+            adv_status = (
+                self.style.SUCCESS("[OK]") if adv["is_reconciled"] else self.style.ERROR("[FAIL]")
+            )
+            self.stdout.write(
+                f"  {adv_status} Subledger Worker Advances (1100): GL ₹{adv['gl_balance']} vs Subledger ₹{adv['subledger_balance']} (Diff: ₹{adv['discrepancy']})"
+            )
 
             if is_healthy:
                 passed_orgs += 1
-                self.stdout.write(self.style.SUCCESS(f"  RESULT: HEALTHY (All invariants verified)\n"))
+                self.stdout.write(
+                    self.style.SUCCESS("  RESULT: HEALTHY (All invariants verified)\n")
+                )
             else:
                 failed_orgs += 1
-                self.stdout.write(self.style.ERROR(f"  RESULT: DISCREPANCIES DETECTED\n"))
+                self.stdout.write(self.style.ERROR("  RESULT: DISCREPANCIES DETECTED\n"))
 
         self.stdout.write("=" * 70)
-        self.stdout.write(f"Reconciliation Summary: {total_orgs} Audited | {passed_orgs} Healthy | {failed_orgs} Discrepancies")
+        self.stdout.write(
+            f"Reconciliation Summary: {total_orgs} Audited | {passed_orgs} Healthy | {failed_orgs} Discrepancies"
+        )
         self.stdout.write("=" * 70)
 
         if failed_orgs > 0:
-            raise CommandError(f"Reconciliation failed with discrepancies in {failed_orgs} organization(s).")
+            raise CommandError(
+                f"Reconciliation failed with discrepancies in {failed_orgs} organization(s)."
+            )
         else:
-            self.stdout.write(self.style.SUCCESS("All tenant financial ledgers are 100% healthy and balanced."))
+            self.stdout.write(
+                self.style.SUCCESS("All tenant financial ledgers are 100% healthy and balanced.")
+            )

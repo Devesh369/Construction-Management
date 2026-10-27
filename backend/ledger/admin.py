@@ -26,7 +26,15 @@ class AccountAdmin(admin.ModelAdmin):
 
 @admin.register(JournalEntry)
 class JournalEntryAdmin(admin.ModelAdmin):
-    list_display = ("entry_number", "date", "reference_type", "project", "posted_by", "organization", "description")
+    list_display = (
+        "entry_number",
+        "date",
+        "reference_type",
+        "project",
+        "posted_by",
+        "organization",
+        "description",
+    )
     list_filter = ("reference_type", "organization", "date", "project")
     search_fields = ("entry_number", "description", "project__name")
     list_select_related = ("project", "posted_by", "organization")

@@ -5,7 +5,7 @@ Simplified without GPS or shift logic.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
@@ -295,9 +295,8 @@ def batch_mark_attendance(
 
             # Check project site assignment
             is_registered = (
-                (emp.primary_project_id == item_proj.id)
-                or emp.assigned_projects.filter(id=item_proj.id).exists()
-            )
+                emp.primary_project_id == item_proj.id
+            ) or emp.assigned_projects.filter(id=item_proj.id).exists()
             if not is_registered:
                 raise BusinessRuleError(
                     f"Worker '{emp.full_name}' is not registered for work at '{item_proj.name}'. Attendance can only be marked at their assigned project sites.",

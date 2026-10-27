@@ -8,10 +8,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.permissions import IsTenantUser, roles_required
+from core.permissions import IsTenantUser
 from core.roles import Role
 from core.views import TenantViewSet
-from core.exceptions import BusinessRuleError
 from expenses.models import RunningCost
 from expenses.serializers_running_costs import RunningCostSerializer
 from expenses.services_running_costs import RunningCostService
@@ -21,6 +20,7 @@ class RunningCostViewSet(TenantViewSet):
     """
     Running Costs Module: Non-salary site operational costs (materials, fuel, food, equipment).
     """
+
     queryset = RunningCost.objects.all().select_related("project", "entered_by")
     serializer_class = RunningCostSerializer
     permission_classes = [IsAuthenticated, IsTenantUser]
@@ -34,8 +34,12 @@ class RunningCostViewSet(TenantViewSet):
             qs = qs.filter(entered_by=user)
 
         project_id = self.request.query_params.get("project")
-        from_date = self.request.query_params.get("fromDate") or self.request.query_params.get("from_date")
-        to_date = self.request.query_params.get("toDate") or self.request.query_params.get("to_date")
+        from_date = self.request.query_params.get("fromDate") or self.request.query_params.get(
+            "from_date"
+        )
+        to_date = self.request.query_params.get("toDate") or self.request.query_params.get(
+            "to_date"
+        )
         search = self.request.query_params.get("search")
 
         if project_id:
@@ -45,7 +49,9 @@ class RunningCostViewSet(TenantViewSet):
         if to_date:
             qs = qs.filter(date__lte=to_date)
         if search:
-            qs = qs.filter(description__icontains=search) | qs.filter(project__name__icontains=search)
+            qs = qs.filter(description__icontains=search) | qs.filter(
+                project__name__icontains=search
+            )
 
         return qs
 

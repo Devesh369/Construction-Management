@@ -7,25 +7,70 @@ Accounts and Authentication Views:
 - Tenant settings configuration
 """
 
+from django.conf import settings
+from django.db import transaction
 from rest_framework import status, views
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from django.conf import settings
-from django.db import transaction
 from accounts.models import Invitation, Organization, User
+from accounts.serializers import (
+    AcceptInviteSerializer,
+    ChangePasswordSerializer,
+    CreateInvitationSerializer,
+    ForgotPasswordSerializer,
+    InvitationSerializer,
+    LoginSerializer,
+    OrganizationSerializer,
+    ResetPasswordSerializer,
+    UserProfileSerializer,
+    UserSerializer,
+)
+from accounts.services import (
+    accept_invitation,
+    change_password,
+    create_user_invitation,
+    login_user,
+    logout_user,
+    refresh_user_token,
+    request_password_reset,
+    reset_password,
+)
+from audit.constants import AuditAction
+from audit.services import log_action
+from core.exceptions import BusinessRuleError
+from core.permissions import IsTenantUser, roles_required
+from core.roles import Role
+from core.views import TenantViewSet
+from ledger.services import create_default_chart_of_accounts
+
+
+def set_refresh_cookie(response: Response, refresh_token: str):
+    """Set refresh token as HTTP-only SameSite=Lax cookie."""
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        max_age=7 * 24 * 60 * 60,  # 7 days
+        httponly=True,
+        samesite="Lax",
+        path="/api/v1/auth/",
+    )
 
 
 class SystemStatusView(views.APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        return Response({
-            "initialized": User.objects.exists(),
-            "site_name": getattr(settings, "SITE_NAME", "BuildSphere"),
-            "site_tagline": getattr(settings, "SITE_TAGLINE", "Construction Management Platform"),
-        })
+        return Response(
+            {
+                "initialized": User.objects.exists(),
+                "site_name": getattr(settings, "SITE_NAME", "BuildSphere"),
+                "site_tagline": getattr(
+                    settings, "SITE_TAGLINE", "Construction Management Platform"
+                ),
+            }
+        )
 
 
 class SetupAdminView(views.APIView):
@@ -34,7 +79,12 @@ class SetupAdminView(views.APIView):
     def post(self, request):
         if User.objects.exists():
             return Response(
-                {"error": {"code": "already_initialized", "message": "System has already been initialized."}},
+                {
+                    "error": {
+                        "code": "already_initialized",
+                        "message": "System has already been initialized.",
+                    }
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -46,16 +96,24 @@ class SetupAdminView(views.APIView):
 
         if not name or not email or not password:
             return Response(
-                {"error": {"code": "validation_error", "message": "Full Name, Work Email, and Password are required."}},
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Full Name, Work Email, and Password are required.",
+                    }
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if len(password) < 6:
             return Response(
-                {"error": {"code": "validation_error", "message": "Password must be at least 6 characters."}},
+                {
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Password must be at least 6 characters.",
+                    }
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        from ledger.services import create_default_chart_of_accounts
 
         with transaction.atomic():
             org, _ = Organization.objects.get_or_create(
@@ -96,48 +154,6 @@ class SetupAdminView(views.APIView):
         )
         set_refresh_cookie(response, tokens["refresh"])
         return response
-
-
-from accounts.serializers import (
-    AcceptInviteSerializer,
-    ChangePasswordSerializer,
-    CreateInvitationSerializer,
-    ForgotPasswordSerializer,
-    InvitationSerializer,
-    LoginSerializer,
-    OrganizationSerializer,
-    ResetPasswordSerializer,
-    UserProfileSerializer,
-    UserSerializer,
-)
-from accounts.services import (
-    accept_invitation,
-    change_password,
-    create_user_invitation,
-    login_user,
-    logout_user,
-    refresh_user_token,
-    request_password_reset,
-    reset_password,
-)
-from audit.constants import AuditAction
-from audit.services import log_action
-from core.exceptions import BusinessRuleError
-from core.permissions import IsTenantUser, roles_required
-from core.roles import Role
-from core.views import TenantViewSet
-
-
-def set_refresh_cookie(response: Response, refresh_token: str):
-    """Set refresh token as HTTP-only SameSite=Lax cookie."""
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        max_age=7 * 24 * 60 * 60,  # 7 days
-        httponly=True,
-        samesite="Lax",
-        path="/api/v1/auth/",
-    )
 
 
 class LoginView(views.APIView):
@@ -451,7 +467,9 @@ class InvitationViewSet(TenantViewSet):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Invitation.objects.none()
-        return Invitation.objects.filter(organization=self.request.user.organization).order_by("-created_at")
+        return Invitation.objects.filter(organization=self.request.user.organization).order_by(
+            "-created_at"
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = CreateInvitationSerializer(data=request.data)

@@ -11,7 +11,6 @@ from attendance.models import (
     Attendance,
     AttendanceStatus,
     Holiday,
-    HolidayType,
 )
 
 
@@ -28,10 +27,18 @@ class AttendanceSerializer(serializers.ModelSerializer):
     earning = serializers.SerializerMethodField()
     project_name = serializers.CharField(source="project.name", read_only=True)
     worked_hours = serializers.DecimalField(
-        max_digits=4, decimal_places=2, min_value=Decimal("0.00"), max_value=Decimal("24.00"), required=False
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        max_value=Decimal("24.00"),
+        required=False,
     )
     ot_hours = serializers.DecimalField(
-        max_digits=4, decimal_places=2, min_value=Decimal("0.00"), max_value=Decimal("24.00"), required=False
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        max_value=Decimal("24.00"),
+        required=False,
     )
 
     class Meta:
@@ -62,6 +69,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
 
     def validate_date(self, value):
         from django.utils import timezone
+
         if value and value > timezone.localdate():
             raise serializers.ValidationError(
                 "Cannot mark attendance for upcoming days. Attendance can only be recorded for today or past dates."
@@ -104,7 +112,11 @@ class BatchRecordItemSerializer(serializers.Serializer):
         choices=AttendanceStatus.choices, default=AttendanceStatus.PRESENT
     )
     ot_hours = serializers.DecimalField(
-        max_digits=5, decimal_places=2, min_value=Decimal("0.00"), default=Decimal("0.00"), required=False
+        max_digits=5,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        default=Decimal("0.00"),
+        required=False,
     )
     remarks = serializers.CharField(required=False, allow_blank=True, default="")
 
@@ -120,6 +132,7 @@ class BatchAttendanceSerializer(serializers.Serializer):
 
     def validate_date(self, value):
         from django.utils import timezone
+
         if value > timezone.localdate():
             raise serializers.ValidationError(
                 "Cannot mark attendance for upcoming days. Only present and past dates are allowed."

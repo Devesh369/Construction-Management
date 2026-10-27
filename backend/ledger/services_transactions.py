@@ -3,16 +3,23 @@ Payment Central Service: Central Unified Transaction Ledger.
 Directly implements Section 2 of Module Architecture & Workflow Specification.
 """
 
-from decimal import Decimal
 import logging
 import random
 import time
+from decimal import Decimal
+
 from django.db import transaction
 from django.utils import timezone
-from core.exceptions import BusinessRuleError
-from ledger.models import Transaction, TransactionType, TransactionCategory, TransactionStatus, TransactionMethod
-from expenses.services_credits import CreditLogsService
+
 from attendance.services_settlement import AttendanceSettlementService
+from core.exceptions import BusinessRuleError
+from ledger.models import (
+    Transaction,
+    TransactionCategory,
+    TransactionMethod,
+    TransactionStatus,
+    TransactionType,
+)
 from workforce.models import Employee
 
 logger = logging.getLogger(__name__)
@@ -119,6 +126,7 @@ class TransactionService:
         # 2. Linked payment reversal
         if payment_id:
             from payroll.models import Payment
+
             pay = Payment.objects.filter(id=payment_id, organization=organization).first()
             if pay:
                 AttendanceSettlementService.reverse_settlement_by_payment_id(str(pay.id))

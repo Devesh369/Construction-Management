@@ -3,13 +3,14 @@ Running Costs Module Services: Site Operational Expenses and Credit-Gating.
 Directly implements Section 3 of Module Architecture & Workflow Specification.
 """
 
-from decimal import Decimal
 import logging
+from decimal import Decimal
+
 from django.db import transaction
 from django.utils import timezone
+
 from core.exceptions import BusinessRuleError
-from expenses.models import RunningCost, PaymentMode
-from expenses.services_credits import CreditLogsService
+from expenses.models import PaymentMode, RunningCost
 from projects.models import Project
 
 logger = logging.getLogger(__name__)
@@ -33,12 +34,16 @@ class RunningCostService:
 
         amount = Decimal(str(data.get("amount", "0.00")))
         if amount <= Decimal("0.00"):
-            raise BusinessRuleError("Expense amount must be greater than zero.", code="invalid_amount")
+            raise BusinessRuleError(
+                "Expense amount must be greater than zero.", code="invalid_amount"
+            )
 
         date = data.get("date") or timezone.now().date()
         description = data.get("description", "").strip()
         if not description:
-            raise BusinessRuleError("Description is required for site running cost.", code="description_required")
+            raise BusinessRuleError(
+                "Description is required for site running cost.", code="description_required"
+            )
 
         payment_method = data.get("payment_method") or data.get("paymentMethod") or PaymentMode.CASH
 
@@ -83,7 +88,9 @@ class RunningCostService:
 
         total_count = qs.count()
         total_amount = sum((r.amount for r in qs), Decimal("0.00"))
-        cash_amount = sum((r.amount for r in qs.filter(payment_method__iexact="cash")), Decimal("0.00"))
+        cash_amount = sum(
+            (r.amount for r in qs.filter(payment_method__iexact="cash")), Decimal("0.00")
+        )
         other_amount = total_amount - cash_amount
 
         return {

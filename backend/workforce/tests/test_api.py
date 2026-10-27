@@ -214,6 +214,7 @@ class TestWorkforceAPI(TenantIsolationTestMixin):
     def test_assign_and_unassign_projects_to_employee(self):
         """Assign project to employee and unassign project."""
         from workforce.services import create_employee
+
         worker = create_employee(
             self.org_alpha,
             {"full_name": "Ramesh Kumar", "daily_rate": Decimal("800.00")},
@@ -243,6 +244,7 @@ class TestWorkforceAPI(TenantIsolationTestMixin):
     def test_employee_pay_and_upad_actions(self):
         """Record advance (upad) and payment (pay) for employee and verify ledger history."""
         from workforce.services import create_employee
+
         worker = create_employee(
             self.org_alpha,
             {"full_name": "Suresh Bhai", "daily_rate": Decimal("1000.00")},
@@ -269,8 +271,10 @@ class TestWorkforceAPI(TenantIsolationTestMixin):
         assert "attendance" in pay_reject.data["error"].lower()
 
         # Mark attendance for worker
-        from attendance.models import Attendance, AttendanceStatus
         from django.utils import timezone
+
+        from attendance.models import Attendance, AttendanceStatus
+
         Attendance.objects.create(
             organization=self.org_alpha,
             employee=worker,
@@ -303,10 +307,11 @@ class TestWorkforceAPI(TenantIsolationTestMixin):
         When someone's salary is 800/day and takes 500 advance, remaining salary is 300.
         Reflected across Workforce, Upad payments, and Attendance settlement.
         """
-        from workforce.services import create_employee
+        from django.utils import timezone
+
         from attendance.models import Attendance, AttendanceStatus
         from attendance.services_settlement import AttendanceSettlementService
-        from django.utils import timezone
+        from workforce.services import create_employee
 
         worker = create_employee(
             self.org_alpha,

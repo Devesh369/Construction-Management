@@ -31,10 +31,14 @@ class EmployeeViewSet(TenantViewSet):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Employee.objects.none()
-        return Employee.objects.filter(
-            organization=self.request.user.organization,
-            deleted_at__isnull=True,
-        ).select_related("primary_project", "group").prefetch_related("assigned_projects")
+        return (
+            Employee.objects.filter(
+                organization=self.request.user.organization,
+                deleted_at__isnull=True,
+            )
+            .select_related("primary_project", "group")
+            .prefetch_related("assigned_projects")
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -48,9 +52,19 @@ class EmployeeViewSet(TenantViewSet):
         return Response(self.get_serializer(employee).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
-        if request.user.role not in [Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT, Role.SUPERVISOR]:
+        if request.user.role not in [
+            Role.ORG_ADMIN,
+            Role.PROJECT_MANAGER,
+            Role.ACCOUNTANT,
+            Role.SUPERVISOR,
+        ]:
             return Response(
-                {"error": {"code": "permission_denied", "message": "You do not have permission to modify worker records."}},
+                {
+                    "error": {
+                        "code": "permission_denied",
+                        "message": "You do not have permission to modify worker records.",
+                    }
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
         partial = kwargs.pop("partial", False)
@@ -68,14 +82,25 @@ class EmployeeViewSet(TenantViewSet):
     def destroy(self, request, *args, **kwargs):
         if request.user.role != Role.ORG_ADMIN:
             return Response(
-                {"error": {"code": "permission_denied", "message": "Only Organization Administrators can delete worker profiles."}},
+                {
+                    "error": {
+                        "code": "permission_denied",
+                        "message": "Only Organization Administrators can delete worker profiles.",
+                    }
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
         return super().destroy(request, *args, **kwargs)
 
-    @action(detail=True, methods=["post"], url_path="assign-project", permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER)])
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="assign-project",
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER)],
+    )
     def assign_project(self, request, pk=None):
         from workforce.services import assign_project_to_employee
+
         employee = self.get_object()
         project_id = request.data.get("project_id")
         if not project_id:
@@ -83,9 +108,15 @@ class EmployeeViewSet(TenantViewSet):
         updated = assign_project_to_employee(employee, int(project_id))
         return Response(self.get_serializer(updated).data)
 
-    @action(detail=True, methods=["post"], url_path="unassign-project", permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER)])
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="unassign-project",
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER)],
+    )
     def unassign_project(self, request, pk=None):
         from workforce.services import unassign_project_from_employee
+
         employee = self.get_object()
         project_id = request.data.get("project_id")
         if not project_id:
@@ -93,25 +124,41 @@ class EmployeeViewSet(TenantViewSet):
         updated = unassign_project_from_employee(employee, int(project_id))
         return Response(self.get_serializer(updated).data)
 
-    @action(detail=True, methods=["post"], url_path="pay", permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT)])
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="pay",
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT)],
+    )
     def pay(self, request, pk=None):
         from decimal import Decimal
+
         from workforce.services import get_employee_financials, record_employee_payment
+
         employee = self.get_object()
         from attendance.models import Attendance, AttendanceStatus
+
         has_attendance = Attendance.objects.filter(
             employee=employee,
-            status__in=[AttendanceStatus.PRESENT, AttendanceStatus.HALF_DAY, AttendanceStatus.HOLIDAY],
+            status__in=[
+                AttendanceStatus.PRESENT,
+                AttendanceStatus.HALF_DAY,
+                AttendanceStatus.HOLIDAY,
+            ],
             deleted_at__isnull=True,
         ).exists()
         if not has_attendance:
             return Response(
-                {"error": "Cannot pay wages to a newly added employee without marked attendance. Attendance must be marked first."},
+                {
+                    "error": "Cannot pay wages to a newly added employee without marked attendance. Attendance must be marked first."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
         amount_raw = request.data.get("amount")
         if not amount_raw or Decimal(str(amount_raw)) <= Decimal("0.00"):
-            return Response({"error": "Valid positive amount is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Valid positive amount is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         payment_mode = request.data.get("payment_mode", "CASH")
         notes = request.data.get("notes", "")
         voucher = record_employee_payment(
@@ -122,22 +169,36 @@ class EmployeeViewSet(TenantViewSet):
             user=request.user,
             request=request,
         )
-        return Response({
-            "status": "PAID",
-            "voucher_id": voucher.id,
-            "voucher_number": voucher.voucher_number,
-            "net_pay": str(voucher.net_pay),
-            "financials": get_employee_financials(employee),
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "status": "PAID",
+                "voucher_id": voucher.id,
+                "voucher_number": voucher.voucher_number,
+                "net_pay": str(voucher.net_pay),
+                "financials": get_employee_financials(employee),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
-    @action(detail=True, methods=["post"], url_path="upad", permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT, Role.SUPERVISOR)])
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="upad",
+        permission_classes=[
+            roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT, Role.SUPERVISOR)
+        ],
+    )
     def upad(self, request, pk=None):
         from decimal import Decimal
+
         from workforce.services import get_employee_financials, record_employee_upad
+
         employee = self.get_object()
         amount_raw = request.data.get("amount")
         if not amount_raw or Decimal(str(amount_raw)) <= Decimal("0.00"):
-            return Response({"error": "Valid positive amount is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Valid positive amount is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         advance_date = request.data.get("advance_date")
         reason = request.data.get("reason", "")
         payment_mode = request.data.get("payment_mode", "CASH")
@@ -150,16 +211,20 @@ class EmployeeViewSet(TenantViewSet):
             user=request.user,
             request=request,
         )
-        return Response({
-            "status": "RECORDED",
-            "advance_id": adv.id,
-            "amount": str(adv.amount),
-            "financials": get_employee_financials(employee),
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "status": "RECORDED",
+                "advance_id": adv.id,
+                "amount": str(adv.amount),
+                "financials": get_employee_financials(employee),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["get"], url_path="payment-history")
     def payment_history(self, request, pk=None):
         from workforce.services import get_employee_payment_history
+
         employee = self.get_object()
         history = get_employee_payment_history(employee)
         return Response(history)
@@ -167,6 +232,7 @@ class EmployeeViewSet(TenantViewSet):
     @action(detail=True, methods=["get"], url_path="financials")
     def financials(self, request, pk=None):
         from workforce.services import get_employee_financials
+
         employee = self.get_object()
         return Response(get_employee_financials(employee))
 

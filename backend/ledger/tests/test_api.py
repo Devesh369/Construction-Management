@@ -283,4 +283,3 @@ class TestLedgerAPI:
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.toks_sup_a['access']}")
         res_sup = self.client.get("/api/v1/ledger/reconciliation")
         assert res_sup.status_code == status.HTTP_403_FORBIDDEN
-

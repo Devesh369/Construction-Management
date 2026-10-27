@@ -5,7 +5,16 @@ from attendance.models import Attendance, Holiday
 
 @admin.register(Attendance)
 class AttendanceAdmin(admin.ModelAdmin):
-    list_display = ("employee", "project", "date", "status", "worked_hours", "ot_hours", "is_locked", "is_settled")
+    list_display = (
+        "employee",
+        "project",
+        "date",
+        "status",
+        "worked_hours",
+        "ot_hours",
+        "is_locked",
+        "is_settled",
+    )
     list_filter = ("status", "is_locked", "is_settled", "date", "organization", "project")
     search_fields = ("employee__employee_code", "employee__full_name", "project__name")
     list_select_related = ("employee", "project", "organization", "marked_by")

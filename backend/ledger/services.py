@@ -589,21 +589,25 @@ def reconcile_ledger(org) -> dict:
     for entry in entries:
         lines = list(entry.lines.all())
         if len(lines) < 2:
-            invalid_entries.append({
-                "id": entry.id,
-                "entry_number": entry.entry_number,
-                "reason": f"Insufficient lines: expected >= 2, found {len(lines)}",
-            })
+            invalid_entries.append(
+                {
+                    "id": entry.id,
+                    "entry_number": entry.entry_number,
+                    "reason": f"Insufficient lines: expected >= 2, found {len(lines)}",
+                }
+            )
             continue
 
-        entry_dr = q2(sum((l.amount for l in lines if l.side == Side.DR), Decimal("0.00")))
-        entry_cr = q2(sum((l.amount for l in lines if l.side == Side.CR), Decimal("0.00")))
+        entry_dr = q2(sum((line.amount for line in lines if line.side == Side.DR), Decimal("0.00")))
+        entry_cr = q2(sum((line.amount for line in lines if line.side == Side.CR), Decimal("0.00")))
         if entry_dr != entry_cr:
-            invalid_entries.append({
-                "id": entry.id,
-                "entry_number": entry.entry_number,
-                "reason": f"Unbalanced lines: DR {entry_dr} != CR {entry_cr}",
-            })
+            invalid_entries.append(
+                {
+                    "id": entry.id,
+                    "entry_number": entry.entry_number,
+                    "reason": f"Unbalanced lines: DR {entry_dr} != CR {entry_cr}",
+                }
+            )
 
     # Trial Balance
     tb = trial_balance(org)
@@ -616,6 +620,7 @@ def reconcile_ledger(org) -> dict:
     gl_ap = get_account_balance(acct_2001) if acct_2001 else Decimal("0.00")
 
     from expenses.models import Vendor
+
     vendors = Vendor.objects.filter(organization=org, deleted_at__isnull=True)
     sub_ap = q2(sum((v.outstanding_balance for v in vendors), Decimal("0.00")))
     ap_diff = q2(gl_ap - sub_ap)
@@ -626,11 +631,14 @@ def reconcile_ledger(org) -> dict:
     gl_adv = get_account_balance(acct_1100) if acct_1100 else Decimal("0.00")
 
     from payroll.models import Advance
+
     advances = Advance.objects.filter(
         organization=org,
         deleted_at__isnull=True,
     )
-    sub_adv = q2(sum((max(Decimal("0.00"), a.amount - a.adjusted_amount) for a in advances), Decimal("0.00")))
+    sub_adv = q2(
+        sum((max(Decimal("0.00"), a.amount - a.adjusted_amount) for a in advances), Decimal("0.00"))
+    )
     adv_diff = q2(gl_adv - sub_adv)
     adv_reconciled = adv_diff == Decimal("0.00")
 
@@ -680,4 +688,3 @@ def reconcile_ledger(org) -> dict:
             },
         },
     }
-

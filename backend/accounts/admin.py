@@ -17,7 +17,13 @@ class UserAdmin(admin.ModelAdmin):
     list_filter = ("role", "is_active", "is_staff")
     search_fields = ("email", "name", "phone")
     list_select_related = ("organization",)
-    readonly_fields = ("created_at", "failed_login_count", "locked_until", "token_version", "deleted_at")
+    readonly_fields = (
+        "created_at",
+        "failed_login_count",
+        "locked_until",
+        "token_version",
+        "deleted_at",
+    )
 
 
 @admin.register(Invitation)

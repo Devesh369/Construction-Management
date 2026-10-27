@@ -13,7 +13,16 @@ from expenses.models import (
 
 @admin.register(Vendor)
 class VendorAdmin(admin.ModelAdmin):
-    list_display = ("name", "contact_person", "phone", "email", "tax_id", "organization", "is_active", "created_at")
+    list_display = (
+        "name",
+        "contact_person",
+        "phone",
+        "email",
+        "tax_id",
+        "organization",
+        "is_active",
+        "created_at",
+    )
     list_filter = ("is_active", "organization")
     search_fields = ("name", "contact_person", "phone", "tax_id")
     list_select_related = ("organization",)
@@ -35,13 +44,28 @@ class ExpenseAdmin(admin.ModelAdmin):
     )
     list_filter = ("category", "status", "payment_mode", "organization", "project")
     search_fields = ("description", "invoice_number", "vendor__name", "project__name")
-    list_select_related = ("project", "vendor", "created_by", "approved_by", "organization", "journal_entry")
+    list_select_related = (
+        "project",
+        "vendor",
+        "created_by",
+        "approved_by",
+        "organization",
+        "journal_entry",
+    )
     readonly_fields = ("approved_at", "created_at", "updated_at")
 
 
 @admin.register(VendorPayment)
 class VendorPaymentAdmin(admin.ModelAdmin):
-    list_display = ("vendor", "project", "amount", "payment_date", "payment_mode", "paid_by", "created_at")
+    list_display = (
+        "vendor",
+        "project",
+        "amount",
+        "payment_date",
+        "payment_mode",
+        "paid_by",
+        "created_at",
+    )
     list_filter = ("payment_mode", "organization", "project")
     search_fields = ("vendor__name", "reference", "notes")
     list_select_related = ("vendor", "project", "paid_by", "organization", "journal_entry")
@@ -59,7 +83,16 @@ class RunningCostBaselineAdmin(admin.ModelAdmin):
 
 @admin.register(RunningCost)
 class RunningCostAdmin(admin.ModelAdmin):
-    list_display = ("project", "date", "amount", "payment_method", "user_name", "user_role", "entered_by", "created_at")
+    list_display = (
+        "project",
+        "date",
+        "amount",
+        "payment_method",
+        "user_name",
+        "user_role",
+        "entered_by",
+        "created_at",
+    )
     list_filter = ("payment_method", "project", "organization", "date")
     search_fields = ("description", "user_name", "project__name", "project__code")
     list_select_related = ("project", "entered_by", "organization")
@@ -86,7 +119,13 @@ class CreditLogAdmin(admin.ModelAdmin):
         "organization",
     )
     list_filter = ("status", "payment_method", "organization", "transaction_date")
-    search_fields = ("description", "individual_name", "category", "credited_by__email", "credited_by__name")
+    search_fields = (
+        "description",
+        "individual_name",
+        "category",
+        "credited_by__email",
+        "credited_by__name",
+    )
     list_select_related = ("credited_by", "project", "employee", "organization")
     readonly_fields = ("created_at", "updated_at")
     inlines = [CreditLogExpenseInline]
