@@ -43,21 +43,6 @@ class ConflictError(APIException):
     default_detail = "The request conflicts with current server state."
 
 
-class OutsideGeofenceError(APIException):
-    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-    default_code = "outside_geofence"
-    default_detail = "Location is outside site geofence radius."
-
-    def __init__(self, distance_m=None, radius_m=None):
-        details = {}
-        if distance_m is not None:
-            details["distance_m"] = str(distance_m)
-        if radius_m is not None:
-            details["radius_m"] = str(radius_m)
-        self.details = details
-        super().__init__(detail=self.default_detail, code=self.default_code)
-
-
 class UnbalancedEntryError(APIException):
     status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
     default_code = "unbalanced_entry"

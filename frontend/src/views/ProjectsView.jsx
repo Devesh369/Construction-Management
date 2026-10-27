@@ -40,9 +40,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
     client_name: '',
     client_phone: '',
     code: '',
-    geofence_lat: '19.076000',
-    geofence_lng: '72.877700',
-    geofence_radius_m: 200,
     status: 'ACTIVE',
   });
 
@@ -105,7 +102,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
         ...formData,
         code: generatedCode,
         estimated_budget: formData.estimated_budget ? formData.estimated_budget : '0.00',
-        geofence_radius_m: Number(formData.geofence_radius_m),
       });
 
       toast.success('Project created successfully!');
@@ -118,9 +114,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
         client_name: '',
         client_phone: '',
         code: '',
-        geofence_lat: '19.076000',
-        geofence_lng: '72.877700',
-        geofence_radius_m: 200,
         status: 'ACTIVE',
       });
       await fetchProjects();
@@ -174,7 +167,7 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
           </div>
           <h3 className="text-lg font-bold text-[var(--text-primary)]">No Projects Registered</h3>
           <p className="text-xs text-[var(--text-secondary)] max-w-sm mx-auto">
-            Get started by adding your first construction site with location, client contacts, and geofence.
+            Get started by adding your first construction site with location, client contacts, and budget.
           </p>
           {canCreate && (
             <Button

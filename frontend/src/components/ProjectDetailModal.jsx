@@ -52,9 +52,6 @@ export const ProjectDetailModal = ({
     client_name: '',
     client_phone: '',
     estimated_budget: '',
-    geofence_lat: '',
-    geofence_lng: '',
-    geofence_radius_m: 200,
   });
 
   const loadProject = async () => {
@@ -73,9 +70,6 @@ export const ProjectDetailModal = ({
         client_name: data.client_name || '',
         client_phone: data.client_phone || '',
         estimated_budget: data.estimated_budget || '0.00',
-        geofence_lat: data.geofence_lat ? String(data.geofence_lat) : '19.076000',
-        geofence_lng: data.geofence_lng ? String(data.geofence_lng) : '72.877700',
-        geofence_radius_m: data.geofence_radius_m || 200,
       });
     } catch (err) {
       setError(err.message || 'Failed to load project details.');
@@ -129,9 +123,6 @@ export const ProjectDetailModal = ({
         client_name: editForm.client_name.trim(),
         client_phone: editForm.client_phone.trim(),
         estimated_budget: editForm.estimated_budget ? editForm.estimated_budget : '0.00',
-        geofence_lat: editForm.geofence_lat,
-        geofence_lng: editForm.geofence_lng,
-        geofence_radius_m: Number(editForm.geofence_radius_m),
       };
 
       const updated = await api.projects.update(projectId, payload);
@@ -146,9 +137,6 @@ export const ProjectDetailModal = ({
         client_name: updated.client_name || '',
         client_phone: updated.client_phone || '',
         estimated_budget: updated.estimated_budget || '0.00',
-        geofence_lat: updated.geofence_lat ? String(updated.geofence_lat) : '19.076000',
-        geofence_lng: updated.geofence_lng ? String(updated.geofence_lng) : '72.877700',
-        geofence_radius_m: updated.geofence_radius_m || 200,
       });
       setIsEditing(false);
       if (onProjectUpdated) {
@@ -324,37 +312,6 @@ export const ProjectDetailModal = ({
                 />
               </div>
 
-              {/* Geofence Configuration */}
-              <div className="p-4 rounded-2xl bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/25 space-y-3">
-                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                  <Compass className="w-4 h-4" />
-                  <span>Update GPS Circle Geofence</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <Input
-                    label="Center Latitude"
-                    required
-                    value={editForm.geofence_lat}
-                    onChange={(e) => setEditForm({ ...editForm, geofence_lat: e.target.value })}
-                  />
-                  <Input
-                    label="Center Longitude"
-                    required
-                    value={editForm.geofence_lng}
-                    onChange={(e) => setEditForm({ ...editForm, geofence_lng: e.target.value })}
-                  />
-                  <Input
-                    label="Radius (Meters)"
-                    type="number"
-                    required
-                    min="20"
-                    max="5000"
-                    value={editForm.geofence_radius_m}
-                    onChange={(e) => setEditForm({ ...editForm, geofence_radius_m: e.target.value })}
-                  />
-                </div>
-              </div>
-
               {/* Form Action Buttons */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--border-default)]">
                 <Button
@@ -451,40 +408,6 @@ export const ProjectDetailModal = ({
                         {project.location || 'Site Location Coordinates'}
                       </span>
                     </div>
-                  </div>
-                </div>
-
-                {/* GPS Circle Geofence */}
-                <div className="p-5 rounded-2xl border border-amber-500/20 bg-amber-500/5 space-y-3">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-2">
-                    <Compass className="w-4 h-4" />
-                    <span>GPS Circle Geofence</span>
-                  </h4>
-
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="p-2.5 rounded-xl bg-white/80 dark:bg-[var(--bg-tertiary)] border border-[var(--border-default)]">
-                      <span className="text-[9px] font-bold uppercase text-[var(--text-muted)] block">Latitude</span>
-                      <span className="text-xs font-black text-[var(--text-primary)]">
-                        {Number(project.geofence_lat).toFixed(6)}
-                      </span>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-white/80 dark:bg-[var(--bg-tertiary)] border border-[var(--border-default)]">
-                      <span className="text-[9px] font-bold uppercase text-[var(--text-muted)] block">Longitude</span>
-                      <span className="text-xs font-black text-[var(--text-primary)]">
-                        {Number(project.geofence_lng).toFixed(6)}
-                      </span>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-white/80 dark:bg-[var(--bg-tertiary)] border border-[var(--border-default)]">
-                      <span className="text-[9px] font-bold uppercase text-[var(--text-muted)] block">Radius</span>
-                      <span className="text-xs font-black text-amber-600 dark:text-amber-400">
-                        {project.geofence_radius_m}m
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)] font-medium">
-                    <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>Automated Haversine check-in enforced within this perimeter.</span>
                   </div>
                 </div>
               </div>

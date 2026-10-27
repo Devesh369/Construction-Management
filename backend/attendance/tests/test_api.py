@@ -41,16 +41,13 @@ class TestAttendanceAPI:
             tok_sup_a, "AlphaSup123#", "Supervisor Alpha"
         )
 
-        # Project with GPS geofence (200m radius)
+        # Project
         self.project_alpha = create_project(
             self.org_alpha,
             user=self.admin_alpha,
             data={
                 "name": "Tower Alpha",
                 "code": "TWR-01",
-                "geofence_lat": Decimal("19.076000"),
-                "geofence_lng": Decimal("72.877700"),
-                "geofence_radius_m": 200,
             },
         )
         add_project_member(self.project_alpha, self.pm_alpha, site_role="Project Manager")
@@ -69,34 +66,16 @@ class TestAttendanceAPI:
             user=self.admin_alpha,
         )
 
-    def test_uc11_worker_check_in_api_inside_geofence(self):
-        """UC-11: Supervisor checks in worker within project geofence."""
+    def test_uc11_worker_check_in_api(self):
+        """UC-11: Supervisor checks in worker for project."""
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.toks_sup_a['access']}")
         data = {
             "employee_id": self.worker1.id,
             "project_id": self.project_alpha.id,
-            "latitude": 19.076100,  # ~11 meters away
-            "longitude": 72.877700,
-            "shift_type": "DAY",
         }
         res = self.client.post("/api/v1/attendance/check-in", data, format="json")
         assert res.status_code == status.HTTP_201_CREATED
-        assert res.data["is_geofence_verified"] is True
         assert res.data["status"] == "PRESENT"
-
-    def test_uc11_worker_check_in_api_outside_geofence(self):
-        """UC-11: Check-in outside geofence boundary is rejected with 422."""
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.toks_sup_a['access']}")
-        data = {
-            "employee_id": self.worker1.id,
-            "project_id": self.project_alpha.id,
-            "latitude": 19.085000,  # ~1 km away
-            "longitude": 72.877700,
-            "shift_type": "DAY",
-        }
-        res = self.client.post("/api/v1/attendance/check-in", data, format="json")
-        assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-        assert "Outside project geofence boundary" in str(res.data)
 
     def test_uc12_batch_marking_gang_api(self):
         """UC-12: Supervisor batch-marks attendance for a labor gang."""
@@ -108,7 +87,6 @@ class TestAttendanceAPI:
         payload = {
             "project_id": self.project_alpha.id,
             "date": "2026-03-25",
-            "shift_type": "DAY",
             "group_id": group.id,
             "group_status": "PRESENT",
         }
@@ -154,35 +132,6 @@ class TestAttendanceAPI:
         assert "Republic Day" in names
         assert "Local Monsoon Closure" in names
 
-    def test_uc14_run_night_shift_api(self):
-        """UC-14: Supervisor starts and completes night shift with safety checklist."""
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.toks_sup_a['access']}")
-        payload = {
-            "project_id": self.project_alpha.id,
-            "shift_date": "2026-03-28",
-            "employee_ids": [self.worker1.id],
-            "safety_checklist_signed": True,
-            "checklist_notes": "All safety harnesses and floodlights inspected.",
-        }
-        res = self.client.post("/api/v1/night-shifts", payload, format="json")
-        assert res.status_code == status.HTTP_201_CREATED
-        session_id = res.data["id"]
-
-        # Complete session
-        res_comp = self.client.patch(
-            f"/api/v1/night-shifts/{session_id}/complete",
-            {"work_completed": "Excavation completed"},
-            format="json",
-        )
-        assert res_comp.status_code == status.HTTP_200_OK
-        assert res_comp.data["status"] == "COMPLETED"
-
-        # PM approves session -> locks attendance rows
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.toks_pm_a['access']}")
-        res_appr = self.client.post(f"/api/v1/night-shifts/{session_id}/approve")
-        assert res_appr.status_code == status.HTTP_200_OK
-        assert res_appr.data["status"] == "APPROVED"
-
     def test_uc15_approve_and_unlock_attendance_api(self):
         """UC-15: PM approves attendance, locking rows; Admin unlocks with reason."""
         # Mark attendance first
@@ -191,7 +140,6 @@ class TestAttendanceAPI:
             employee=self.worker1,
             project=self.project_alpha,
             date=date(2026, 3, 29),
-            shift_type="DAY",
             status=AttendanceStatus.PRESENT,
             marked_by=self.sup_alpha,
         )

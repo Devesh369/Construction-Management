@@ -61,7 +61,6 @@ export const SettingsView = () => {
     workday_hours: '8.00',
     half_day_hours: '4.00',
     overtime_after_hours: '8.00',
-    night_shift_multiplier: '1.50',
     expense_approval_limit: '15000.00',
   });
 
@@ -88,7 +87,6 @@ export const SettingsView = () => {
         workday_hours: orgRes?.workday_hours || '8.00',
         half_day_hours: orgRes?.half_day_hours || '4.00',
         overtime_after_hours: orgRes?.overtime_after_hours || '8.00',
-        night_shift_multiplier: orgRes?.night_shift_multiplier || '1.50',
         expense_approval_limit: orgRes?.expense_approval_limit || '15000.00',
       });
 

@@ -691,10 +691,8 @@ def generate_attendance_excel(
         "Worker Code",
         "Worker Name",
         "Project Code",
-        "Shift",
         "Status",
         "OT Hours",
-        "GPS Verified?",
         "Locked?",
     ]
     for c_idx, h in enumerate(headers_2, start=1):
@@ -706,11 +704,9 @@ def generate_attendance_excel(
         ws2.cell(row=curr_row_2, column=2, value=a.employee.employee_code)
         ws2.cell(row=curr_row_2, column=3, value=a.employee.full_name)
         ws2.cell(row=curr_row_2, column=4, value=a.project.code)
-        ws2.cell(row=curr_row_2, column=5, value=a.shift_type)
-        ws2.cell(row=curr_row_2, column=6, value=a.status)
-        ws2.cell(row=curr_row_2, column=7, value=float(a.ot_hours))
-        ws2.cell(row=curr_row_2, column=8, value="YES" if a.is_geofence_verified else "NO")
-        ws2.cell(row=curr_row_2, column=9, value="YES" if a.is_locked else "NO")
+        ws2.cell(row=curr_row_2, column=5, value=a.status)
+        ws2.cell(row=curr_row_2, column=6, value=float(a.ot_hours))
+        ws2.cell(row=curr_row_2, column=7, value="YES" if a.is_locked else "NO")
         curr_row_2 += 1
 
     apply_excel_styling(ws2, header_row_index=4)

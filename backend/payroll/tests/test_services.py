@@ -10,7 +10,7 @@ import pytest
 from django.utils import timezone
 
 from accounts.services import accept_invitation, create_organization, create_user_invitation
-from attendance.models import Attendance, AttendanceStatus, ShiftType
+from attendance.models import Attendance, AttendanceStatus
 from attendance.services import AttendanceSummary
 from audit.constants import AuditAction
 from audit.models import AuditLog
@@ -63,9 +63,6 @@ class TestPayrollServices:
                 "name": "Skyline Project",
                 "code": "SKY-P6",
                 "budget": Decimal("50000000.00"),
-                "geofence_lat": Decimal("19.076000"),
-                "geofence_lng": Decimal("72.877700"),
-                "geofence_radius_m": 200,
             },
         )
 
@@ -101,14 +98,13 @@ class TestPayrollServices:
 
     def test_calculate_voucher_worked_example_and_edge_cases(self):
         """
-        Verify wage formula matching Worked Example from Section 6 (M9):
-        Rate 800, OT 100, multiplier 1.50.
-        5 present (1 night shift), 1 half day, 1 holiday, 6 OT hrs, 1000 advance.
+        Verify wage formula matching worked example:
+        Rate 800, OT 100.
+        5 present, 1 half day, 1 holiday, 6 OT hrs, 1000 advance.
         basic: (5 + 0.5 + 1) * 800 = 5200.00
         ot: 6 * 100 = 600.00
-        night: 1 * 800 * 0.50 = 400.00
-        gross: 6200.00
-        net: 5200.00
+        gross: 5800.00
+        net: 4800.00
         """
         summary = AttendanceSummary(
             employee_id=self.worker1.id,
@@ -116,17 +112,15 @@ class TestPayrollServices:
             half_days=1,
             paid_holidays=1,
             ot_hours=Decimal("6.00"),
-            night_shifts=1,
         )
         calc = calculate_voucher(
             self.worker1, summary, open_advances=Decimal("1000.00"), org=self.org
         )
         assert calc["basic_pay"] == Decimal("5200.00")
         assert calc["ot_pay"] == Decimal("600.00")
-        assert calc["night_allowance"] == Decimal("400.00")
-        assert calc["gross_pay"] == Decimal("6200.00")
+        assert calc["gross_pay"] == Decimal("5800.00")
         assert calc["advances_deducted"] == Decimal("1000.00")
-        assert calc["net_pay"] == Decimal("5200.00")
+        assert calc["net_pay"] == Decimal("4800.00")
         assert calc["payment_mode"] == "UPI"
 
         # Edge case 1: Half days only (3 half days @ 800) -> units = 1.5 -> 1200.00
@@ -136,7 +130,6 @@ class TestPayrollServices:
             half_days=3,
             paid_holidays=0,
             ot_hours=Decimal("0.00"),
-            night_shifts=0,
         )
         calc_half = calculate_voucher(
             self.worker1, sum_half, open_advances=Decimal("0.00"), org=self.org
@@ -224,7 +217,6 @@ class TestPayrollServices:
                 employee=self.worker1,
                 project=self.project,
                 date=d,
-                shift_type=ShiftType.DAY,
                 status=AttendanceStatus.PRESENT,
                 is_locked=True,
                 marked_by=self.pm,
@@ -235,7 +227,6 @@ class TestPayrollServices:
                 employee=self.worker1,
                 project=self.project,
                 date=d,
-                shift_type=ShiftType.DAY,
                 status=AttendanceStatus.PRESENT,
                 is_locked=False,
                 marked_by=self.pm,
@@ -266,7 +257,6 @@ class TestPayrollServices:
                 employee=self.worker1,
                 project=self.project,
                 date=date(2026, 10, i),
-                shift_type=ShiftType.DAY,
                 status=AttendanceStatus.PRESENT,
                 is_locked=True,
                 marked_by=self.pm,
@@ -348,7 +338,6 @@ class TestPayrollServices:
                 employee=self.worker1,
                 project=self.project,
                 date=date(2026, 10, i),
-                shift_type=ShiftType.DAY,
                 status=AttendanceStatus.PRESENT,
                 is_locked=True,
                 marked_by=self.pm,
@@ -396,7 +385,6 @@ class TestPayrollServices:
                 employee=self.worker1,
                 project=self.project,
                 date=date(2026, 10, i),
-                shift_type=ShiftType.DAY,
                 status=AttendanceStatus.PRESENT,
                 is_locked=True,
                 marked_by=self.pm,
@@ -436,7 +424,6 @@ class TestPayrollServices:
                 employee=self.worker1,
                 project=self.project,
                 date=date(2026, 10, i),
-                shift_type=ShiftType.DAY,
                 status=AttendanceStatus.PRESENT,
                 is_locked=True,
                 marked_by=self.pm,
@@ -481,7 +468,6 @@ class TestPayrollServices:
                 employee=self.worker1,
                 project=self.project,
                 date=date(2026, 10, i),
-                shift_type=ShiftType.DAY,
                 status=AttendanceStatus.PRESENT,
                 is_locked=True,
                 marked_by=self.pm,

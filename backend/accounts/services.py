@@ -83,7 +83,6 @@ def create_organization(name: str, admin_email: str) -> tuple[Organization, Invi
             workday_hours=Decimal("8.00"),
             half_day_hours=Decimal("4.00"),
             overtime_after_hours=Decimal("8.00"),
-            night_shift_multiplier=Decimal("1.50"),
             expense_approval_limit=Decimal("1000.00"),
         )
 

@@ -61,9 +61,6 @@ class ProjectSerializer(serializers.ModelSerializer):
             "estimated_budget",
             "actual_spend",
             "progress_percent",
-            "geofence_lat",
-            "geofence_lng",
-            "geofence_radius_m",
             "budget_categories",
             "warning",
             "created_at",
@@ -79,27 +76,6 @@ class ProjectSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        lat = attrs.get("geofence_lat", getattr(self.instance, "geofence_lat", None))
-        lng = attrs.get("geofence_lng", getattr(self.instance, "geofence_lng", None))
-
-        # Geofence needs both coordinates or none
-        if (lat is not None and lng is None) or (lat is None and lng is not None):
-            raise serializers.ValidationError(
-                {
-                    "geofence": "Both latitude and longitude must be provided for a geofence, or both omitted."
-                }
-            )
-
-        if lat is not None and not (Decimal("-90.0") <= lat <= Decimal("90.0")):
-            raise serializers.ValidationError(
-                {"geofence_lat": "Latitude must be between -90 and 90 degrees."}
-            )
-
-        if lng is not None and not (Decimal("-180.0") <= lng <= Decimal("180.0")):
-            raise serializers.ValidationError(
-                {"geofence_lng": "Longitude must be between -180 and 180 degrees."}
-            )
-
         return attrs
 
     def to_representation(self, instance):

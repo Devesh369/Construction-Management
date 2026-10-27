@@ -182,7 +182,6 @@ export const AttendanceView = ({ selectedProjectId }) => {
       list.forEach((r) => {
         map[r.employee] = {
           status: r.status,
-          shiftType: r.shift_type,
           earning: r.earning,
           recordId: r.id,
           project: r.project,
@@ -545,7 +544,6 @@ export const AttendanceView = ({ selectedProjectId }) => {
       return {
         employee_id: emp.id,
         project_id: allocatedProj,
-        shift_type: 'DAY',
         status: statusToApply,
         ot_hours: '0.00',
       };

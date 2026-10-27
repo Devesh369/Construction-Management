@@ -75,12 +75,6 @@ class Organization(models.Model):
         default=Decimal("8.00"),
         help_text="Hours above this threshold count as overtime",
     )
-    night_shift_multiplier = models.DecimalField(
-        max_digits=3,
-        decimal_places=2,
-        default=Decimal("1.50"),
-        help_text="Multiplier applied to wage rate for night shifts",
-    )
     expense_approval_limit = models.DecimalField(
         max_digits=12,
         decimal_places=2,

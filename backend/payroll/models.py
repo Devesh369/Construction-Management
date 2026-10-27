@@ -122,14 +122,12 @@ class PayrollVoucher(TenantModel):
     half_days = models.PositiveIntegerField(default=0)
     paid_holidays = models.PositiveIntegerField(default=0)
     ot_hours = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))
-    night_shifts = models.PositiveIntegerField(default=0)
 
     # Calculated rates and wages
     daily_rate_used = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     ot_rate_used = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     basic_pay = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     ot_pay = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
-    night_allowance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     gross_pay = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     advances_deducted = models.DecimalField(
         max_digits=12, decimal_places=2, default=Decimal("0.00")

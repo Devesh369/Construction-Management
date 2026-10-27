@@ -95,7 +95,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "workday_hours",
             "half_day_hours",
             "overtime_after_hours",
-            "night_shift_multiplier",
             "expense_approval_limit",
             "is_active",
             "created_at",
@@ -113,10 +112,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
         overtime = attrs.get(
             "overtime_after_hours", getattr(self.instance, "overtime_after_hours", Decimal("8.00"))
         )
-        multiplier = attrs.get(
-            "night_shift_multiplier",
-            getattr(self.instance, "night_shift_multiplier", Decimal("1.50")),
-        )
         approval_limit = attrs.get(
             "expense_approval_limit",
             getattr(self.instance, "expense_approval_limit", Decimal("1000.00")),
@@ -129,10 +124,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
         if overtime <= Decimal("0.00"):
             raise serializers.ValidationError(
                 {"overtime_after_hours": "overtime_after_hours must be greater than 0."}
-            )
-        if multiplier < Decimal("1.00"):
-            raise serializers.ValidationError(
-                {"night_shift_multiplier": "night_shift_multiplier must be >= 1.00."}
             )
         if approval_limit < Decimal("0.00"):
             raise serializers.ValidationError(
