@@ -13,6 +13,7 @@ from ledger.services import (
     balance_sheet,
     post_journal_entry,
     profit_and_loss,
+    reconcile_ledger,
     reverse_entry,
     trial_balance,
 )
@@ -306,3 +307,58 @@ class TestLedgerServices:
         # Liabilities = 0
         # Equity = 100,000 + Net Profit (25,000) = 125,000
         assert bs["total_liabilities_and_equity"] == "125000.00"
+
+    def test_reconcile_ledger_healthy(self):
+        """Reconciliation audit passes with HEALTHY status when all invariants hold."""
+        # 1. Post balanced capital entry
+        post_journal_entry(
+            org=self.org,
+            date=date(2026, 1, 1),
+            description="Initial Capital",
+            lines=[
+                {"account_code": "1002", "side": Side.DR, "amount": Decimal("100000.00")},
+                {"account_code": "3001", "side": Side.CR, "amount": Decimal("100000.00")},
+            ],
+        )
+
+        audit = reconcile_ledger(self.org)
+        assert audit["is_healthy"] is True
+        assert audit["status"] == "HEALTHY"
+        assert audit["trial_balance"]["is_balanced"] is True
+        assert audit["balance_sheet"]["is_balanced"] is True
+        assert audit["journal_entries"]["total_audited"] == 1
+        assert len(audit["journal_entries"]["invalid_entries"]) == 0
+        assert audit["subledger_reconciliation"]["accounts_payable"]["is_reconciled"] is True
+        assert audit["subledger_reconciliation"]["worker_advances"]["is_reconciled"] is True
+
+    def test_reconcile_ledger_detects_subledger_ap_discrepancy(self):
+        """Reconciliation detects when general ledger AP (2001) differs from vendor subledger."""
+        # Post manual entry crediting 2001 (increasing AP liability in GL) without a vendor record
+        post_journal_entry(
+            org=self.org,
+            date=date(2026, 2, 1),
+            description="Direct AP liability increase",
+            lines=[
+                {"account_code": "5001", "side": Side.DR, "amount": Decimal("5000.00")},
+                {"account_code": "2001", "side": Side.CR, "amount": Decimal("5000.00")},
+            ],
+        )
+
+        audit = reconcile_ledger(self.org)
+        assert audit["subledger_reconciliation"]["accounts_payable"]["is_reconciled"] is False
+        assert audit["subledger_reconciliation"]["accounts_payable"]["discrepancy"] == "5000.00"
+        assert audit["is_healthy"] is False
+        assert audit["status"] == "DISCREPANCIES_FOUND"
+
+    def test_reconcile_ledger_command(self):
+        """Management command reconcile_ledger executes successfully."""
+        from io import StringIO
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("reconcile_ledger", org=str(self.org.id), stdout=out)
+        output = out.getvalue()
+        assert "FINANCIAL LEDGER RECONCILIATION AUDIT" in output
+        assert "Auditing Tenant" in output
+        assert "HEALTHY" in output
+

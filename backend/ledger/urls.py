@@ -7,6 +7,7 @@ from ledger.views import (
     BalanceSheetView,
     JournalEntryViewSet,
     ProfitLossView,
+    ReconciliationView,
     TrialBalanceView,
 )
 from ledger.views_transactions import TransactionViewSet
@@ -21,5 +22,6 @@ urlpatterns = [
     path("trial-balance", TrialBalanceView.as_view(), name="ledger-trial-balance"),
     path("profit-loss", ProfitLossView.as_view(), name="ledger-profit-loss"),
     path("balance-sheet", BalanceSheetView.as_view(), name="ledger-balance-sheet"),
+    path("reconciliation", ReconciliationView.as_view(), name="ledger-reconciliation"),
     path("", include(router.urls)),
 ]

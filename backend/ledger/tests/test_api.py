@@ -267,3 +267,20 @@ class TestLedgerAPI:
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.toks_sup_a['access']}")
         res = self.client.get("/api/v1/ledger/accounts")
         assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_reconciliation_api(self):
+        """Accountant can fetch financial ledger reconciliation report."""
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.toks_acc_a['access']}")
+        res = self.client.get("/api/v1/ledger/reconciliation")
+        assert res.status_code == status.HTTP_200_OK
+        assert "is_healthy" in res.data
+        assert "status" in res.data
+        assert "trial_balance" in res.data
+        assert "balance_sheet" in res.data
+        assert "subledger_reconciliation" in res.data
+
+        # Supervisor is forbidden
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.toks_sup_a['access']}")
+        res_sup = self.client.get("/api/v1/ledger/reconciliation")
+        assert res_sup.status_code == status.HTTP_403_FORBIDDEN
+
