@@ -52,6 +52,7 @@ export const SettingsView = () => {
     role: 'PROJECT_MANAGER',
     password: '',
     phone: '',
+    notification_email: '',
   });
 
   // Org settings form
@@ -123,6 +124,7 @@ export const SettingsView = () => {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     setSaving(true);
+    const cleanPhone = userForm.phone?.replace(/\D/g, '') || undefined;
     try {
       await api.users.create({
         name: userForm.name.trim(),
@@ -130,8 +132,12 @@ export const SettingsView = () => {
         role: userForm.role,
         password: userForm.password,
         phone: cleanPhone,
+        notification_email: userForm.notification_email?.trim() || undefined,
       });
-      toast.success(`User '${userForm.email}' created successfully with role ${userForm.role}!`);
+      const targetEmail = userForm.notification_email?.trim() || userForm.email;
+      toast.success(
+        `User '${userForm.email}' created! Login credentials dispatched to ${targetEmail} via email.`
+      );
       setIsAddUserModalOpen(false);
       setUserForm({
         name: '',
@@ -139,6 +145,7 @@ export const SettingsView = () => {
         role: 'PROJECT_MANAGER',
         password: '',
         phone: '',
+        notification_email: '',
       });
       await fetchData();
     } catch (err) {
@@ -643,6 +650,26 @@ export const SettingsView = () => {
               }
               className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
+              <span>Send Credentials To Email</span>
+              <span className="text-[10px] text-blue-500 font-semibold normal-case">Delivered via Resend</span>
+            </label>
+            <input
+              type="email"
+              placeholder="Defaults to Work Email (leave blank or specify alternate)"
+              value={userForm.notification_email}
+              onChange={(e) =>
+                setUserForm({ ...userForm, notification_email: e.target.value })
+              }
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
+            />
+            <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5">
+              <Mail size={12} className="text-blue-500 shrink-0" />
+              <span>Login credentials (username, password & role details) will be emailed upon creation.</span>
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-3">

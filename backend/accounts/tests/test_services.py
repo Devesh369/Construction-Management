@@ -115,3 +115,26 @@ class TestAccountsServices:
         user_reset = reset_password(raw_reset_token, "NewPassword123#")
         assert user_reset.token_version == initial_token_version + 1
         assert user_reset.check_password("NewPassword123#")
+
+    def test_send_credentials_email_fallback(self):
+        """Test send_credentials_email sends message to user's email or custom_email."""
+        from django.core import mail
+
+        from accounts.services import send_credentials_email
+
+        org, invite, raw_token = create_organization("Email Test Org", "admin@emailtest.com")
+        user, _ = accept_invitation(raw_token, "Pass#123456", name="Tester")
+
+        mail.outbox.clear()
+        res = send_credentials_email(
+            user=user,
+            password="TemporaryPassword123#",
+            organization=org,
+            custom_email="alternate@emailtest.com",
+        )
+        assert res is True
+        assert len(mail.outbox) == 1
+        sent = mail.outbox[0]
+        assert "alternate@emailtest.com" in sent.to
+        assert "TemporaryPassword123#" in sent.body
+        assert "Email Test Org" in sent.subject

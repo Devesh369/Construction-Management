@@ -21,7 +21,11 @@ class DashboardOverviewView(views.APIView):
     Cached for 60 seconds unless ?refresh=true is provided.
     """
 
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT),
+    ]
 
     def get(self, request):
         force_refresh = request.query_params.get("refresh", "").lower() in ["true", "1"]

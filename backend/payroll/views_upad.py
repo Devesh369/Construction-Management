@@ -9,7 +9,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from attendance.services_settlement import AttendanceSettlementService
-from core.permissions import IsTenantUser
+from core.permissions import IsTenantUser, roles_required
+from core.roles import Role
 from core.views import TenantViewSet
 from payroll.models import Payment, PaymentLifecycleStatus
 from payroll.serializers_upad import PaymentSerializer
@@ -26,7 +27,11 @@ class PaymentViewSet(TenantViewSet):
         "employee", "project", "created_by", "approved_by", "processed_by"
     )
     serializer_class = PaymentSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(Role.ORG_ADMIN, Role.ACCOUNTANT),
+    ]
 
     def get_queryset(self):
         qs = super().get_queryset()

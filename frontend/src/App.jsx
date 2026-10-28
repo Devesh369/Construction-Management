@@ -23,19 +23,27 @@ import { useUIStore } from './store/uiStore';
 import buildsphereLogo from './assets/buildsphere_logo.png';
 
 export const ROLE_PERMISSIONS = {
-  dashboard: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT', 'AUDITOR', 'SITE_ENGINEER', 'SUPERVISOR'],
-  projects: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR', 'ACCOUNTANT', 'AUDITOR'],
-  workforce: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SUPERVISOR', 'ACCOUNTANT'],
-  attendance: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SUPERVISOR', 'ACCOUNTANT'],
-  progress: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR'],
-  expenses: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR', 'ACCOUNTANT'],
-  upad: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT', 'SUPERVISOR', 'SITE_ENGINEER'],
-  payment_central: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT', 'AUDITOR'],
+  dashboard: ['ORG_ADMIN', 'PROJECT_MANAGER'],
+  projects: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_ENGINEER'],
+  workforce: ['ORG_ADMIN', 'SUPERVISOR'],
+  attendance: ['ORG_ADMIN', 'SUPERVISOR'],
+  progress: ['ORG_ADMIN', 'SITE_ENGINEER'],
+  expenses: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'],
+  upad: ['ORG_ADMIN', 'ACCOUNTANT'],
+  payment_central: ['ORG_ADMIN', 'ACCOUNTANT'],
   credits: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'],
-  payroll: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'],
-  ledger: ['ORG_ADMIN', 'ACCOUNTANT', 'AUDITOR'],
+  payroll: ['ORG_ADMIN', 'ACCOUNTANT'],
+  ledger: ['ORG_ADMIN', 'ACCOUNTANT'],
   reports: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'],
   settings: ['ORG_ADMIN'],
+};
+
+export const DEFAULT_TAB_BY_ROLE = {
+  ORG_ADMIN: 'dashboard',
+  PROJECT_MANAGER: 'dashboard',
+  SITE_ENGINEER: 'progress',
+  SUPERVISOR: 'attendance',
+  ACCOUNTANT: 'ledger',
 };
 
 const AppContent = () => {
@@ -86,6 +94,14 @@ const AppContent = () => {
     setActiveTab(tab);
   };
 
+  // Automatically switch to role default tab if current tab is not permitted
+  useEffect(() => {
+    if (role && !ROLE_PERMISSIONS[activeTab]?.includes(role)) {
+      const targetTab = DEFAULT_TAB_BY_ROLE[role] || 'projects';
+      setActiveTab(targetTab);
+    }
+  }, [role, activeTab]);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     setRefreshKey((prev) => prev + 1);
@@ -121,6 +137,7 @@ const AppContent = () => {
 
   const isDark = theme === 'dark';
   const isTabAllowed = ROLE_PERMISSIONS[activeTab]?.includes(role);
+  const fallbackTab = DEFAULT_TAB_BY_ROLE[role] || 'projects';
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-secondary)]">
@@ -146,11 +163,11 @@ const AppContent = () => {
                 Your current designation (<strong style={{ color: 'var(--accent)' }}>{role?.replace('_', ' ')}</strong>) is not authorized to access the <strong>{activeTab.toUpperCase()}</strong> module. Please contact your Organization Administrator to request elevated permissions.
               </p>
               <button
-                onClick={() => setActiveTab('dashboard')}
+                onClick={() => setActiveTab(fallbackTab)}
                 className="btn btn-primary"
                 style={{ margin: '0 auto' }}
               >
-                Return to Dashboard
+                Return to {fallbackTab.toUpperCase()}
               </button>
             </div>
           ) : (

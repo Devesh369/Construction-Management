@@ -58,6 +58,12 @@ class UserSerializer(serializers.ModelSerializer):
         min_length=6,
         error_messages={"min_length": "Password must be at least 6 characters long."},
     )
+    notification_email = serializers.EmailField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
 
     def validate_phone(self, value):
         from core.validators import validate_mobile_10_digits
@@ -68,7 +74,17 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "email", "name", "phone", "role", "password", "is_active", "created_at"]
+        fields = [
+            "id",
+            "email",
+            "name",
+            "phone",
+            "role",
+            "password",
+            "notification_email",
+            "is_active",
+            "created_at",
+        ]
         read_only_fields = ["id", "created_at"]
 
 

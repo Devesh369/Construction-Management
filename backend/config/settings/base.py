@@ -214,5 +214,9 @@ EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
 
+# Resend Email API Configuration
+RESEND_API_KEY = env("RESEND_API_KEY", default="")
+RESEND_FROM_EMAIL = env("RESEND_FROM_EMAIL", default="BuildSphere <onboarding@resend.dev>")
+
 # Demo Seed configuration
 SEED_PASSWORD = env("SEED_PASSWORD", default="ChangeMe#12345")

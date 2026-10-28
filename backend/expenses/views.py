@@ -45,7 +45,17 @@ class ExpenseViewSet(ProjectScopedMixin, TenantViewSet):
 
     queryset = Expense.objects.all()
     serializer_class = ExpenseSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(
+            Role.ORG_ADMIN,
+            Role.PROJECT_MANAGER,
+            Role.ACCOUNTANT,
+            Role.SITE_ENGINEER,
+            Role.SUPERVISOR,
+        ),
+    ]
     filterset_fields = ["project", "category", "status", "payment_mode", "vendor", "created_by"]
     search_fields = ["description", "invoice_number"]
 
@@ -156,20 +166,24 @@ class VendorViewSet(TenantViewSet):
 
     queryset = Vendor.objects.all()
     serializer_class = VendorSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(
+            Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT, Role.SITE_ENGINEER
+        ),
+    ]
     filterset_fields = ["is_active"]
     search_fields = ["name", "contact_person", "tax_id"]
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
-            return [
-                IsAuthenticated(),
-                IsTenantUser(),
-                roles_required(
-                    Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT, Role.SITE_ENGINEER
-                )(),
-            ]
-        return [IsAuthenticated(), IsTenantUser()]
+        return [
+            IsAuthenticated(),
+            IsTenantUser(),
+            roles_required(
+                Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT, Role.SITE_ENGINEER
+            )(),
+        ]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):

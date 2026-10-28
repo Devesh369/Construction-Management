@@ -42,7 +42,11 @@ from workforce.models import Employee
 class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
     queryset = Attendance.objects.all()
     serializer_class = AttendanceSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.ACCOUNTANT),
+    ]
     filterset_fields = ["project", "date", "status", "is_locked", "employee"]
     search_fields = ["employee__full_name", "employee__employee_code"]
     ordering = ["-date", "-id"]
@@ -76,6 +80,16 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
 
     def perform_create(self, serializer):
         from django.utils import timezone
+
+        if self.request.user.role not in [
+            Role.ORG_ADMIN,
+            Role.PROJECT_MANAGER,
+            Role.SUPERVISOR,
+        ]:
+            raise BusinessRuleError(
+                "You do not have permission to mark attendance.",
+                code="permission_denied",
+            )
 
         org = self.request.user.organization
         emp = serializer.validated_data.get("employee")
@@ -112,6 +126,16 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
     def perform_update(self, serializer):
         from django.utils import timezone
 
+        if self.request.user.role not in [
+            Role.ORG_ADMIN,
+            Role.PROJECT_MANAGER,
+            Role.SUPERVISOR,
+        ]:
+            raise BusinessRuleError(
+                "You do not have permission to modify attendance records.",
+                code="permission_denied",
+            )
+
         if serializer.instance.is_locked:
             raise ConflictError(
                 "Locked attendance records cannot be modified.", code="record_locked"
@@ -131,6 +155,11 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         serializer.save()
 
     def perform_destroy(self, instance):
+        if self.request.user.role != Role.ORG_ADMIN:
+            raise BusinessRuleError(
+                "Only ORG_ADMIN can delete attendance records.",
+                code="permission_denied",
+            )
         if instance.is_locked:
             raise ConflictError(
                 "Locked attendance records cannot be deleted.", code="record_locked"
@@ -140,7 +169,12 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
             code="attendance_already_marked",
         )
 
-    @action(detail=False, methods=["post"], url_path="check-in")
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="check-in",
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR)],
+    )
     def check_in(self, request):
         """Worker check-in on site."""
         serializer = CheckInSerializer(data=request.data)
@@ -156,7 +190,12 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         )
         return Response(AttendanceSerializer(record).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=["post"], url_path="check-out")
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="check-out",
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR)],
+    )
     def check_out(self, request):
         """Worker check-out. Computes worked and overtime hours."""
         serializer = CheckOutSerializer(data=request.data)
@@ -171,7 +210,12 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         )
         return Response(AttendanceSerializer(record).data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=["post"], url_path="batch")
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="batch",
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR)],
+    )
     def batch(self, request):
         """Batch mark attendance for gang members or records array."""
         serializer = BatchAttendanceSerializer(data=request.data)
@@ -234,7 +278,12 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         )
         return Response({"unlocked_count": count}, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=["post"], url_path="close-day")
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="close-day",
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR)],
+    )
     def close_day(self, request):
         """Automated or supervisor close-day absentee marking."""
         serializer = CloseDaySerializer(data=request.data)

@@ -8,7 +8,11 @@ Accounts business services:
 """
 
 import hashlib
+import json
+import logging
 import secrets
+import urllib.error
+import urllib.request
 from datetime import timedelta
 from decimal import Decimal
 
@@ -422,3 +426,168 @@ def create_user_invitation(
         )
 
     return invitation, raw_token
+
+
+logger = logging.getLogger(__name__)
+
+ROLE_DESCRIPTIONS = {
+    Role.ORG_ADMIN: "Org Admin (Super Admin - Full Access)",
+    Role.PROJECT_MANAGER: "Project Manager (Budgets, Projects & Vendors)",
+    Role.SITE_ENGINEER: "Site Engineer (DPR, Work Progress & Quantities)",
+    Role.SUPERVISOR: "Site Supervisor (Daily Attendance & Workers)",
+    Role.ACCOUNTANT: "Accountant (Ledger, Upad, Payment & Payroll)",
+}
+
+
+def send_credentials_email(
+    user: User,
+    password: str,
+    organization=None,
+    custom_email: str | None = None,
+) -> bool:
+    """
+    Sends account login credentials directly to the user.
+    Uses Resend REST API if RESEND_API_KEY is configured in settings/.env;
+    otherwise falls back cleanly to Django's standard email backend (e.g. console).
+    """
+    recipient = (custom_email or user.email or "").strip().lower()
+    if not recipient:
+        return False
+
+    org_name = (
+        organization.name
+        if organization
+        else (user.organization.name if user.organization else "BuildSphere")
+    )
+    role_label = ROLE_DESCRIPTIONS.get(
+        user.role,
+        user.get_role_display() if hasattr(user, "get_role_display") else user.role,
+    )
+    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000").rstrip("/")
+    login_url = f"{frontend_url}/login" if not frontend_url.endswith("/login") else frontend_url
+
+    subject = f"Your Login Credentials — {org_name} on BuildSphere"
+
+    text_content = (
+        f"Hello {user.name or 'Team Member'},\n\n"
+        f"An active account has been created for you on BuildSphere for {org_name}.\n\n"
+        f"--- YOUR ACCOUNT CREDENTIALS ---\n"
+        f"Portal URL: {login_url}\n"
+        f"Work Email / Username: {user.email}\n"
+        f"Initial Password: {password}\n"
+        f"Assigned Role: {role_label}\n"
+        f"--------------------------------\n\n"
+        f"Please log in and change your password after your first login.\n\n"
+        f"Best regards,\n"
+        f"{org_name} Administrative Team\n"
+    )
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>{subject}</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+      <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <div style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); padding: 32px 24px; text-align: center; color: #ffffff;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">BuildSphere</h1>
+          <p style="margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;">Construction Management Platform</p>
+        </div>
+        <div style="padding: 32px 28px;">
+          <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 700; color: #0f172a;">Welcome, {user.name or 'Team Member'}!</h2>
+          <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #475569;">
+            An active account has been provisioned for you in <strong>{org_name}</strong>. Here are your portal access details:
+          </p>
+
+          <div style="background-color: #f1f5f9; border-radius: 12px; border: 1px solid #cbd5e1; padding: 20px; margin-bottom: 24px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600; width: 140px;">Work Email:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700; font-family: monospace;">{user.email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Initial Password:</td>
+                <td style="padding: 6px 0; color: #2563eb; font-weight: 800; font-family: monospace; font-size: 15px;">{password}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Assigned Role:</td>
+                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">{role_label}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="text-align: center; margin-bottom: 24px;">
+            <a href="{login_url}" style="display: inline-block; background-color: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-weight: 700; font-size: 14px;">
+              Log In to Portal
+            </a>
+          </div>
+
+          <p style="margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5; text-align: center;">
+            For security reasons, please change your password after logging in for the first time.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+
+    resend_api_key = getattr(settings, "RESEND_API_KEY", "").strip()
+    from_email = (
+        getattr(settings, "RESEND_FROM_EMAIL", "BuildSphere <onboarding@resend.dev>")
+        or "BuildSphere <onboarding@resend.dev>"
+    )
+
+    # 1. Attempt delivery via Resend API if API Key is configured
+    if resend_api_key:
+        try:
+            req_data = json.dumps(
+                {
+                    "from": from_email,
+                    "to": [recipient],
+                    "subject": subject,
+                    "html": html_content,
+                    "text": text_content,
+                }
+            ).encode("utf-8")
+
+            request_obj = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=req_data,
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "BuildSphere-API",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request_obj, timeout=10) as resp:
+                resp_body = json.loads(resp.read().decode())
+                logger.info(
+                    "Credentials email sent via Resend to %s: %s",
+                    recipient,
+                    resp_body.get("id"),
+                )
+                return True
+        except Exception as exc:
+            logger.warning(
+                "Resend API dispatch failed (%s); falling back to standard email backend.",
+                exc,
+            )
+
+    # 2. Fallback to standard Django send_mail (console/SMTP/locmem)
+    try:
+        fallback_from = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@buildsphere.internal")
+        send_mail(
+            subject=subject,
+            message=text_content,
+            from_email=fallback_from,
+            recipient_list=[recipient],
+            html_message=html_content,
+            fail_silently=True,
+        )
+        return True
+    except Exception as exc:
+        logger.error("Standard email backend failed to send credentials: %s", exc)
+        return False

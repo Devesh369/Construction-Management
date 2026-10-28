@@ -29,7 +29,11 @@ from progress.services import reject_dpr, verify_dpr
 class DailyProgressReportViewSet(ProjectScopedMixin, TenantViewSet):
     queryset = DailyProgressReport.objects.all()
     serializer_class = DailyProgressReportSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SITE_ENGINEER, Role.SUPERVISOR),
+    ]
     filterset_fields = ["project", "status", "report_date"]
     search_fields = ["summary", "issues", "project__name"]
     ordering_fields = ["report_date"]
@@ -121,7 +125,13 @@ class DailyProgressReportViewSet(ProjectScopedMixin, TenantViewSet):
         methods=["post"],
         url_path="photos",
         parser_classes=[MultiPartParser, FormParser],
-        permission_classes=[IsAuthenticated, IsTenantUser],
+        permission_classes=[
+            IsAuthenticated,
+            IsTenantUser,
+            roles_required(
+                Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SITE_ENGINEER, Role.SUPERVISOR
+            ),
+        ],
     )
     def upload_photo(self, request, pk=None):
         """Upload site photo (up to 10 photos per report, max 5MB)."""
@@ -163,7 +173,13 @@ class DailyProgressReportViewSet(ProjectScopedMixin, TenantViewSet):
         detail=True,
         methods=["delete"],
         url_path="photos/(?P<photo_id>[^/.]+)",
-        permission_classes=[IsAuthenticated, IsTenantUser],
+        permission_classes=[
+            IsAuthenticated,
+            IsTenantUser,
+            roles_required(
+                Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SITE_ENGINEER, Role.SUPERVISOR
+            ),
+        ],
     )
     def delete_photo(self, request, pk=None, photo_id=None):
         """Delete site photo from report."""
@@ -189,7 +205,11 @@ class WorkEntryViewSet(ProjectScopedMixin, TenantViewSet):
 
     queryset = WorkEntry.objects.all()
     serializer_class = WorkEntrySerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SITE_ENGINEER, Role.SUPERVISOR),
+    ]
     filterset_fields = ["project", "date", "department"]
     search_fields = ["description", "department", "project__name", "project__code"]
     ordering_fields = ["date", "created_at"]

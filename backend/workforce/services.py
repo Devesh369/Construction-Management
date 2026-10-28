@@ -438,6 +438,13 @@ def record_employee_upad(
     except Exception:
         pass
 
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(employee.organization)
+    except Exception:
+        pass
+
     return adv
 
 

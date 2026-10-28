@@ -916,7 +916,7 @@ export const WorkforceView = () => {
           </div>
 
           {/* Project Assignment Dropdown + Button */}
-          {['ORG_ADMIN', 'PROJECT_MANAGER'].includes(userRole) && (
+          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SUPERVISOR'].includes(userRole) && (
             <form onSubmit={handleAssignProject} className="flex items-center gap-2 max-w-xl">
               <select
                 value={assignProjectId}
@@ -967,7 +967,7 @@ export const WorkforceView = () => {
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40">
                       In progress
                     </span>
-                    {['ORG_ADMIN', 'PROJECT_MANAGER'].includes(userRole) && (
+                    {['ORG_ADMIN', 'PROJECT_MANAGER', 'SUPERVISOR'].includes(userRole) && (
                       <button
                         onClick={() => handleUnassignProject(proj.id)}
                         className="w-7 h-7 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center transition-colors"

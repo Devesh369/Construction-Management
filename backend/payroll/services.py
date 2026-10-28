@@ -177,27 +177,28 @@ def record_advance(user: User, data: dict, request=None) -> Advance:
         adv.save(update_fields=["journal_entry"])
 
         # Sync to UPAD Payment module so it is visible in both UPAD and Workforce
-        try:
-            from payroll.models import Payment, PaymentLifecycleStatus, PaymentType
+        if not (adv.reason and "[UPAD-" in adv.reason):
+            try:
+                from payroll.models import Payment, PaymentLifecycleStatus, PaymentType
 
-            Payment.objects.create(
-                organization=org,
-                employee=adv.employee,
-                project=adv.project,
-                type=PaymentType.ADVANCE,
-                base_salary=adv.employee.daily_rate or Decimal("0.00"),
-                amount=amount,
-                method=payment_mode.lower(),
-                status=PaymentLifecycleStatus.PAID,
-                date_from=adv.advance_date,
-                date_to=adv.advance_date,
-                description=f"[ADV-{adv.id}] {adv.reason}".strip(),
-                created_by=user,
-                processed_by=user,
-                processed_at=timezone.now(),
-            )
-        except Exception:
-            pass
+                Payment.objects.create(
+                    organization=org,
+                    employee=adv.employee,
+                    project=adv.project,
+                    type=PaymentType.ADVANCE,
+                    base_salary=adv.employee.daily_rate or Decimal("0.00"),
+                    amount=amount,
+                    method=payment_mode.lower(),
+                    status=PaymentLifecycleStatus.PAID,
+                    date_from=adv.advance_date,
+                    date_to=adv.advance_date,
+                    description=f"[ADV-{adv.id}] {adv.reason}".strip(),
+                    created_by=user,
+                    processed_by=user,
+                    processed_at=timezone.now(),
+                )
+            except Exception:
+                pass
 
         log_action(
             user=user,
@@ -207,6 +208,13 @@ def record_advance(user: User, data: dict, request=None) -> Advance:
             request=request,
             organization=org,
         )
+
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(org)
+    except Exception:
+        pass
 
     return adv
 
@@ -278,6 +286,13 @@ def create_run(
         request=request,
         organization=org,
     )
+
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(org)
+    except Exception:
+        pass
 
     return run, warnings
 
@@ -557,6 +572,13 @@ def approve_run(run: PayrollRun, approver: User, request=None) -> PayrollRun:
             organization=org,
         )
 
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(org)
+    except Exception:
+        pass
+
     return run
 
 
@@ -679,6 +701,13 @@ def mark_voucher_paid(
             request=request,
             organization=voucher.organization,
         )
+
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(voucher.organization)
+    except Exception:
+        pass
 
     return voucher
 

@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from attendance.services_settlement import AttendanceSettlementService
-from core.permissions import IsTenantUser
+from core.permissions import IsTenantUser, roles_required
 from core.roles import Role
 from core.views import TenantViewSet
 from ledger.models import Transaction
@@ -25,11 +25,22 @@ class TransactionViewSet(TenantViewSet):
 
     queryset = Transaction.objects.all().select_related("recorded_by")
     serializer_class = TransactionSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(Role.ORG_ADMIN, Role.ACCOUNTANT),
+    ]
 
     def get_queryset(self):
-        qs = super().get_queryset()
         user = self.request.user
+        org = getattr(user, "organization", None)
+        if org:
+            try:
+                TransactionService.sync_organization_transactions(org)
+            except Exception:
+                pass
+
+        qs = super().get_queryset()
 
         # Role-based visibility: regular admins cannot see super_admin transactions (Section 2.1)
         if user.role not in [Role.ORG_ADMIN, Role.ACCOUNTANT]:
@@ -48,6 +59,7 @@ class TransactionViewSet(TenantViewSet):
             "to_date"
         )
         search = self.request.query_params.get("search")
+        module = self.request.query_params.get("module")
 
         if txn_type:
             qs = qs.filter(type=txn_type)
@@ -61,6 +73,13 @@ class TransactionViewSet(TenantViewSet):
             qs = qs.filter(date__gte=from_date)
         if to_date:
             qs = qs.filter(date__lte=to_date)
+        if module:
+            if module == "spend_vendor":
+                qs = qs.filter(metadata__source__in=["expense", "vendor_payment", "running_cost"])
+            elif module == "upad":
+                qs = qs.filter(metadata__source="upad")
+            elif module == "payroll":
+                qs = qs.filter(metadata__source="payroll")
         if search:
             qs = (
                 qs.filter(description__icontains=search)
@@ -113,6 +132,13 @@ class TransactionViewSet(TenantViewSet):
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
         """Aggregated financial summary (Section 2.3)."""
+        org = getattr(request.user, "organization", None)
+        if org:
+            try:
+                TransactionService.sync_organization_transactions(org)
+            except Exception:
+                pass
+
         data = TransactionService.get_summary(
             organization=request.user.organization,
             user=request.user,

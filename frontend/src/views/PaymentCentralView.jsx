@@ -56,12 +56,13 @@ export const PaymentCentralView = () => {
 
   // Filters & Search (Matches Screenshot 1)
   const [searchQuery, setSearchQuery] = useState('');
-  const [fromDate, setFromDate] = useState('2026-06-01');
+  const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterAdmin, setFilterAdmin] = useState('all');
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [filterModule, setFilterModule] = useState('all'); // 'all' | 'spend_vendor' | 'upad' | 'payroll'
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [displayLayout, setDisplayLayout] = useState('table'); // 'table' | 'cards'
 
@@ -87,7 +88,7 @@ export const PaymentCentralView = () => {
     setLoading(true);
     try {
       const [txnRes, empRes, projRes, venRes] = await Promise.all([
-        api.transactions.list(),
+        api.transactions.list({ page_size: 1000 }),
         api.workforce.listEmployees({ page_size: 1000 }).catch(() => []),
         api.projects.list().catch(() => []),
         api.expenses.listVendors().catch(() => []),
@@ -110,12 +111,113 @@ export const PaymentCentralView = () => {
     loadData();
   }, []);
 
+  // Compute breakdown counts across financial domains
+  const moduleCounts = useMemo(() => {
+    let spend_vendor = 0;
+    let upad = 0;
+    let payroll = 0;
+
+    transactions.forEach((t) => {
+      const src = t.metadata?.source?.toLowerCase() || '';
+      if (
+        src === 'expense' ||
+        src === 'vendor_payment' ||
+        src === 'running_cost' ||
+        t.category === 'vendor' ||
+        t.category === 'site_cost'
+      ) {
+        spend_vendor++;
+      } else if (
+        src === 'upad' ||
+        (t.category === 'salary' &&
+          (t.description?.includes('[UPAD') || t.metadata?.paymentType === 'advance'))
+      ) {
+        upad++;
+      } else if (src === 'payroll' || t.description?.includes('[PAYROLL')) {
+        payroll++;
+      }
+    });
+
+    return {
+      all: transactions.length,
+      spend_vendor,
+      upad,
+      payroll,
+    };
+  }, [transactions]);
+
+  // Helper for identifying module source badge
+  const getSourceBadge = (t) => {
+    const src = t.metadata?.source?.toLowerCase() || '';
+    if (
+      src === 'expense' ||
+      src === 'vendor_payment' ||
+      src === 'running_cost' ||
+      t.category === 'vendor' ||
+      t.category === 'site_cost'
+    ) {
+      let label = 'SPEND & VENDOR';
+      if (src === 'vendor_payment') label = 'VENDOR PAYMENT';
+      else if (src === 'running_cost') label = 'RUNNING COST';
+      else if (src === 'expense') label = 'EXPENSE / SPEND';
+      return {
+        label,
+        color:
+          'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40',
+      };
+    }
+    if (
+      src === 'upad' ||
+      (t.category === 'salary' &&
+        (t.description?.includes('[UPAD') || t.metadata?.paymentType === 'advance'))
+    ) {
+      return {
+        label: 'UPAD & ADVANCE',
+        color:
+          'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-900/40',
+      };
+    }
+    if (src === 'payroll' || t.description?.includes('[PAYROLL')) {
+      return {
+        label: 'PAYROLL VOUCHER',
+        color:
+          'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/40',
+      };
+    }
+    return {
+      label: 'PAYMENT CENTRAL',
+      color:
+        'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
+    };
+  };
+
   // Filtered transactions
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
       // Date range
       if (fromDate && t.date && t.date < fromDate) return false;
       if (toDate && t.date && t.date > toDate) return false;
+
+      // Module filter
+      if (filterModule === 'spend_vendor') {
+        const isSpend =
+          t.metadata?.source === 'expense' ||
+          t.metadata?.source === 'vendor_payment' ||
+          t.metadata?.source === 'running_cost' ||
+          t.category === 'vendor' ||
+          t.category === 'site_cost';
+        if (!isSpend) return false;
+      } else if (filterModule === 'upad') {
+        const isUpad =
+          t.metadata?.source === 'upad' ||
+          (t.category === 'salary' &&
+            (t.description?.includes('[UPAD') || t.metadata?.paymentType === 'advance'));
+        if (!isUpad) return false;
+      } else if (filterModule === 'payroll') {
+        const isPayroll =
+          t.metadata?.source === 'payroll' || t.description?.includes('[PAYROLL');
+        if (!isPayroll) return false;
+      }
 
       // Type filter
       if (filterType !== 'all' && t.type?.toLowerCase() !== filterType.toLowerCase()) {
@@ -146,7 +248,7 @@ export const PaymentCentralView = () => {
 
       return true;
     });
-  }, [transactions, fromDate, toDate, filterType, filterStatus, filterEmployee, searchQuery]);
+  }, [transactions, fromDate, toDate, filterModule, filterType, filterStatus, filterEmployee, searchQuery]);
 
   // Aggregate Metrics (Matches Screenshot 1 KPI Cards)
   const totalOutgoing = useMemo(() => {
@@ -474,6 +576,47 @@ export const PaymentCentralView = () => {
                 </button>
               </div>
             </div>
+
+            {/* Quick Financial Module Filter Tabs */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
+                <Layers size={13} className="text-blue-500" />
+                <span>Financial Domain:</span>
+              </span>
+              {[
+                { id: 'all', label: 'All Transactions', count: moduleCounts.all },
+                { id: 'spend_vendor', label: 'Spend & Vendors', count: moduleCounts.spend_vendor },
+                { id: 'upad', label: 'UPAD & Advances', count: moduleCounts.upad },
+                { id: 'payroll', label: 'Payroll Vouchers', count: moduleCounts.payroll },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setFilterModule(tab.id);
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 border',
+                    filterModule === tab.id
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
+                      : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  )}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={cn(
+                      'px-1.5 py-0.5 rounded-full text-[10px] font-black',
+                      filterModule === tab.id
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* 4 KPI Metric Cards (Matches Screenshot 1) */}
@@ -581,6 +724,90 @@ export const PaymentCentralView = () => {
               <div className="p-12 text-center text-xs text-slate-400 font-semibold">
                 No payment transactions found matching the filter criteria.
               </div>
+            ) : displayLayout === 'cards' ? (
+              <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {paginatedTransactions.map((t) => {
+                  const isOutgoing = t.type?.toLowerCase() === 'outgoing';
+                  const isSalary = t.category?.toLowerCase() === 'salary';
+                  const sourceBadge = getSourceBadge(t);
+
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-3 relative overflow-hidden"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={cn(
+                                'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider',
+                                sourceBadge.color
+                              )}
+                            >
+                              {sourceBadge.label}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400">
+                              {formatDateDMY(t.date)}
+                            </span>
+                          </div>
+                          <h3 className="text-sm font-black text-slate-900 dark:text-white mt-2 line-clamp-1">
+                            {t.payee_name || 'Recipient'}
+                          </h3>
+                        </div>
+                        <div className="text-right">
+                          <span
+                            className={cn(
+                              'text-sm font-black',
+                              isOutgoing
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : 'text-emerald-600 dark:text-emerald-400'
+                            )}
+                          >
+                            {isOutgoing
+                              ? `- ₹${Number(t.amount || 0).toLocaleString('en-IN')}`
+                              : `+ ₹${Number(t.amount || 0).toLocaleString('en-IN')}`}
+                          </span>
+                          <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                            {t.method?.replace('_', ' ')?.toUpperCase() || 'CASH'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-600 dark:text-slate-300 font-medium line-clamp-2">
+                        {t.description || 'No description provided'}
+                      </p>
+
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">
+                          Recorded: {t.recorded_by_name?.toUpperCase() || 'NARESH'}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border',
+                              t.status === 'completed'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200'
+                                : t.status === 'pending'
+                                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200'
+                                : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200'
+                            )}
+                          >
+                            {t.status}
+                          </span>
+                          <button
+                            onClick={() => handleDeleteTransaction(t.id)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                            title="Delete Transaction"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
@@ -590,7 +817,7 @@ export const PaymentCentralView = () => {
                       <th className="py-3 px-4 w-28">DATE</th>
                       <th className="py-3 px-5">EMPLOYEE / PAID TO</th>
                       <th className="py-3 px-4 text-center w-28">TYPE</th>
-                      <th className="py-3 px-5 text-center">CATEGORY</th>
+                      <th className="py-3 px-5 text-center">CATEGORY & SOURCE</th>
                       <th className="py-3 px-4 text-center">PAID BY</th>
                       <th className="py-3 px-5">DESCRIPTION</th>
                       <th className="py-3 px-5 text-right w-32">AMOUNT</th>
@@ -603,6 +830,7 @@ export const PaymentCentralView = () => {
                       const isOutgoing = t.type?.toLowerCase() === 'outgoing';
                       const isSalary = t.category?.toLowerCase() === 'salary';
                       const isCash = t.method?.toLowerCase() === 'cash';
+                      const sourceBadge = getSourceBadge(t);
 
                       return (
                         <tr
@@ -631,12 +859,22 @@ export const PaymentCentralView = () => {
                             </span>
                           </td>
                           <td className="py-3.5 px-5 text-center">
-                            <div className="inline-block">
-                              <span className="px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-black uppercase text-slate-700 dark:text-slate-300">
-                                {isSalary ? 'STAFF SALARY' : (t.category || 'GENERAL').toUpperCase()}
+                            <div className="flex flex-col items-center gap-1">
+                              <span
+                                className={cn(
+                                  'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider',
+                                  sourceBadge.color
+                                )}
+                              >
+                                {sourceBadge.label}
                               </span>
-                              <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
-                                {isCash ? 'CASH' : 'UPI / ONLINE'}
+                              <span className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-300">
+                                {isSalary
+                                  ? 'STAFF SALARY'
+                                  : (t.category || 'GENERAL').replace('_', ' ').toUpperCase()}
+                              </span>
+                              <div className="text-[9px] font-bold text-slate-400 uppercase">
+                                {t.method?.replace('_', ' ')?.toUpperCase() || (isCash ? 'CASH' : 'ONLINE')}
                               </div>
                             </div>
                           </td>
@@ -654,7 +892,9 @@ export const PaymentCentralView = () => {
                                   : 'text-emerald-600 dark:text-emerald-400'
                               }
                             >
-                              {isOutgoing ? `- ₹${Number(t.amount || 0).toLocaleString('en-IN')}` : `+ ₹${Number(t.amount || 0).toLocaleString('en-IN')}`}
+                              {isOutgoing
+                                ? `- ₹${Number(t.amount || 0).toLocaleString('en-IN')}`
+                                : `+ ₹${Number(t.amount || 0).toLocaleString('en-IN')}`}
                             </span>
                           </td>
                           <td className="py-3.5 px-4 text-center">
@@ -662,7 +902,9 @@ export const PaymentCentralView = () => {
                               <div className="flex items-center justify-center gap-1.5">
                                 <select
                                   value={t.status || 'completed'}
-                                  onChange={(e) => handleUpdateTransactionStatus(t.id, e.target.value)}
+                                  onChange={(e) =>
+                                    handleUpdateTransactionStatus(t.id, e.target.value)
+                                  }
                                   className={cn(
                                     'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border cursor-pointer focus:outline-none transition-all',
                                     t.status === 'completed'
@@ -679,7 +921,9 @@ export const PaymentCentralView = () => {
                                 {t.status === 'pending' && (
                                   <button
                                     type="button"
-                                    onClick={() => handleUpdateTransactionStatus(t.id, 'completed')}
+                                    onClick={() =>
+                                      handleUpdateTransactionStatus(t.id, 'completed')
+                                    }
                                     className="px-2 py-0.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black uppercase shadow-sm cursor-pointer transition-all shrink-0"
                                     title="Confirm transaction immediately"
                                   >
@@ -706,7 +950,9 @@ export const PaymentCentralView = () => {
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => {
-                                  alert(`Transaction: ${t.transaction_id}\nDate: ${t.date}\nAmount: ₹${t.amount}\nPayee: ${t.payee_name}\nRecorded by: ${t.recorded_by_name || 'Naresh'}`);
+                                  alert(
+                                    `Transaction: ${t.transaction_id}\nDate: ${t.date}\nAmount: ₹${t.amount}\nPayee: ${t.payee_name}\nRecorded by: ${t.recorded_by_name || 'Naresh'}`
+                                  );
                                 }}
                                 className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                                 title="View Receipt"

@@ -174,8 +174,14 @@ def create_expense(user, data: dict, request=None) -> Expense:
                     "amount": str(expense.amount),
                 },
                 request=request,
-                organization=org,
             )
+
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(org)
+    except Exception:
+        pass
 
     return expense
 
@@ -217,6 +223,13 @@ def approve_expense(expense: Expense, approver, request=None) -> Expense:
             organization=expense.organization,
         )
 
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(expense.organization)
+    except Exception:
+        pass
+
     return expense
 
 
@@ -250,6 +263,14 @@ def reject_expense(expense: Expense, approver, reason: str, request=None) -> Exp
         request=request,
         organization=expense.organization,
     )
+
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(expense.organization)
+    except Exception:
+        pass
+
     return expense
 
 
@@ -294,6 +315,13 @@ def cancel_expense(expense: Expense, user, reason: str, request=None) -> Expense
             request=request,
             organization=expense.organization,
         )
+
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(expense.organization)
+    except Exception:
+        pass
 
     return expense
 
@@ -405,6 +433,13 @@ def record_vendor_payment(vendor: Vendor, user, data: dict, request=None) -> Ven
             request=request,
             organization=vendor.organization,
         )
+
+    try:
+        from ledger.services_transactions import TransactionService
+
+        TransactionService.sync_organization_transactions(vendor.organization)
+    except Exception:
+        pass
 
     return vp
 

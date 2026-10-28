@@ -38,12 +38,14 @@ DROP FUNCTION IF EXISTS prevent_immutable_record_modification();
 
 def apply_triggers(apps, schema_editor):
     if schema_editor.connection.vendor == "postgresql":
-        schema_editor.execute(TRIGGER_SQL)
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute(TRIGGER_SQL)
 
 
 def reverse_triggers(apps, schema_editor):
     if schema_editor.connection.vendor == "postgresql":
-        schema_editor.execute(REVERSE_SQL)
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute(REVERSE_SQL)
 
 
 class Migration(migrations.Migration):

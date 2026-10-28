@@ -36,6 +36,7 @@ from accounts.services import (
     refresh_user_token,
     request_password_reset,
     reset_password,
+    send_credentials_email,
 )
 from audit.constants import AuditAction
 from audit.services import log_action
@@ -343,6 +344,10 @@ class UserViewSet(TenantViewSet):
     def perform_create(self, serializer):
         password = serializer.validated_data.pop("password", None) or "Pass@12345"
         role = serializer.validated_data.get("role", Role.PROJECT_MANAGER)
+        notification_email = (
+            serializer.validated_data.pop("notification_email", "")
+            or self.request.data.get("notification_email", "").strip()
+        )
         user = serializer.save(
             organization=self.request.user.organization,
             is_staff=(role == Role.ORG_ADMIN),
@@ -357,6 +362,13 @@ class UserViewSet(TenantViewSet):
             obj=user,
             request=self.request,
             organization=self.request.user.organization,
+        )
+
+        send_credentials_email(
+            user=user,
+            password=password,
+            organization=self.request.user.organization,
+            custom_email=notification_email or None,
         )
 
     def perform_update(self, serializer):

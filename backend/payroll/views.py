@@ -116,7 +116,7 @@ class PayrollRunViewSet(ProjectScopedMixin, TenantViewSet):
     permission_classes = [
         IsAuthenticated,
         IsTenantUser,
-        roles_required(Role.ACCOUNTANT, Role.PROJECT_MANAGER, Role.ORG_ADMIN),
+        roles_required(Role.ACCOUNTANT, Role.ORG_ADMIN),
     ]
     filterset_fields = ["project", "status"]
 
@@ -163,7 +163,7 @@ class PayrollRunViewSet(ProjectScopedMixin, TenantViewSet):
         detail=True,
         methods=["post"],
         url_path="approve",
-        permission_classes=[roles_required(Role.ORG_ADMIN, Role.ACCOUNTANT, Role.PROJECT_MANAGER)],
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.ACCOUNTANT)],
     )
     def approve(self, request, pk=None):
         """UC-25: Approve run, post balanced journal, adjust advances FIFO, and update spend."""
@@ -184,7 +184,7 @@ class PayrollRunViewSet(ProjectScopedMixin, TenantViewSet):
         run = self.get_object()
         user = request.user
 
-        if user.role not in [Role.ORG_ADMIN, Role.ACCOUNTANT, Role.PROJECT_MANAGER]:
+        if user.role not in [Role.ORG_ADMIN, Role.ACCOUNTANT]:
             return Response(
                 {
                     "error": {
@@ -269,7 +269,7 @@ class PayrollVoucherViewSet(TenantViewSet):
     permission_classes = [
         IsAuthenticated,
         IsTenantUser,
-        roles_required(Role.ACCOUNTANT, Role.PROJECT_MANAGER, Role.ORG_ADMIN),
+        roles_required(Role.ACCOUNTANT, Role.ORG_ADMIN),
     ]
 
     def get_queryset(self):

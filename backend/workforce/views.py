@@ -24,7 +24,13 @@ from workforce.services import (
 class EmployeeViewSet(TenantViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(
+            Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.ACCOUNTANT
+        ),
+    ]
     filterset_fields = ["trade", "primary_project", "group", "employment_type", "is_active"]
     search_fields = ["full_name", "employee_code", "phone"]
 
@@ -41,6 +47,20 @@ class EmployeeViewSet(TenantViewSet):
         )
 
     def create(self, request, *args, **kwargs):
+        if request.user.role not in [
+            Role.ORG_ADMIN,
+            Role.PROJECT_MANAGER,
+            Role.SUPERVISOR,
+        ]:
+            return Response(
+                {
+                    "error": {
+                        "code": "permission_denied",
+                        "message": "You do not have permission to register worker records.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         employee = create_employee(
@@ -106,7 +126,7 @@ class EmployeeViewSet(TenantViewSet):
         detail=True,
         methods=["post"],
         url_path="assign-project",
-        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER)],
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR)],
     )
     def assign_project(self, request, pk=None):
         from workforce.services import assign_project_to_employee
@@ -122,7 +142,7 @@ class EmployeeViewSet(TenantViewSet):
         detail=True,
         methods=["post"],
         url_path="unassign-project",
-        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER)],
+        permission_classes=[roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR)],
     )
     def unassign_project(self, request, pk=None):
         from workforce.services import unassign_project_from_employee
@@ -250,7 +270,11 @@ class EmployeeViewSet(TenantViewSet):
 class LaborGroupViewSet(TenantViewSet):
     queryset = LaborGroup.objects.all()
     serializer_class = LaborGroupSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR),
+    ]
     filterset_fields = ["project", "is_active"]
     search_fields = ["name"]
 
