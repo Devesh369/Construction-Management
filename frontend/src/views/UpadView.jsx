@@ -898,140 +898,36 @@ export const UpadView = ({ selectedProjectId }) => {
             </div>
           </div>
 
-            {/* Modal Form */}
-            <form onSubmit={handleProcessUpad}>
-              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-                {/* Employee Selection */}
-                <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                    Employee *
-                  </label>
-                  <select
-                    value={processForm.employee_id}
-                    onChange={(e) =>
-                      setProcessForm({ ...processForm, employee_id: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
-                  >
-                    <option value="">Select Employee...</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.full_name} ({emp.role || 'Worker'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          {/* Live Salary & Upad Calculation Preview */}
+          {selectedEmp && (
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-blue-50/80 to-indigo-50/80 dark:from-slate-800/80 dark:to-slate-800/40 border border-blue-200/60 dark:border-blue-900/40 space-y-2.5">
+              <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  Salary & Upad Calculator
+                </span>
+                <span className="text-blue-600 dark:text-blue-400 font-extrabold">{selectedEmp.full_name}</span>
+              </div>
 
-                {/* Live Salary & Upad Calculation Preview */}
-                {selectedEmp && (
-                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-blue-50/80 to-indigo-50/80 dark:from-slate-800/80 dark:to-slate-800/40 border border-blue-200/60 dark:border-blue-900/40 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      <span>Salary & Upad Calculator</span>
-                      <span className="text-blue-600 dark:text-blue-400 font-extrabold">{selectedEmp.full_name}</span>
-                    </div>
-                    {!hasAttendance && (
-                      <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[11px] font-semibold flex items-center gap-2">
-                        <AlertCircle size={14} className="shrink-0 text-amber-600" />
-                        <span>Worker has no recorded attendance yet. Attendance must be marked to accrue payable wages.</span>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-3 gap-2 text-center pt-0.5">
-                      <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60">
-                        <div className="text-[10px] font-bold uppercase text-slate-400">Daily Salary</div>
-                        <div className="text-xs font-black text-slate-900 dark:text-white mt-0.5">₹{empDailyWage}</div>
-                      </div>
-                      <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60">
-                        <div className="text-[10px] font-bold uppercase text-slate-400">Current Balance</div>
-                        <div className="text-xs font-black text-indigo-600 dark:text-indigo-400 mt-0.5">₹{empCurrentBalance}</div>
-                      </div>
-                      <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60">
-                        <div className="text-[10px] font-bold uppercase text-slate-400">Remain Salary</div>
-                        <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-0.5">₹{projectedBalance}</div>
-                      </div>
-                    </div>
-                    {enteredUpad > 0 && (
-                      <div className="text-[11px] text-center font-semibold text-slate-600 dark:text-slate-300 pt-1 border-t border-blue-100 dark:border-slate-700/60">
-                        Taking <span className="font-bold text-blue-600 dark:text-blue-400">₹{enteredUpad}</span> Upad from daily wage ₹{empDailyWage || empCurrentBalance} leaves <span className="font-black text-emerald-600 dark:text-emerald-400">₹{projectedBalance}</span> remaining salary.
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Project Selection */}
-                <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                    Project *
-                  </label>
-                  <select
-                    value={processForm.project_id}
-                    onChange={(e) =>
-                      setProcessForm({ ...processForm, project_id: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
-                  >
-                    <option value="">Select Project...</option>
-                    {projects.map((proj) => (
-                      <option key={proj.id} value={proj.id}>
-                        {proj.name}
-                      </option>
-                    ))}
-                  </select>
+              {!hasAttendance && (
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[11px] font-semibold flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0 text-amber-600" />
+                  <span>Worker has no recorded attendance yet. Attendance must be marked to accrue payable wages.</span>
                 </div>
               )}
 
-                {/* Amount & Date */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                      Amount (₹) *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      placeholder="e.g. 2000"
-                      value={processForm.amount}
-                      onChange={(e) =>
-                        setProcessForm({ ...processForm, amount: e.target.value })
-                      }
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                      Date *
-                    </label>
-                    <input
-                      type="date"
-                      max={todayStr}
-                      value={processForm.date}
-                      onChange={(e) =>
-                        setProcessForm({ ...processForm, date: e.target.value })
-                      }
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
-                    />
-                  </div>
+              <div className="grid grid-cols-3 gap-2.5 text-center">
+                <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 shadow-xs">
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Daily Salary</div>
+                  <div className="text-xs font-black text-slate-900 dark:text-white mt-0.5">₹{empDailyWage}</div>
                 </div>
                 <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 shadow-xs">
                   <div className="text-[10px] font-bold uppercase text-slate-400">Current Balance</div>
                   <div className="text-xs font-black text-indigo-600 dark:text-indigo-400 mt-0.5">₹{empCurrentBalance}</div>
                 </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                    Description / Purpose *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. GPY કર્યા દવા માટે, કાળું એ લીધા"
-                    value={processForm.description}
-                    onChange={(e) =>
-                      setProcessForm({ ...processForm, description: e.target.value })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
-                  />
+                <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 shadow-xs">
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Remain Salary</div>
+                  <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-0.5">₹{projectedBalance}</div>
                 </div>
               </div>
 
