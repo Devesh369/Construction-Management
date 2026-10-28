@@ -3,19 +3,19 @@ UPAD Module Services: Worker Advance Payments, Salary Disbursements, and Approva
 Directly implements Section 1 of Module Architecture & Workflow Specification.
 """
 
+import logging
 from datetime import timedelta
 from decimal import Decimal
-import logging
+
 from django.db import transaction
 from django.utils import timezone
-from core.exceptions import BusinessRuleError
-from accounts.models import Role
-from payroll.models import Payment, PaymentType, PaymentMethod, PaymentLifecycleStatus
-from workforce.models import Employee
-from expenses.services_credits import CreditLogsService
+
 from attendance.services_settlement import AttendanceSettlementService
+from core.exceptions import BusinessRuleError
+from ledger.models import Transaction, TransactionCategory, TransactionType
 from ledger.services_transactions import TransactionService
-from ledger.models import Transaction, TransactionType, TransactionCategory
+from payroll.models import Payment, PaymentLifecycleStatus, PaymentMethod, PaymentType
+from workforce.models import Employee
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,9 @@ class UpadPaymentService:
 
         amount = Decimal(str(data.get("amount", "0.00")))
         if amount <= Decimal("0.00"):
-            raise BusinessRuleError("Payment amount must be greater than zero.", code="invalid_amount")
+            raise BusinessRuleError(
+                "Payment amount must be greater than zero.", code="invalid_amount"
+            )
 
         # 4. Duplicate detection: checks if same employee + same amount was paid in last 60 seconds
         sixty_secs_ago = timezone.now() - timedelta(seconds=60)
@@ -59,9 +61,14 @@ class UpadPaymentService:
         pay_type = data.get("type", PaymentType.ADVANCE)
         if pay_type == PaymentType.SALARY:
             from attendance.models import Attendance, AttendanceStatus
+
             has_attendance = Attendance.objects.filter(
                 employee=employee,
-                status__in=[AttendanceStatus.PRESENT, AttendanceStatus.HALF_DAY, AttendanceStatus.HOLIDAY],
+                status__in=[
+                    AttendanceStatus.PRESENT,
+                    AttendanceStatus.HALF_DAY,
+                    AttendanceStatus.HOLIDAY,
+                ],
                 deleted_at__isnull=True,
             ).exists()
             if not has_attendance:
@@ -73,8 +80,14 @@ class UpadPaymentService:
         initial_status = data.get("status", PaymentLifecycleStatus.PAID)
         base_salary = Decimal(str(data.get("base_salary") or data.get("baseSalary") or amount))
         expenses = Decimal(str(data.get("expenses", "0.00")))
-        date_from = data.get("date_from") or (data.get("dateRange", {}).get("from") if isinstance(data.get("dateRange"), dict) else None)
-        date_to = data.get("date_to") or (data.get("dateRange", {}).get("to") if isinstance(data.get("dateRange"), dict) else None)
+        date_from = data.get("date_from") or (
+            data.get("dateRange", {}).get("from")
+            if isinstance(data.get("dateRange"), dict)
+            else None
+        )
+        date_to = data.get("date_to") or (
+            data.get("dateRange", {}).get("to") if isinstance(data.get("dateRange"), dict) else None
+        )
         description = data.get("description", "")
         project_id = data.get("project_id") or data.get("project")
 
@@ -135,24 +148,32 @@ class UpadPaymentService:
             )
 
             # 9. Sync into Advance model so worker balance and payroll runs reflect it immediately
-            if pay_type in [PaymentType.ADVANCE, PaymentType.WITHDRAWAL] and not description.startswith("[ADV-"):
+            if pay_type in [
+                PaymentType.ADVANCE,
+                PaymentType.WITHDRAWAL,
+            ] and not description.startswith("[ADV-"):
                 try:
-                    from payroll.models import Advance, AdvanceStatus
+                    from payroll.services import record_advance
                     from projects.models import Project
-                    proj = payment.project or employee.primary_project or employee.assigned_projects.first()
+
+                    proj = (
+                        payment.project
+                        or employee.primary_project
+                        or employee.assigned_projects.first()
+                    )
                     if not proj:
                         proj = Project.objects.filter(organization=organization).first()
                     if proj:
-                        Advance.objects.create(
-                            organization=organization,
-                            employee=employee,
-                            project=proj,
-                            amount=amount,
-                            advance_date=date_from or timezone.now().date(),
-                            reason=f"[UPAD-{payment.id}] {description}".strip(),
-                            payment_mode=method.upper(),
-                            given_by=user,
-                            status=AdvanceStatus.OPEN,
+                        record_advance(
+                            user=user,
+                            data={
+                                "employee": employee,
+                                "project": proj,
+                                "amount": amount,
+                                "advance_date": date_from or timezone.now().date(),
+                                "reason": f"[UPAD-{payment.id}] {description}".strip(),
+                                "payment_mode": "CASH" if method == "cash" else "BANK_TRANSFER",
+                            },
                         )
                 except Exception:
                     pass
@@ -169,15 +190,20 @@ class UpadPaymentService:
         - Self-approval check: approver != creator (separation of duties)
         - Status changes from PENDING to APPROVED
         """
-        payment = Payment.objects.select_for_update().filter(
-            id=payment_id, organization=organization, deleted_at__isnull=True
-        ).first()
+        payment = (
+            Payment.objects.select_for_update()
+            .filter(id=payment_id, organization=organization, deleted_at__isnull=True)
+            .first()
+        )
 
         if not payment:
             raise BusinessRuleError("Payment not found.", code="payment_not_found")
 
         if payment.status != PaymentLifecycleStatus.PENDING:
-            raise BusinessRuleError(f"Only PENDING payments can be approved. Current status: {payment.status}", code="invalid_status")
+            raise BusinessRuleError(
+                f"Only PENDING payments can be approved. Current status: {payment.status}",
+                code="invalid_status",
+            )
 
         # 3. Self-approval check: approver != creator (separation of duties)
         if payment.created_by_id == user.id and not getattr(user, "is_superuser", False):
@@ -197,9 +223,11 @@ class UpadPaymentService:
     @transaction.atomic
     def reject_payment(payment_id: int, user, organization, reason: str = "") -> Payment:
         """Reject a pending payment."""
-        payment = Payment.objects.select_for_update().filter(
-            id=payment_id, organization=organization, deleted_at__isnull=True
-        ).first()
+        payment = (
+            Payment.objects.select_for_update()
+            .filter(id=payment_id, organization=organization, deleted_at__isnull=True)
+            .first()
+        )
 
         if not payment:
             raise BusinessRuleError("Payment not found.", code="payment_not_found")
@@ -223,15 +251,20 @@ class UpadPaymentService:
         - Settles attendance records
         - Creates linked Transaction in Payment Central
         """
-        payment = Payment.objects.select_for_update().filter(
-            id=payment_id, organization=organization, deleted_at__isnull=True
-        ).first()
+        payment = (
+            Payment.objects.select_for_update()
+            .filter(id=payment_id, organization=organization, deleted_at__isnull=True)
+            .first()
+        )
 
         if not payment:
             raise BusinessRuleError("Payment not found.", code="payment_not_found")
 
         if payment.status not in [PaymentLifecycleStatus.APPROVED, PaymentLifecycleStatus.PENDING]:
-            raise BusinessRuleError("Only PENDING or APPROVED payments can be processed for disbursement.", code="payment_not_approved")
+            raise BusinessRuleError(
+                "Only PENDING or APPROVED payments can be processed for disbursement.",
+                code="payment_not_approved",
+            )
 
         txn_id = payment.transaction_id or TransactionService.generate_transaction_id()
         payment.transaction_id = txn_id
@@ -239,7 +272,9 @@ class UpadPaymentService:
         payment.status = PaymentLifecycleStatus.PAID
         payment.approved_by = payment.approved_by or user
         payment.approved_at = payment.approved_at or timezone.now()
-        payment.approved_by_admin_name = payment.approved_by_admin_name or getattr(user, "name", "") or user.email
+        payment.approved_by_admin_name = (
+            payment.approved_by_admin_name or getattr(user, "name", "") or user.email
+        )
         payment.processed_by = user
         payment.processed_at = timezone.now()
         payment.save()
@@ -274,25 +309,36 @@ class UpadPaymentService:
         )
 
         # Sync into Advance model if not already synced
-        if payment.type in [PaymentType.ADVANCE, PaymentType.WITHDRAWAL] and not payment.description.startswith("[ADV-"):
+        if payment.type in [
+            PaymentType.ADVANCE,
+            PaymentType.WITHDRAWAL,
+        ] and not payment.description.startswith("[ADV-"):
             try:
-                from payroll.models import Advance, AdvanceStatus
+                from payroll.models import Advance
+                from payroll.services import record_advance
                 from projects.models import Project
+
                 if not Advance.objects.filter(reason__contains=f"[UPAD-{payment.id}]").exists():
-                    proj = payment.project or payment.employee.primary_project or payment.employee.assigned_projects.first()
+                    proj = (
+                        payment.project
+                        or payment.employee.primary_project
+                        or payment.employee.assigned_projects.first()
+                    )
                     if not proj:
                         proj = Project.objects.filter(organization=organization).first()
                     if proj:
-                        Advance.objects.create(
-                            organization=organization,
-                            employee=payment.employee,
-                            project=proj,
-                            amount=payment.amount,
-                            advance_date=payment.date_from or timezone.now().date(),
-                            reason=f"[UPAD-{payment.id}] {payment.description}".strip(),
-                            payment_mode=payment.method.upper(),
-                            given_by=user,
-                            status=AdvanceStatus.OPEN,
+                        record_advance(
+                            user=user,
+                            data={
+                                "employee": payment.employee,
+                                "project": proj,
+                                "amount": payment.amount,
+                                "advance_date": payment.date_from or timezone.now().date(),
+                                "reason": f"[UPAD-{payment.id}] {payment.description}".strip(),
+                                "payment_mode": (
+                                    "CASH" if payment.method == "cash" else "BANK_TRANSFER"
+                                ),
+                            },
                         )
             except Exception:
                 pass
@@ -322,16 +368,8 @@ class UpadPaymentService:
         # 2. Delete linked Advance if created by or linked to this payment
         import re
         from payroll.models import Advance
-        from ledger.services import reverse_entry
 
-        adv_ids = []
-        if payment.description:
-            m = re.search(r"\[ADV-(\d+)\]", payment.description)
-            if m:
-                adv_ids.append(int(m.group(1)))
-
-        adv_to_delete = Advance.objects.filter(id__in=adv_ids, organization=organization)
-        adv_to_delete = adv_to_delete | Advance.objects.filter(
+        Advance.objects.filter(
             organization=organization,
             reason__contains=f"[UPAD-{payment.id}]",
         )
@@ -373,9 +411,15 @@ class UpadPaymentService:
 
         total_disbursed = sum((p.amount for p in paid_qs), Decimal("0.00"))
         total_pending = sum((p.amount for p in pending_qs), Decimal("0.00"))
-        salary_sum = sum((p.amount for p in paid_qs.filter(type=PaymentType.SALARY)), Decimal("0.00"))
-        advance_sum = sum((p.amount for p in paid_qs.filter(type=PaymentType.ADVANCE)), Decimal("0.00"))
-        withdrawal_sum = sum((p.amount for p in paid_qs.filter(type=PaymentType.WITHDRAWAL)), Decimal("0.00"))
+        salary_sum = sum(
+            (p.amount for p in paid_qs.filter(type=PaymentType.SALARY)), Decimal("0.00")
+        )
+        advance_sum = sum(
+            (p.amount for p in paid_qs.filter(type=PaymentType.ADVANCE)), Decimal("0.00")
+        )
+        withdrawal_sum = sum(
+            (p.amount for p in paid_qs.filter(type=PaymentType.WITHDRAWAL)), Decimal("0.00")
+        )
 
         return {
             "total_count": total_payments,

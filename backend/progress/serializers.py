@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -13,6 +15,15 @@ from workforce.models import Employee
 
 
 class TaskProgressSerializer(serializers.ModelSerializer):
+    task_name = serializers.CharField(max_length=200, required=True, allow_blank=False)
+    percent_complete = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        max_value=Decimal("100.00"),
+        default=Decimal("0.00"),
+    )
+
     class Meta:
         model = TaskProgress
         fields = ["id", "task_name", "percent_complete", "notes"]
@@ -20,6 +31,12 @@ class TaskProgressSerializer(serializers.ModelSerializer):
 
 
 class MaterialUsageSerializer(serializers.ModelSerializer):
+    material_name = serializers.CharField(max_length=200, required=True, allow_blank=False)
+    quantity = serializers.DecimalField(
+        max_digits=12, decimal_places=3, min_value=Decimal("0.001"), required=True
+    )
+    unit = serializers.CharField(max_length=50, required=True, allow_blank=False)
+
     class Meta:
         model = MaterialUsage
         fields = ["id", "material_name", "quantity", "unit"]
@@ -170,10 +187,14 @@ class WorkEntryEmployeeDetailSerializer(serializers.ModelSerializer):
 
 
 class WorkEntrySerializer(serializers.ModelSerializer):
+    date = serializers.DateField(required=True)
+    description = serializers.CharField(required=True, allow_blank=False)
     project_name = serializers.CharField(source="project.name", read_only=True)
     project_code = serializers.CharField(source="project.code", read_only=True)
     created_by_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
-    employee_details = WorkEntryEmployeeDetailSerializer(source="employees", many=True, read_only=True)
+    employee_details = WorkEntryEmployeeDetailSerializer(
+        source="employees", many=True, read_only=True
+    )
     role_counts = serializers.SerializerMethodField()
     total_workers = serializers.SerializerMethodField()
 
@@ -207,4 +228,3 @@ class WorkEntrySerializer(serializers.ModelSerializer):
 
     def get_total_workers(self, obj):
         return obj.employees.count()
-

@@ -8,14 +8,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.permissions import IsTenantUser, roles_required
+from attendance.services_settlement import AttendanceSettlementService
+from core.permissions import IsTenantUser
 from core.roles import Role
 from core.views import TenantViewSet
-from core.exceptions import BusinessRuleError
-from ledger.models import Transaction, TransactionType, TransactionCategory
+from ledger.models import Transaction
 from ledger.serializers_transactions import TransactionSerializer
 from ledger.services_transactions import TransactionService
-from attendance.services_settlement import AttendanceSettlementService
 from workforce.models import Employee
 
 
@@ -23,6 +22,7 @@ class TransactionViewSet(TenantViewSet):
     """
     Payment Central: Central Unified Financial Ledger.
     """
+
     queryset = Transaction.objects.all().select_related("recorded_by")
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticated, IsTenantUser]
@@ -38,9 +38,15 @@ class TransactionViewSet(TenantViewSet):
         txn_type = self.request.query_params.get("type")
         category = self.request.query_params.get("category")
         status_filter = self.request.query_params.get("status")
-        payee_name = self.request.query_params.get("payeeName") or self.request.query_params.get("payee_name")
-        from_date = self.request.query_params.get("dateFrom") or self.request.query_params.get("from_date")
-        to_date = self.request.query_params.get("dateTo") or self.request.query_params.get("to_date")
+        payee_name = self.request.query_params.get("payeeName") or self.request.query_params.get(
+            "payee_name"
+        )
+        from_date = self.request.query_params.get("dateFrom") or self.request.query_params.get(
+            "from_date"
+        )
+        to_date = self.request.query_params.get("dateTo") or self.request.query_params.get(
+            "to_date"
+        )
         search = self.request.query_params.get("search")
 
         if txn_type:
@@ -56,14 +62,11 @@ class TransactionViewSet(TenantViewSet):
         if to_date:
             qs = qs.filter(date__lte=to_date)
         if search:
-            qs = qs.filter(
-                description__icontains=search
-            ) | qs.filter(
-                payee_name__icontains=search
-            ) | qs.filter(
-                payer_name__icontains=search
-            ) | qs.filter(
-                transaction_id__icontains=search
+            qs = (
+                qs.filter(description__icontains=search)
+                | qs.filter(payee_name__icontains=search)
+                | qs.filter(payer_name__icontains=search)
+                | qs.filter(transaction_id__icontains=search)
             )
 
         return qs
@@ -80,7 +83,10 @@ class TransactionViewSet(TenantViewSet):
         data = serializer.data
 
         # Cache employee remaining salaries to avoid redundant queries
-        emp_map = {e.full_name.strip().lower(): e for e in Employee.objects.filter(organization=org, deleted_at__isnull=True)}
+        emp_map = {
+            e.full_name.strip().lower(): e
+            for e in Employee.objects.filter(organization=org, deleted_at__isnull=True)
+        }
 
         for item in data:
             payee = (item.get("payee_name") or "").strip().lower()

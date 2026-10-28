@@ -38,6 +38,7 @@ class ChangePasswordSerializer(serializers.Serializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     def validate_phone(self, value):
         from core.validators import validate_mobile_10_digits
+
         if value:
             return validate_mobile_10_digits(value)
         return value
@@ -49,10 +50,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False, min_length=6)
+    name = serializers.CharField(max_length=150, required=True, allow_blank=False)
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        min_length=6,
+        error_messages={"min_length": "Password must be at least 6 characters long."},
+    )
 
     def validate_phone(self, value):
         from core.validators import validate_mobile_10_digits
+
         if value:
             return validate_mobile_10_digits(value)
         return value
@@ -71,14 +80,41 @@ class InvitationSerializer(serializers.ModelSerializer):
 
 
 class CreateInvitationSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=True)
     name = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
-    role = serializers.ChoiceField(choices=Role.choices)
+    role = serializers.ChoiceField(choices=Role.choices, required=True)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(max_length=200, required=True, allow_blank=False)
+    workday_hours = serializers.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("0.50"),
+        max_value=Decimal("24.00"),
+        required=False,
+    )
+    half_day_hours = serializers.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("0.50"),
+        max_value=Decimal("24.00"),
+        required=False,
+    )
+    overtime_after_hours = serializers.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("0.50"),
+        max_value=Decimal("24.00"),
+        required=False,
+    )
+    expense_approval_limit = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.00"), required=False
+    )
+
     def validate_contact_phone(self, value):
         from core.validators import validate_mobile_10_digits
+
         if value:
             return validate_mobile_10_digits(value)
         return value
@@ -95,7 +131,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "workday_hours",
             "half_day_hours",
             "overtime_after_hours",
-            "night_shift_multiplier",
             "expense_approval_limit",
             "is_active",
             "created_at",
@@ -113,10 +148,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
         overtime = attrs.get(
             "overtime_after_hours", getattr(self.instance, "overtime_after_hours", Decimal("8.00"))
         )
-        multiplier = attrs.get(
-            "night_shift_multiplier",
-            getattr(self.instance, "night_shift_multiplier", Decimal("1.50")),
-        )
         approval_limit = attrs.get(
             "expense_approval_limit",
             getattr(self.instance, "expense_approval_limit", Decimal("1000.00")),
@@ -129,10 +160,6 @@ class OrganizationSerializer(serializers.ModelSerializer):
         if overtime <= Decimal("0.00"):
             raise serializers.ValidationError(
                 {"overtime_after_hours": "overtime_after_hours must be greater than 0."}
-            )
-        if multiplier < Decimal("1.00"):
-            raise serializers.ValidationError(
-                {"night_shift_multiplier": "night_shift_multiplier must be >= 1.00."}
             )
         if approval_limit < Decimal("0.00"):
             raise serializers.ValidationError(

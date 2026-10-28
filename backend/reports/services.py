@@ -9,11 +9,12 @@ from decimal import Decimal
 from io import BytesIO
 
 import openpyxl
+from django.conf import settings
 from django.utils import timezone
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape, letter
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -39,7 +40,7 @@ LETTERHEAD_LANDSCAPE = os.path.join(
 
 def draw_letterhead_background(canvas_obj, doc):
     """
-    Draws the official BuildSphere AI letterhead on every page background.
+    Draws the official BuildSphere letterhead on every page background.
     Uses landscape-proportioned letterhead for landscape pages and
     portrait letterhead for portrait pages.
     """
@@ -102,7 +103,9 @@ class NumberedCanvas(canvas.Canvas):
         # Running footer text cleanly positioned on the official letterhead base wave
         footer_text = f"Page {self._pageNumber} of {total_pages}"
         self.drawRightString(page_w - 36, 16, footer_text)
-        self.drawString(36, 16, "BuildSphere AI • Confidential • Building Smarter. Shaping Tomorrow.")
+        site_name = getattr(settings, "SITE_NAME", "BuildSphere")
+        site_tagline = getattr(settings, "SITE_TAGLINE", "Construction Management Platform")
+        self.drawString(36, 16, f"{site_name} • Confidential • {site_tagline}")
 
         self.restoreState()
 
@@ -688,10 +691,8 @@ def generate_attendance_excel(
         "Worker Code",
         "Worker Name",
         "Project Code",
-        "Shift",
         "Status",
         "OT Hours",
-        "GPS Verified?",
         "Locked?",
     ]
     for c_idx, h in enumerate(headers_2, start=1):
@@ -703,11 +704,9 @@ def generate_attendance_excel(
         ws2.cell(row=curr_row_2, column=2, value=a.employee.employee_code)
         ws2.cell(row=curr_row_2, column=3, value=a.employee.full_name)
         ws2.cell(row=curr_row_2, column=4, value=a.project.code)
-        ws2.cell(row=curr_row_2, column=5, value=a.shift_type)
-        ws2.cell(row=curr_row_2, column=6, value=a.status)
-        ws2.cell(row=curr_row_2, column=7, value=float(a.ot_hours))
-        ws2.cell(row=curr_row_2, column=8, value="YES" if a.is_geofence_verified else "NO")
-        ws2.cell(row=curr_row_2, column=9, value="YES" if a.is_locked else "NO")
+        ws2.cell(row=curr_row_2, column=5, value=a.status)
+        ws2.cell(row=curr_row_2, column=6, value=float(a.ot_hours))
+        ws2.cell(row=curr_row_2, column=7, value="YES" if a.is_locked else "NO")
         curr_row_2 += 1
 
     apply_excel_styling(ws2, header_row_index=4)

@@ -214,7 +214,6 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
       list.forEach((r) => {
         map[r.employee] = {
           status: r.status,
-          shiftType: r.shift_type,
           earning: r.earning,
           recordId: r.id,
           project: r.project,
@@ -585,7 +584,6 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
       return {
         employee_id: emp.id,
         project_id: allocatedProj,
-        shift_type: 'DAY',
         status: statusToApply,
         ot_hours: '0.00',
       };
@@ -2208,7 +2206,6 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
                 </label>
                 <input
                   type="date"
-                  required
                   value={holidayForm.date}
                   onChange={(e) =>
                     setHolidayForm((prev) => ({ ...prev, date: e.target.value }))
@@ -2223,7 +2220,6 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
                 </label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. Diwali, Independence Day"
                   value={holidayForm.name}
                   onChange={(e) =>

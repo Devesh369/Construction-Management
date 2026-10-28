@@ -68,7 +68,7 @@ class TestWorkflow2DailySiteCycle:
         )
         self.sup, _ = accept_invitation(sup_tok, "SupPass123#", "Site Supervisor")
 
-        # Project with geofence: Nariman Point (18.926000, 72.823000, radius 200m)
+        # Project
         self.project = create_project(
             self.org,
             self.admin,
@@ -76,9 +76,6 @@ class TestWorkflow2DailySiteCycle:
                 "name": "Marine Bay Tower",
                 "code": "PRJ-MBT",
                 "estimated_budget": Decimal("20000000.00"),
-                "geofence_lat": Decimal("18.926000"),
-                "geofence_lng": Decimal("72.823000"),
-                "geofence_radius_m": 200,
                 "status": ProjectStatus.ACTIVE,
             },
         )
@@ -124,46 +121,26 @@ class TestWorkflow2DailySiteCycle:
         today = timezone.localdate()
 
         # ----------------------------------------------------------------------
-        # Step 1: 08:00 SUP Marks Attendance - GPS Inside vs Outside Geofence
+        # Step 1: 08:00 SUP Marks Attendance
         # ----------------------------------------------------------------------
-        # A) Check-in inside geofence (exact site coordinates)
         in_res = self.sup_client.post(
             "/api/v1/attendance/check-in",
             {
                 "employee_id": self.w1.id,
                 "project_id": self.project.id,
-                "latitude": "18.926000",
-                "longitude": "72.823000",
                 "date": str(today),
             },
             format="json",
         )
         assert in_res.status_code == status.HTTP_201_CREATED
-        assert in_res.data["is_geofence_verified"] is True
+        assert in_res.data["status"] == "PRESENT"
 
-        # B) Check-in attempt far outside geofence (Bandra ~14km away: 19.055, 72.830)
-        out_res = self.sup_client.post(
-            "/api/v1/attendance/check-in",
-            {
-                "employee_id": self.w2.id,
-                "project_id": self.project.id,
-                "latitude": "19.055000",
-                "longitude": "72.830000",
-                "date": str(today),
-            },
-            format="json",
-        )
-        assert out_res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-        assert out_res.data["error"]["code"] == "outside_geofence"
-
-        # C) Mark second worker attendance validly inside site geofence
+        # Mark second worker attendance
         in_res2 = self.sup_client.post(
             "/api/v1/attendance/check-in",
             {
                 "employee_id": self.w2.id,
                 "project_id": self.project.id,
-                "latitude": "18.926050",
-                "longitude": "72.823050",
                 "date": str(today),
             },
             format="json",

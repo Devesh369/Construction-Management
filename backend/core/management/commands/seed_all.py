@@ -16,13 +16,9 @@ from django.utils import timezone
 from accounts.models import Organization, User
 from attendance.models import (
     Attendance,
-    AttendanceMethod,
     AttendanceStatus,
     Holiday,
     HolidayType,
-    NightShiftSession,
-    NightShiftStatus,
-    ShiftType,
 )
 from core.roles import Role
 from expenses.models import (
@@ -92,7 +88,6 @@ class Command(BaseCommand):
                 "progress_taskprogress",
                 "progress_dailyprogressreport",
                 "attendance_attendance",
-                "attendance_nightshiftsession",
                 "attendance_holiday",
                 "workforce_employee",
                 "workforce_laborgroup",
@@ -148,7 +143,6 @@ class Command(BaseCommand):
                 "workday_hours": Decimal("8.00"),
                 "half_day_hours": Decimal("4.00"),
                 "overtime_after_hours": Decimal("8.00"),
-                "night_shift_multiplier": Decimal("1.50"),
                 "expense_approval_limit": Decimal("10000.00"),
             },
         )
@@ -245,7 +239,7 @@ class Command(BaseCommand):
         self.stdout.write("  ✓ Capital and banking opening journals posted")
 
         # Projects for Alpha
-        def _get_or_create_project(org, code, name, budget, lat, lng, radius, status):
+        def _get_or_create_project(org, code, name, budget, status):
             proj, _ = Project.objects.get_or_create(
                 organization=org,
                 code=code,
@@ -253,9 +247,6 @@ class Command(BaseCommand):
                     "name": name,
                     "estimated_budget": budget,
                     "actual_spend": Decimal("0.00"),
-                    "geofence_lat": lat,
-                    "geofence_lng": lng,
-                    "geofence_radius_m": radius,
                     "status": status,
                     "start_date": today - timedelta(days=30),
                     "expected_end_date": today + timedelta(days=335),
@@ -275,9 +266,6 @@ class Command(BaseCommand):
             "PRJ-SKY",
             "Skyline Tower",
             Decimal("50000000.00"),
-            Decimal("19.076000"),
-            Decimal("72.877700"),
-            200,
             ProjectStatus.ACTIVE,
         )
         proj_riv = _get_or_create_project(
@@ -285,9 +273,6 @@ class Command(BaseCommand):
             "PRJ-RIV",
             "Riverside Mall",
             Decimal("30000000.00"),
-            Decimal("18.520400"),
-            Decimal("73.856700"),
-            300,
             ProjectStatus.ACTIVE,
         )
 
@@ -552,23 +537,6 @@ class Command(BaseCommand):
             },
         )
 
-        # 1 Night Shift Session
-        night_date = today - timedelta(days=5)
-        night_session, _ = NightShiftSession.objects.get_or_create(
-            organization=org_alpha,
-            project=proj_sky,
-            shift_date=night_date,
-            defaults={
-                "supervisor": alpha_sup1,
-                "safety_checklist_signed": True,
-                "checklist_notes": "All safety harnesses and high-illumination flood lights verified.",
-                "work_completed": "Emergency night concrete pouring for foundation base.",
-                "status": NightShiftStatus.APPROVED,
-                "approved_by": alpha_pm,
-                "approved_at": timezone.now() - timedelta(days=4),
-            },
-        )
-
         # 14 Days Attendance History
         self.stdout.write("  ✓ Seeding 14 days of attendance history...")
         for day_offset in range(13, -1, -1):
@@ -588,28 +556,14 @@ class Command(BaseCommand):
                     status = AttendanceStatus.PRESENT
                     ot = Decimal("2.00") if (idx + day_offset) % 4 == 0 else Decimal("0.00")
 
-                shift = (
-                    ShiftType.NIGHT
-                    if (att_date == night_date and idx in [1, 2, 3])
-                    else ShiftType.DAY
-                )
-                night_link = night_session if shift == ShiftType.NIGHT else None
-
                 Attendance.objects.get_or_create(
                     organization=org_alpha,
                     employee=emp,
                     date=att_date,
-                    shift_type=shift,
                     defaults={
                         "project": proj,
                         "status": status,
                         "ot_hours": ot,
-                        "latitude": proj.geofence_lat,
-                        "longitude": proj.geofence_lng,
-                        "distance_m": Decimal("15.50"),
-                        "is_geofence_verified": True,
-                        "method": AttendanceMethod.GPS,
-                        "night_shift": night_link,
                         "marked_by": alpha_sup1 if proj == proj_sky else alpha_sup2,
                         "is_locked": is_first_week,
                         "locked_at": timezone.now() - timedelta(days=6) if is_first_week else None,
@@ -1264,9 +1218,6 @@ class Command(BaseCommand):
             "PRJ-BET",
             "Beta Heights",
             Decimal("25000000.00"),
-            Decimal("12.971600"),
-            Decimal("77.594600"),
-            250,
             ProjectStatus.ACTIVE,
         )
         ProjectMembership.objects.get_or_create(

@@ -13,6 +13,10 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+admin.site.site_header = f"{getattr(settings, 'SITE_NAME', 'BuildSphere')} Administration"
+admin.site.site_title = getattr(settings, "SITE_NAME", "BuildSphere")
+admin.site.index_title = "Portal Administration"
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     # OpenAPI schema and API documentation

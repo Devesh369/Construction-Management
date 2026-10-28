@@ -40,6 +40,8 @@ class DailyProgressReport(TenantModel):
     rejection_reason = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "Daily Progress Report"
+        verbose_name_plural = "Daily Progress Reports"
         ordering = ["-report_date"]
         unique_together = ("project", "report_date")
         indexes = [
@@ -63,6 +65,8 @@ class TaskProgress(TenantModel):
     notes = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "Task Progress"
+        verbose_name_plural = "Task Progress Records"
         ordering = ["id"]
 
     def __str__(self):
@@ -87,6 +91,8 @@ class MaterialUsage(TenantModel):
     unit = models.CharField(max_length=20)
 
     class Meta:
+        verbose_name = "Material Usage"
+        verbose_name_plural = "Material Usage Records"
         ordering = ["id"]
 
     def __str__(self):
@@ -101,6 +107,8 @@ class SitePhoto(TenantModel):
     caption = models.CharField(max_length=200, blank=True)
 
     class Meta:
+        verbose_name = "Site Photo"
+        verbose_name_plural = "Site Photos"
         ordering = ["id"]
 
     def __str__(self):
@@ -119,7 +127,9 @@ class WorkEntry(TenantModel):
     date = models.DateField()
     description = models.TextField()
     department = models.CharField(max_length=100, blank=True, default="")
-    employees = models.ManyToManyField("workforce.Employee", related_name="work_entries", blank=True)
+    employees = models.ManyToManyField(
+        "workforce.Employee", related_name="work_entries", blank=True
+    )
     created_by = models.ForeignKey(
         "accounts.User",
         null=True,
@@ -131,6 +141,8 @@ class WorkEntry(TenantModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        verbose_name = "Work Entry"
+        verbose_name_plural = "Work Entries"
         ordering = ["-date", "-id"]
         indexes = [
             models.Index(fields=["organization", "project", "date"]),
@@ -138,4 +150,3 @@ class WorkEntry(TenantModel):
 
     def __str__(self):
         return f"WorkEntry {self.date} - {self.project.name}"
-

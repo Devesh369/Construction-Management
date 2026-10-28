@@ -27,9 +27,6 @@ class TestProjectsServices:
             "name": "Skyline Tower",
             "code": "SKY-01",
             "estimated_budget": Decimal("5000000.00"),
-            "geofence_lat": Decimal("19.076000"),
-            "geofence_lng": Decimal("72.877700"),
-            "geofence_radius_m": 250,
         }
         project = create_project(self.org, self.admin, data)
 

@@ -19,6 +19,8 @@ class ProjectStatus(models.TextChoices):
 
 
 class Project(TenantModel):
+    """Construction site project entity tracking budget, spend, and progress."""
+
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=30)
     client_name = models.CharField(max_length=200, blank=True)
@@ -42,29 +44,10 @@ class Project(TenantModel):
         validators=[MinValueValidator(Decimal("0.00")), MaxValueValidator(Decimal("100.00"))],
     )
 
-    # GPS Geofence definition (circle: latitude, longitude, radius in meters)
-    geofence_lat = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(Decimal("-90.0")), MaxValueValidator(Decimal("90.0"))],
-    )
-    geofence_lng = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(Decimal("-180.0")), MaxValueValidator(Decimal("180.0"))],
-    )
-    geofence_radius_m = models.PositiveIntegerField(
-        default=200,
-        validators=[MinValueValidator(20), MaxValueValidator(5000)],
-        help_text="Radius of geofence circle in meters (20 to 5000)",
-    )
-
     class Meta:
-        ordering = ["created_at", "id"]
+        verbose_name = "Project"
+        verbose_name_plural = "Projects"
+        ordering = ["-created_at"]
         unique_together = ("organization", "code")
         indexes = [
             models.Index(fields=["organization", "status"]),
@@ -84,6 +67,8 @@ class ProjectMembership(TenantModel):
     site_role = models.CharField(max_length=50, blank=True)
 
     class Meta:
+        verbose_name = "Project Membership"
+        verbose_name_plural = "Project Memberships"
         ordering = ["-created_at"]
         unique_together = ("project", "user")
 
@@ -99,6 +84,8 @@ class BudgetCategory(TenantModel):
     allocated_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
 
     class Meta:
+        verbose_name = "Budget Category"
+        verbose_name_plural = "Budget Categories"
         ordering = ["-created_at"]
         unique_together = ("project", "name")
 

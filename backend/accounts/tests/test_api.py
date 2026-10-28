@@ -165,7 +165,6 @@ class TestAccountsAPI(TenantIsolationTestMixin):
                 "workday_hours": "9.00",
                 "half_day_hours": "4.50",
                 "overtime_after_hours": "9.00",
-                "night_shift_multiplier": "1.75",
                 "expense_approval_limit": "2500.00",
             },
             format="json",

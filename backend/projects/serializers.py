@@ -6,6 +6,11 @@ from projects.models import BudgetCategory, Project, ProjectMembership
 
 
 class BudgetCategorySerializer(serializers.ModelSerializer):
+    name = serializers.CharField(max_length=100, required=True, allow_blank=False)
+    allocated_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.00"), default=Decimal("0.00")
+    )
+
     class Meta:
         model = BudgetCategory
         fields = ["id", "name", "allocated_amount"]
@@ -22,14 +27,20 @@ class ProjectMembershipSerializer(serializers.ModelSerializer):
 
 
 class AddMemberSerializer(serializers.Serializer):
-    user_id = serializers.IntegerField()
+    user_id = serializers.IntegerField(required=True)
     site_role = serializers.CharField(max_length=50, required=False, allow_blank=True, default="")
 
 
 class ProjectSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(max_length=200, required=True, allow_blank=False)
     code = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
     estimated_budget = serializers.DecimalField(
-        max_digits=12, decimal_places=2, required=False, allow_null=True, default=Decimal("0.00")
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        allow_null=True,
+        default=Decimal("0.00"),
     )
     budget_categories = BudgetCategorySerializer(many=True, read_only=True)
     warning = serializers.CharField(read_only=True, required=False)
@@ -37,10 +48,13 @@ class ProjectSerializer(serializers.ModelSerializer):
     def validate_estimated_budget(self, value):
         if value is None or value == "":
             return Decimal("0.00")
+        if value < Decimal("0.00"):
+            raise serializers.ValidationError("Estimated budget cannot be negative.")
         return value
 
     def validate_client_phone(self, value):
         from core.validators import validate_mobile_10_digits
+
         if value:
             return validate_mobile_10_digits(value)
         return value
@@ -61,9 +75,6 @@ class ProjectSerializer(serializers.ModelSerializer):
             "estimated_budget",
             "actual_spend",
             "progress_percent",
-            "geofence_lat",
-            "geofence_lng",
-            "geofence_radius_m",
             "budget_categories",
             "warning",
             "created_at",
@@ -79,25 +90,21 @@ class ProjectSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        lat = attrs.get("geofence_lat", getattr(self.instance, "geofence_lat", None))
-        lng = attrs.get("geofence_lng", getattr(self.instance, "geofence_lng", None))
-
-        # Geofence needs both coordinates or none
-        if (lat is not None and lng is None) or (lat is None and lng is not None):
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        expected_end_date = attrs.get(
+            "expected_end_date", getattr(self.instance, "expected_end_date", None)
+        )
+        if start_date and expected_end_date and expected_end_date < start_date:
             raise serializers.ValidationError(
-                {
-                    "geofence": "Both latitude and longitude must be provided for a geofence, or both omitted."
-                }
+                {"expected_end_date": "Expected end date cannot be earlier than start date."}
             )
 
-        if lat is not None and not (Decimal("-90.0") <= lat <= Decimal("90.0")):
+        budget = attrs.get(
+            "estimated_budget", getattr(self.instance, "estimated_budget", Decimal("0.00"))
+        )
+        if budget is not None and budget < Decimal("0.00"):
             raise serializers.ValidationError(
-                {"geofence_lat": "Latitude must be between -90 and 90 degrees."}
-            )
-
-        if lng is not None and not (Decimal("-180.0") <= lng <= Decimal("180.0")):
-            raise serializers.ValidationError(
-                {"geofence_lng": "Longitude must be between -180 and 180 degrees."}
+                {"estimated_budget": "Estimated budget cannot be negative."}
             )
 
         return attrs

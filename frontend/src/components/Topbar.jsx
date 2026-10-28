@@ -58,11 +58,11 @@ export const Topbar = ({
         <div className="flex items-center gap-2 lg:hidden">
           <img
             src={buildsphereLogo}
-            alt="BuildSphere AI"
+            alt="BuildSphere"
             className="w-7 h-7 object-contain rounded-md"
           />
           <span className="text-sm font-black tracking-tight text-[var(--text-primary)]">
-            BuildSphere <span className="text-blue-600 dark:text-blue-400">AI</span>
+            BuildSphere
           </span>
         </div>
       </div>

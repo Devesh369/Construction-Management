@@ -60,6 +60,8 @@ class LaborGroup(TenantModel):
     is_active = models.BooleanField(default=True)
 
     class Meta:
+        verbose_name = "Labor Group"
+        verbose_name_plural = "Labor Groups"
         ordering = ["-created_at"]
 
     def __str__(self):
@@ -127,6 +129,8 @@ class Employee(TenantModel):
     bank_name = models.CharField(max_length=150, blank=True)
 
     class Meta:
+        verbose_name = "Employee"
+        verbose_name_plural = "Employees"
         ordering = ["-created_at"]
         unique_together = ("organization", "employee_code")
         indexes = [

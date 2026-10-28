@@ -3,12 +3,13 @@ Credits Module Services: Cash Credit Management and FIFO Deductions.
 Directly implements Section 4 and Section 4.5 of Module Architecture & Workflow Specification.
 """
 
-from decimal import Decimal
 import logging
+from decimal import Decimal
+
 from django.db import transaction
-from django.utils import timezone
+
 from core.exceptions import BusinessRuleError
-from expenses.models import CreditLog, CreditLogExpense, CreditLogStatus, PaymentMode
+from expenses.models import CreditLog, CreditLogExpense, CreditLogStatus
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,9 @@ logger = logging.getLogger(__name__)
 class CreditLogsService:
     @staticmethod
     @transaction.atomic
-    def deduct_credit(organization, user, amount: Decimal, description: str, date, transaction_id: str = "") -> list:
+    def deduct_credit(
+        organization, user, amount: Decimal, description: str, date, transaction_id: str = ""
+    ) -> list:
         """
         FIFO Deduction Algorithm (Section 4.5):
         When an admin makes a cash payment, the system deducts from the oldest active credit log first.
@@ -99,7 +102,9 @@ class CreditLogsService:
 
     @staticmethod
     @transaction.atomic
-    def reverse_credit_deduction(organization, transaction_id: str = "", description: str = "", amount: Decimal = None):
+    def reverse_credit_deduction(
+        organization, transaction_id: str = "", description: str = "", amount: Decimal = None
+    ):
         """
         Credit Reversal (Section 4.4 D):
         Finds matching credit expenses by transactionId or description, removes them,
@@ -111,7 +116,9 @@ class CreditLogsService:
         elif description:
             expenses = list(query.filter(description__icontains=description))
             if amount is not None:
-                expenses = [e for e in expenses if abs(e.amount - Decimal(str(amount))) < Decimal("0.01")]
+                expenses = [
+                    e for e in expenses if abs(e.amount - Decimal(str(amount))) < Decimal("0.01")
+                ]
         else:
             return
 
@@ -128,13 +135,17 @@ class CreditLogsService:
             )
             log.amount_spent = all_expenses_sum
             log.remaining_balance = log.amount - log.amount_spent
-            if log.status == CreditLogStatus.FULLY_UTILIZED and log.remaining_balance > Decimal("0.00"):
+            if log.status == CreditLogStatus.FULLY_UTILIZED and log.remaining_balance > Decimal(
+                "0.00"
+            ):
                 log.status = CreditLogStatus.ACTIVE
             log.save()
 
     @staticmethod
     @transaction.atomic
-    def add_manual_expense(credit_log, user, amount: Decimal, description: str, date) -> CreditLogExpense:
+    def add_manual_expense(
+        credit_log, user, amount: Decimal, description: str, date
+    ) -> CreditLogExpense:
         """Manual expense against a specific credit log (Section 4.4 C)."""
         amount = Decimal(str(amount))
         if amount > credit_log.remaining_balance:

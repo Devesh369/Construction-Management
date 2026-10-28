@@ -30,6 +30,7 @@ from ledger.services import (
     get_account_balance,
     post_journal_entry,
     profit_and_loss,
+    reconcile_ledger,
     reverse_entry,
     trial_balance,
 )
@@ -240,3 +241,22 @@ class BalanceSheetView(views.APIView):
         as_of = request.query_params.get("as_of")
         data = balance_sheet(request.user.organization, as_of=as_of)
         return Response(data)
+
+
+class ReconciliationView(views.APIView):
+    """
+    GET /api/v1/ledger/reconciliation
+    Audit and reconcile double-entry ledger invariants, trial balance,
+    balance sheet, and AP / Worker Advance subledgers.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+        IsTenantUser,
+        roles_required(Role.ACCOUNTANT, Role.ORG_ADMIN),
+    ]
+
+    def get(self, request):
+        data = reconcile_ledger(request.user.organization)
+        status_code = status.HTTP_200_OK if data["is_healthy"] else status.HTTP_409_CONFLICT
+        return Response(data, status=status_code)

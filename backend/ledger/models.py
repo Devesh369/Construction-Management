@@ -34,12 +34,16 @@ class Side(models.TextChoices):
 
 
 class Account(TenantModel):
+    """Standard Chart of Accounts entity classified by account type."""
+
     code = models.CharField(max_length=10)
     name = models.CharField(max_length=100)
     type = models.CharField(max_length=20, choices=AccountType.choices)
     is_active = models.BooleanField(default=True)
 
     class Meta:
+        verbose_name = "Account"
+        verbose_name_plural = "Accounts"
         ordering = ["code"]
         unique_together = ("organization", "code")
         indexes = [
@@ -52,6 +56,8 @@ class Account(TenantModel):
 
 
 class JournalEntry(ImmutableTenantModel):
+    """Immutable double-entry journal entry recording balanced debits and credits."""
+
     entry_number = models.CharField(max_length=30)
     date = models.DateField()
     description = models.TextField()
@@ -85,6 +91,8 @@ class JournalEntry(ImmutableTenantModel):
     reversal_reason = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "Journal Entry"
+        verbose_name_plural = "Journal Entries"
         ordering = ["-date", "-created_at"]
         indexes = [
             models.Index(fields=["organization", "date"]),
@@ -96,6 +104,8 @@ class JournalEntry(ImmutableTenantModel):
 
 
 class JournalLine(ImmutableTenantModel):
+    """Individual debit or credit posting leg within an immutable journal entry."""
+
     entry = models.ForeignKey(JournalEntry, on_delete=models.CASCADE, related_name="lines")
     account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="lines")
     side = models.CharField(max_length=2, choices=Side.choices)
@@ -107,6 +117,8 @@ class JournalLine(ImmutableTenantModel):
     memo = models.TextField(blank=True)
 
     class Meta:
+        verbose_name = "Journal Line"
+        verbose_name_plural = "Journal Lines"
         ordering = ["id"]
         indexes = [
             models.Index(fields=["entry", "account"]),
@@ -152,17 +164,24 @@ class Transaction(TenantModel):
     role-based visibility, running net-payable enrichment, and credit-log tie-in.
     Corresponds directly to Section 2 of Module Architecture & Workflow Specification.
     """
+
     transaction_id = models.CharField(max_length=100, unique=True, db_index=True)
     date = models.DateField()
     type = models.CharField(max_length=20, choices=TransactionType.choices)
-    category = models.CharField(max_length=40, choices=TransactionCategory.choices, default=TransactionCategory.OTHER)
+    category = models.CharField(
+        max_length=40, choices=TransactionCategory.choices, default=TransactionCategory.OTHER
+    )
     payer_name = models.CharField(max_length=255)
     payee_name = models.CharField(max_length=255)
     amount = models.DecimalField(
         max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))]
     )
-    method = models.CharField(max_length=30, choices=TransactionMethod.choices, default=TransactionMethod.CASH)
-    status = models.CharField(max_length=20, choices=TransactionStatus.choices, default=TransactionStatus.COMPLETED)
+    method = models.CharField(
+        max_length=30, choices=TransactionMethod.choices, default=TransactionMethod.CASH
+    )
+    status = models.CharField(
+        max_length=20, choices=TransactionStatus.choices, default=TransactionStatus.COMPLETED
+    )
     description = models.TextField(blank=True)
     recorded_by = models.ForeignKey(
         "accounts.User", on_delete=models.CASCADE, related_name="recorded_transactions"
@@ -170,6 +189,8 @@ class Transaction(TenantModel):
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
+        verbose_name = "Transaction"
+        verbose_name_plural = "Transactions"
         ordering = ["-date", "-created_at", "-id"]
         indexes = [
             models.Index(fields=["organization", "type"]),
@@ -180,4 +201,3 @@ class Transaction(TenantModel):
 
     def __str__(self):
         return f"{self.transaction_id} ({self.type.upper()}) ₹{self.amount} - {self.payee_name}"
-

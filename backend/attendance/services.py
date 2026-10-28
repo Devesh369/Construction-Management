@@ -1,11 +1,11 @@
 """
-Attendance services: GPS check-in/out, batch marking, holiday handling,
-night shift sessions, close-day automation, and attendance summaries.
+Attendance services: check-in/out, batch marking, holiday handling,
+close-day automation, and attendance summaries.
+Simplified without GPS or shift logic.
 """
 
-import math
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
@@ -15,12 +15,8 @@ from django.utils import timezone
 from accounts.models import Organization
 from attendance.models import (
     Attendance,
-    AttendanceMethod,
     AttendanceStatus,
     Holiday,
-    NightShiftSession,
-    NightShiftStatus,
-    ShiftType,
 )
 from audit.constants import AuditAction
 from audit.services import log_action
@@ -28,27 +24,6 @@ from core.exceptions import BusinessRuleError, ConflictError, NotFoundError
 from core.money import q2
 from projects.models import Project
 from workforce.models import Employee, LaborGroup
-
-
-def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """
-    Calculate the great-circle distance between two GPS coordinates in meters.
-    Formula:
-        R = 6371000 meters
-        a = sin²(Δlat/2) + cos(lat1) * cos(lat2) * sin²(Δlon/2)
-        d = 2 * R * asin(√a)
-    """
-    r = 6371000.0  # Earth radius in meters
-    phi1 = math.radians(float(lat1))
-    phi2 = math.radians(float(lat2))
-    delta_phi = math.radians(float(lat2) - float(lat1))
-    delta_lambda = math.radians(float(lon2) - float(lon1))
-
-    a = math.sin(delta_phi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * (
-        math.sin(delta_lambda / 2.0) ** 2
-    )
-    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
-    return r * c
 
 
 @dataclass
@@ -60,7 +35,6 @@ class AttendanceSummary:
     half_days: int
     paid_holidays: int
     ot_hours: Decimal
-    night_shifts: int
 
 
 def get_attendance_summary(
@@ -84,16 +58,11 @@ def get_attendance_summary(
         if project:
             qs = qs.filter(project=project)
 
-        # Days present = PRESENT rows (day + night)
+        # Days present = PRESENT rows
         days_present = qs.filter(status=AttendanceStatus.PRESENT).count()
 
         # Half days
         half_days = qs.filter(status=AttendanceStatus.HALF_DAY).count()
-
-        # Night shifts = PRESENT rows with shift_type=NIGHT
-        night_shifts = qs.filter(
-            status=AttendanceStatus.PRESENT, shift_type=ShiftType.NIGHT
-        ).count()
 
         # Overtime hours sum
         ot_total = qs.aggregate(total=Sum("ot_hours"))["total"] or Decimal("0.00")
@@ -121,7 +90,6 @@ def get_attendance_summary(
                 half_days=half_days,
                 paid_holidays=paid_holidays,
                 ot_hours=q2(ot_total),
-                night_shifts=night_shifts,
             )
         )
     return summaries
@@ -132,15 +100,10 @@ def check_in_worker(
     org: Organization,
     employee_id: int,
     project_id: int,
-    latitude: float,
-    longitude: float,
-    shift_type: str = ShiftType.DAY,
     request=None,
 ) -> Attendance:
     """
-    UC-11: GPS check-in worker on site.
-    Validates geofence. Distance <= radius accepted; otherwise logs
-    ATTENDANCE_OFFSITE_ATTEMPT and raises outside_geofence error.
+    Worker check-in on project site.
     """
     try:
         project = Project.objects.get(organization=org, id=project_id)
@@ -152,48 +115,13 @@ def check_in_worker(
     except Employee.DoesNotExist:
         raise NotFoundError("Active employee not found in this organization.")
 
-    # Geofence check
-    if project.geofence_lat is None or project.geofence_lng is None:
-        raise BusinessRuleError(
-            "Geofence is not configured for this project.", code="geofence_not_configured"
-        )
-
-    distance = haversine_m(
-        latitude,
-        longitude,
-        float(project.geofence_lat),
-        float(project.geofence_lng),
-    )
-
-    if distance > project.geofence_radius_m:
-        log_action(
-            user=user,
-            action=AuditAction.ATTENDANCE_OFFSITE_ATTEMPT,
-            obj=project,
-            changes={
-                "employee_id": employee.id,
-                "distance_m": round(distance, 2),
-                "radius_m": project.geofence_radius_m,
-                "latitude": latitude,
-                "longitude": longitude,
-            },
-            request=request,
-            organization=org,
-        )
-        raise BusinessRuleError(
-            f"Outside project geofence boundary (Distance: {round(distance, 1)}m, Allowed: {project.geofence_radius_m}m).",
-            code="outside_geofence",
-            details={"distance_m": round(distance, 2), "radius_m": project.geofence_radius_m},
-        )
-
     today = timezone.localdate()
-    # Duplicate check for same worker, date, and shift
     existing = Attendance.all_objects.filter(
-        organization=org, employee=employee, date=today, shift_type=shift_type
+        organization=org, employee=employee, date=today
     ).first()
     if existing and existing.deleted_at is None:
         raise ConflictError(
-            f"Worker '{employee.employee_code}' is already checked in for shift {shift_type} today.",
+            f"Worker '{employee.employee_code}' is already checked in for today.",
             code="duplicate_attendance",
         )
 
@@ -205,11 +133,6 @@ def check_in_worker(
         existing.status = AttendanceStatus.PRESENT
         existing.check_in_time = now
         existing.check_out_time = None
-        existing.latitude = Decimal(str(latitude))
-        existing.longitude = Decimal(str(longitude))
-        existing.distance_m = q2(Decimal(str(distance)))
-        existing.is_geofence_verified = True
-        existing.method = AttendanceMethod.GPS
         existing.marked_by = marked_user
         existing.save()
         return existing
@@ -219,14 +142,8 @@ def check_in_worker(
         employee=employee,
         project=project,
         date=today,
-        shift_type=shift_type,
         status=AttendanceStatus.PRESENT,
         check_in_time=now,
-        latitude=Decimal(str(latitude)),
-        longitude=Decimal(str(longitude)),
-        distance_m=q2(Decimal(str(distance))),
-        is_geofence_verified=True,
-        method=AttendanceMethod.GPS,
         marked_by=marked_user,
     )
 
@@ -236,9 +153,6 @@ def check_out_worker(
     org: Organization,
     employee_id: int,
     project_id: int,
-    latitude: float | None = None,
-    longitude: float | None = None,
-    shift_type: str = ShiftType.DAY,
 ) -> Attendance:
     """
     Check-out worker and calculate worked hours and overtime.
@@ -250,7 +164,6 @@ def check_out_worker(
             employee_id=employee_id,
             project_id=project_id,
             date=today,
-            shift_type=shift_type,
         )
     except Attendance.DoesNotExist:
         raise NotFoundError("Check-in record not found for today.")
@@ -292,13 +205,13 @@ def batch_mark_attendance(
     org: Organization,
     project_id: int | None = None,
     date_val: date | None = None,
-    shift_type: str = ShiftType.DAY,
     records: list[dict] | None = None,
     group_id: int | None = None,
     group_status: str | None = None,
+    **kwargs,
 ) -> dict:
     """
-    UC-12: Batch mark attendance for labor gang members or explicit employee list.
+    Batch mark attendance for labor gang members or explicit employee list.
     Upserts unlocked rows; skips locked rows.
     """
     today = timezone.localdate()
@@ -332,7 +245,6 @@ def batch_mark_attendance(
                 {
                     "employee_id": member.id,
                     "project_id": project_id or (member.primary_project_id or group.project_id),
-                    "shift_type": shift_type,
                     "status": target_status,
                     "ot_hours": Decimal("0.00"),
                     "remarks": f"Gang batch: {group.name}",
@@ -346,7 +258,6 @@ def batch_mark_attendance(
                 {
                     "employee_id": rec["employee_id"],
                     "project_id": rec.get("project_id") or project_id,
-                    "shift_type": rec.get("shift_type") or shift_type,
                     "status": rec.get("status", AttendanceStatus.PRESENT),
                     "ot_hours": q2(Decimal(str(rec.get("ot_hours", "0.00")))),
                     "remarks": rec.get("remarks", ""),
@@ -361,7 +272,6 @@ def batch_mark_attendance(
         marked_user = user or org.users.first()
         for item in prepared_entries:
             emp_id = item["employee_id"]
-            item_shift = item.get("shift_type") or ShiftType.DAY
             item_proj = None
 
             emp = Employee.objects.filter(organization=org, id=emp_id).first()
@@ -383,11 +293,10 @@ def batch_mark_attendance(
                     code="project_allocation_required",
                 )
 
-            # Strict check: Employee MUST be registered/assigned to this project site!
+            # Check project site assignment
             is_registered = (
-                (emp.primary_project_id == item_proj.id)
-                or emp.assigned_projects.filter(id=item_proj.id).exists()
-            )
+                emp.primary_project_id == item_proj.id
+            ) or emp.assigned_projects.filter(id=item_proj.id).exists()
             if not is_registered:
                 raise BusinessRuleError(
                     f"Worker '{emp.full_name}' is not registered for work at '{item_proj.name}'. Attendance can only be marked at their assigned project sites.",
@@ -398,7 +307,6 @@ def batch_mark_attendance(
                 organization=org,
                 employee_id=emp_id,
                 date=parsed_date,
-                shift_type=item_shift,
             ).first()
 
             if existing:
@@ -411,7 +319,6 @@ def batch_mark_attendance(
                     existing.status = item["status"]
                     existing.ot_hours = item["ot_hours"]
                     existing.remarks = item["remarks"]
-                    existing.method = AttendanceMethod.MANUAL
                     existing.marked_by = marked_user
                     existing.project = item_proj
                     existing.save()
@@ -422,11 +329,9 @@ def batch_mark_attendance(
                     employee_id=emp_id,
                     project=item_proj,
                     date=date_val,
-                    shift_type=item_shift,
                     status=item["status"],
                     ot_hours=item["ot_hours"],
                     remarks=item["remarks"],
-                    method=AttendanceMethod.MANUAL,
                     marked_by=marked_user,
                 )
                 created_count += 1
@@ -444,7 +349,7 @@ def approve_and_lock_attendance(
     request=None,
 ) -> int:
     """
-    UC-15: PM / ORG_ADMIN approve and lock attendance records. Audited.
+    PM / ORG_ADMIN approve and lock attendance records. Audited.
     """
     qs = Attendance.objects.filter(organization=org, project_id=project_id, is_locked=False)
     if date_val:
@@ -480,7 +385,7 @@ def unlock_attendance(
     request=None,
 ) -> int:
     """
-    UC-15: ORG_ADMIN unlocks attendance with mandatory reason. Audited.
+    ORG_ADMIN unlocks attendance with mandatory reason. Audited.
     """
     if not reason or not reason.strip():
         raise BusinessRuleError(
@@ -514,7 +419,7 @@ def close_day_attendance(
     date_val: date,
 ) -> dict:
     """
-    For active workers of the project with no DAY record:
+    For active workers of the project with no record:
     creates HOLIDAY if a holiday applies, else ABSENT.
     """
     try:
@@ -548,7 +453,6 @@ def close_day_attendance(
                 organization=org,
                 employee=worker,
                 date=date_val,
-                shift_type=ShiftType.DAY,
             ).first()
 
             status = AttendanceStatus.HOLIDAY if holiday_applies else AttendanceStatus.ABSENT
@@ -558,9 +462,7 @@ def close_day_attendance(
                     employee=worker,
                     project=project,
                     date=date_val,
-                    shift_type=ShiftType.DAY,
                     status=status,
-                    method=AttendanceMethod.MANUAL,
                     marked_by=marked_user,
                     remarks="Auto close-day mark",
                 )
@@ -573,7 +475,6 @@ def close_day_attendance(
                 existing.deleted_at = None
                 existing.project = project
                 existing.status = status
-                existing.method = AttendanceMethod.MANUAL
                 existing.marked_by = marked_user
                 existing.remarks = "Auto close-day mark"
                 existing.save()
@@ -584,123 +485,3 @@ def close_day_attendance(
                     absent_count += 1
 
     return {"closed_records": closed_count, "holidays": holiday_count, "absents": absent_count}
-
-
-def create_night_shift_session(
-    user,
-    org: Organization,
-    project_id: int,
-    shift_date: date,
-    employee_ids: list[int],
-    safety_checklist_signed: bool,
-    checklist_notes: str = "",
-) -> NightShiftSession:
-    """
-    UC-14: Run a night shift. Mandatory safety checklist signed.
-    Creates NightShiftSession and NIGHT attendance rows.
-    """
-    today = timezone.localdate()
-    parsed_date = shift_date if isinstance(shift_date, date) else date.fromisoformat(str(shift_date))
-    if parsed_date > today:
-        raise BusinessRuleError(
-            "Cannot create night shift session for upcoming days. Attendance can only be recorded for today or past dates.",
-            code="future_attendance_not_allowed",
-        )
-
-    if not safety_checklist_signed:
-        raise BusinessRuleError(
-            "The supervisor must sign the safety checklist before initiating a night shift.",
-            code="checklist_required",
-        )
-
-    try:
-        project = Project.objects.get(organization=org, id=project_id)
-    except Project.DoesNotExist:
-        raise NotFoundError("Project not found.")
-
-    marked_user = user or org.users.first()
-
-    with transaction.atomic():
-        session = NightShiftSession.objects.create(
-            organization=org,
-            project=project,
-            shift_date=shift_date,
-            supervisor=marked_user,
-            safety_checklist_signed=True,
-            checklist_notes=checklist_notes,
-            status=NightShiftStatus.IN_PROGRESS,
-        )
-
-        for emp_id in employee_ids:
-            existing = Attendance.all_objects.filter(
-                organization=org,
-                employee_id=emp_id,
-                date=shift_date,
-                shift_type=ShiftType.NIGHT,
-            ).first()
-            if existing:
-                existing.deleted_at = None
-                existing.project = project
-                existing.status = AttendanceStatus.PRESENT
-                existing.method = AttendanceMethod.MANUAL
-                existing.night_shift = session
-                existing.marked_by = marked_user
-                existing.save()
-            else:
-                Attendance.objects.create(
-                    organization=org,
-                    employee_id=emp_id,
-                    project=project,
-                    date=shift_date,
-                    shift_type=ShiftType.NIGHT,
-                    status=AttendanceStatus.PRESENT,
-                    method=AttendanceMethod.MANUAL,
-                    night_shift=session,
-                    marked_by=marked_user,
-                )
-
-    return session
-
-
-def complete_night_shift_session(
-    user,
-    session: NightShiftSession,
-    end_time: datetime | None = None,
-    work_completed: str = "",
-) -> NightShiftSession:
-    """
-    Complete night shift and record work summary.
-    """
-    session.status = NightShiftStatus.COMPLETED
-    session.end_time = end_time or timezone.now()
-    session.work_completed = work_completed
-    session.save(update_fields=["status", "end_time", "work_completed", "updated_at"])
-    return session
-
-
-def approve_night_shift_session(
-    user,
-    session: NightShiftSession,
-    request=None,
-) -> NightShiftSession:
-    """
-    Approve night shift session and lock roster attendance rows.
-    """
-    now = timezone.now()
-    session.status = NightShiftStatus.APPROVED
-    session.approved_by = user
-    session.approved_at = now
-    session.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
-
-    # Lock roster attendance rows
-    session.roster_attendance.update(is_locked=True, locked_at=now, locked_by=user)
-
-    log_action(
-        user=user,
-        action=AuditAction.NIGHT_SHIFT_APPROVED,
-        obj=session,
-        changes={"status": NightShiftStatus.APPROVED, "session_id": session.id},
-        request=request,
-        organization=session.organization,
-    )
-    return session

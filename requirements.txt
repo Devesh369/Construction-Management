@@ -1,5 +1,5 @@
 # ==============================================================================
-# BuildSphere AI - Python Dependencies & Local Setup Guide
+# BuildSphere - Python Dependencies & Local Setup Guide
 # ==============================================================================
 # Python Version: Python 3.11+ (Python 3.12 recommended)
 #

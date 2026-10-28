@@ -4,17 +4,17 @@ Directly implements Section 4.3, 4.4, 4.5, and 4.6 of Module Architecture & Work
 """
 
 from decimal import Decimal
+
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from core.permissions import IsTenantUser, roles_required
+from core.permissions import IsTenantUser
 from core.roles import Role
 from core.views import TenantViewSet
-from core.exceptions import BusinessRuleError
 from expenses.models import CreditLog, CreditLogExpense, CreditLogStatus
-from expenses.serializers_credits import CreditLogSerializer, CreditLogExpenseSerializer
+from expenses.serializers_credits import CreditLogExpenseSerializer, CreditLogSerializer
 from expenses.services_credits import CreditLogsService
 
 
@@ -22,7 +22,12 @@ class CreditLogViewSet(TenantViewSet):
     """
     Credits Module: Manages cash pool available to each admin for site disbursement.
     """
-    queryset = CreditLog.objects.all().select_related("credited_by", "project", "employee").prefetch_related("expenses")
+
+    queryset = (
+        CreditLog.objects.all()
+        .select_related("credited_by", "project", "employee")
+        .prefetch_related("expenses")
+    )
     serializer_class = CreditLogSerializer
     permission_classes = [IsAuthenticated, IsTenantUser]
 
@@ -35,7 +40,9 @@ class CreditLogViewSet(TenantViewSet):
             qs = qs.filter(credited_by=user)
 
         status_filter = self.request.query_params.get("status")
-        credited_by_id = self.request.query_params.get("creditedBy") or self.request.query_params.get("credited_by")
+        credited_by_id = self.request.query_params.get(
+            "creditedBy"
+        ) or self.request.query_params.get("credited_by")
         search = self.request.query_params.get("search")
 
         if status_filter:
@@ -43,12 +50,10 @@ class CreditLogViewSet(TenantViewSet):
         if credited_by_id:
             qs = qs.filter(credited_by_id=credited_by_id)
         if search:
-            qs = qs.filter(
-                description__icontains=search
-            ) | qs.filter(
-                individual_name__icontains=search
-            ) | qs.filter(
-                category__icontains=search
+            qs = (
+                qs.filter(description__icontains=search)
+                | qs.filter(individual_name__icontains=search)
+                | qs.filter(category__icontains=search)
             )
 
         return qs
@@ -83,7 +88,9 @@ class CreditLogViewSet(TenantViewSet):
         date = request.data.get("date")
 
         if not description:
-            return Response({"error": "Description is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Description is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         exp = CreditLogsService.add_manual_expense(
             credit_log=credit_log,
@@ -109,19 +116,29 @@ class CreditLogViewSet(TenantViewSet):
         expense.delete()
 
         # Recalculate credit log
-        all_expenses = sum((e.amount for e in credit_log.expenses.filter(deleted_at__isnull=True)), Decimal("0.00"))
+        all_expenses = sum(
+            (e.amount for e in credit_log.expenses.filter(deleted_at__isnull=True)), Decimal("0.00")
+        )
         credit_log.amount_spent = all_expenses
         credit_log.remaining_balance = credit_log.amount - credit_log.amount_spent
-        if credit_log.status == CreditLogStatus.FULLY_UTILIZED and credit_log.remaining_balance > Decimal("0.00"):
+        if (
+            credit_log.status == CreditLogStatus.FULLY_UTILIZED
+            and credit_log.remaining_balance > Decimal("0.00")
+        ):
             credit_log.status = CreditLogStatus.ACTIVE
         credit_log.save()
 
         # Unlink linked transaction if present (Section 4.4 E)
         if txn_id:
             from ledger.services_transactions import TransactionService
+
             try:
-                TransactionService.delete_transaction(txn_id, request.user, request.user.organization)
+                TransactionService.delete_transaction(
+                    txn_id, request.user, request.user.organization
+                )
             except Exception:
                 pass
 
-        return Response({"status": "expense_removed", "expense_id": expense_id}, status=status.HTTP_200_OK)
+        return Response(
+            {"status": "expense_removed", "expense_id": expense_id}, status=status.HTTP_200_OK
+        )

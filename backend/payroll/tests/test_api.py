@@ -11,7 +11,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from accounts.services import accept_invitation, create_organization, create_user_invitation
-from attendance.models import Attendance, AttendanceStatus, ShiftType
+from attendance.models import Attendance, AttendanceStatus
 from core.roles import Role
 from payroll.models import (
     Advance,
@@ -112,7 +112,6 @@ class TestPayrollAPI:
                 employee=self.worker,
                 project=self.project,
                 date=date(2026, 10, i),
-                shift_type=ShiftType.DAY,
                 status=AttendanceStatus.PRESENT,
                 is_locked=True,
                 marked_by=self.pm,
@@ -178,7 +177,6 @@ class TestPayrollAPI:
             employee=self.worker,
             project=self.project,
             date=date(2026, 10, 1),
-            shift_type=ShiftType.DAY,
             status=AttendanceStatus.PRESENT,
             is_locked=True,
             marked_by=self.pm,

@@ -119,7 +119,7 @@ export const ReportsView = ({ selectedProjectId }) => {
       icon: FileSpreadsheet,
       color: '#fbbf24',
       roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'],
-      description: 'Monthly site muster sheet with daily check-in marks (P, H, A), overtime hours, and GPS geofence compliance flags.',
+      description: 'Monthly site muster sheet with daily check-in marks (P, H, A) and overtime hours.',
       action: () => {
         if (!projectId) {
           alert('Please create and select a project first to export the attendance muster.');

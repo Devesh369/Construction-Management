@@ -9,6 +9,7 @@ Contracts:
 - trial_balance(org, as_of=None, project=None) -> dict
 - profit_and_loss(org, date_from=None, date_to=None, project=None) -> dict
 - balance_sheet(org, as_of=None) -> dict
+- reconcile_ledger(org) -> dict
 """
 
 from decimal import Decimal
@@ -564,4 +565,126 @@ def balance_sheet(org, as_of=None) -> dict:
         "total_assets": str(q2(total_assets)),
         "total_liabilities_and_equity": str(q2(total_liabilities_and_equity)),
         "is_balanced": q2(total_assets) == q2(total_liabilities_and_equity),
+    }
+
+
+def reconcile_ledger(org) -> dict:
+    """
+    Audit and reconcile double-entry ledger invariants for an organization:
+    1. Journal Entry Integrity: each entry has >= 2 lines and SUM(DR) == SUM(CR).
+    2. Trial Balance: Total Debits == Total Credits.
+    3. Balance Sheet: Total Assets == Total Liabilities + Total Equity + Current Period Earnings.
+    4. Subledger Reconciliation:
+       - Accounts Payable (2001) GL Balance == Sum of Vendor outstanding balances.
+       - Worker Advances (1100) GL Balance == Sum of unadjusted worker advances.
+    """
+    entries = (
+        JournalEntry.objects.filter(organization=org)
+        .prefetch_related("lines")
+        .order_by("date", "id")
+    )
+    total_audited = entries.count()
+    invalid_entries = []
+
+    for entry in entries:
+        lines = list(entry.lines.all())
+        if len(lines) < 2:
+            invalid_entries.append(
+                {
+                    "id": entry.id,
+                    "entry_number": entry.entry_number,
+                    "reason": f"Insufficient lines: expected >= 2, found {len(lines)}",
+                }
+            )
+            continue
+
+        entry_dr = q2(sum((line.amount for line in lines if line.side == Side.DR), Decimal("0.00")))
+        entry_cr = q2(sum((line.amount for line in lines if line.side == Side.CR), Decimal("0.00")))
+        if entry_dr != entry_cr:
+            invalid_entries.append(
+                {
+                    "id": entry.id,
+                    "entry_number": entry.entry_number,
+                    "reason": f"Unbalanced lines: DR {entry_dr} != CR {entry_cr}",
+                }
+            )
+
+    # Trial Balance
+    tb = trial_balance(org)
+
+    # Balance Sheet
+    bs = balance_sheet(org)
+
+    # Subledger 1: Accounts Payable (2001)
+    acct_2001 = Account.objects.filter(organization=org, code="2001").first()
+    gl_ap = get_account_balance(acct_2001) if acct_2001 else Decimal("0.00")
+
+    from expenses.models import Vendor
+
+    vendors = Vendor.objects.filter(organization=org, deleted_at__isnull=True)
+    sub_ap = q2(sum((v.outstanding_balance for v in vendors), Decimal("0.00")))
+    ap_diff = q2(gl_ap - sub_ap)
+    ap_reconciled = ap_diff == Decimal("0.00")
+
+    # Subledger 2: Worker Advances (1100)
+    acct_1100 = Account.objects.filter(organization=org, code="1100").first()
+    gl_adv = get_account_balance(acct_1100) if acct_1100 else Decimal("0.00")
+
+    from payroll.models import Advance
+
+    advances = Advance.objects.filter(
+        organization=org,
+        deleted_at__isnull=True,
+    )
+    sub_adv = q2(
+        sum((max(Decimal("0.00"), a.amount - a.adjusted_amount) for a in advances), Decimal("0.00"))
+    )
+    adv_diff = q2(gl_adv - sub_adv)
+    adv_reconciled = adv_diff == Decimal("0.00")
+
+    is_healthy = (
+        len(invalid_entries) == 0
+        and tb["is_balanced"]
+        and bs["is_balanced"]
+        and ap_reconciled
+        and adv_reconciled
+    )
+
+    return {
+        "organization": {
+            "id": org.id,
+            "name": org.name,
+        },
+        "is_healthy": is_healthy,
+        "status": "HEALTHY" if is_healthy else "DISCREPANCIES_FOUND",
+        "journal_entries": {
+            "total_audited": total_audited,
+            "invalid_entries": invalid_entries,
+        },
+        "trial_balance": {
+            "total_debit": tb["total_debit"],
+            "total_credit": tb["total_credit"],
+            "is_balanced": tb["is_balanced"],
+        },
+        "balance_sheet": {
+            "total_assets": bs["total_assets"],
+            "total_liabilities_and_equity": bs["total_liabilities_and_equity"],
+            "is_balanced": bs["is_balanced"],
+        },
+        "subledger_reconciliation": {
+            "accounts_payable": {
+                "account_code": "2001",
+                "gl_balance": str(q2(gl_ap)),
+                "subledger_balance": str(q2(sub_ap)),
+                "discrepancy": str(ap_diff),
+                "is_reconciled": ap_reconciled,
+            },
+            "worker_advances": {
+                "account_code": "1100",
+                "gl_balance": str(q2(gl_adv)),
+                "subledger_balance": str(q2(sub_adv)),
+                "discrepancy": str(adv_diff),
+                "is_reconciled": adv_reconciled,
+            },
+        },
     }

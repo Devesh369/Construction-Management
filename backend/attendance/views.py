@@ -1,11 +1,10 @@
 """
 Attendance views and endpoints:
-- Check-in (GPS geofence) / Check-out (OT hours calculation)
+- Check-in / Check-out (worked and overtime hours calculation)
 - Gang & individual batch attendance marking
 - Approval lock & administrative unlock
 - Close-day automated absentee marking
-- Attendance matrix grid
-- Night shift sessions with supervisor checklists
+- Attendance matrix grid and report summaries
 - Holiday calendar
 """
 
@@ -14,7 +13,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from attendance.models import Attendance, Holiday, NightShiftSession
+from attendance.models import Attendance, Holiday
 from attendance.serializers import (
     ApproveAttendanceSerializer,
     AttendanceSerializer,
@@ -23,23 +22,17 @@ from attendance.serializers import (
     CheckOutSerializer,
     CloseDaySerializer,
     HolidaySerializer,
-    NightShiftCompleteSerializer,
-    NightShiftCreateSerializer,
-    NightShiftSessionSerializer,
     UnlockAttendanceSerializer,
 )
 from attendance.services import (
     approve_and_lock_attendance,
-    approve_night_shift_session,
     batch_mark_attendance,
     check_in_worker,
     check_out_worker,
     close_day_attendance,
-    complete_night_shift_session,
-    create_night_shift_session,
     unlock_attendance,
 )
-from core.exceptions import ConflictError
+from core.exceptions import BusinessRuleError, ConflictError
 from core.permissions import IsTenantUser, roles_required
 from core.roles import Role
 from core.views import ProjectScopedMixin, TenantViewSet
@@ -59,8 +52,12 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         qs = self.filter_project_scope(qs).select_related("employee", "project")
         qs = qs.filter(employee__deleted_at__isnull=True)
 
-        date_from = self.request.query_params.get("date_from") or self.request.query_params.get("from_date")
-        date_to = self.request.query_params.get("date_to") or self.request.query_params.get("to_date")
+        date_from = self.request.query_params.get("date_from") or self.request.query_params.get(
+            "from_date"
+        )
+        date_to = self.request.query_params.get("date_to") or self.request.query_params.get(
+            "to_date"
+        )
         if date_from:
             qs = qs.filter(date__gte=date_from)
         if date_to:
@@ -69,6 +66,7 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         search = self.request.query_params.get("search")
         if search:
             from django.db.models import Q
+
             qs = qs.filter(
                 Q(employee__full_name__icontains=search)
                 | Q(employee__employee_code__icontains=search)
@@ -77,6 +75,8 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         return qs
 
     def perform_create(self, serializer):
+        from django.utils import timezone
+
         org = self.request.user.organization
         emp = serializer.validated_data.get("employee")
         date_val = serializer.validated_data.get("date")
@@ -85,9 +85,8 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
                 "Cannot mark attendance for upcoming days. Only present and past dates are allowed.",
                 code="future_attendance_not_allowed",
             )
-        shift = serializer.validated_data.get("shift_type", ShiftType.DAY)
         existing = Attendance.all_objects.filter(
-            organization=org, employee=emp, date=date_val, shift_type=shift
+            organization=org, employee=emp, date=date_val
         ).first()
         if existing:
             if existing.deleted_at is not None:
@@ -99,7 +98,9 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
                 serializer.instance = existing
                 return
             elif existing.is_locked:
-                raise ConflictError("Locked attendance records cannot be modified.", code="record_locked")
+                raise ConflictError(
+                    "Locked attendance records cannot be modified.", code="record_locked"
+                )
             else:
                 emp_name = emp.full_name if emp else "this employee"
                 raise ConflictError(
@@ -109,6 +110,8 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         serializer.save(organization=org)
 
     def perform_update(self, serializer):
+        from django.utils import timezone
+
         if serializer.instance.is_locked:
             raise ConflictError(
                 "Locked attendance records cannot be modified.", code="record_locked"
@@ -139,7 +142,7 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
 
     @action(detail=False, methods=["post"], url_path="check-in")
     def check_in(self, request):
-        """UC-11: Worker GPS check-in on site with geofence verification."""
+        """Worker check-in on site."""
         serializer = CheckInSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -149,9 +152,6 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
             org=request.user.organization,
             employee_id=data["employee_id"],
             project_id=data["project_id"],
-            latitude=data["latitude"],
-            longitude=data["longitude"],
-            shift_type=data.get("shift_type", "DAY"),
             request=request,
         )
         return Response(AttendanceSerializer(record).data, status=status.HTTP_201_CREATED)
@@ -168,15 +168,12 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
             org=request.user.organization,
             employee_id=data["employee_id"],
             project_id=data["project_id"],
-            latitude=data.get("latitude"),
-            longitude=data.get("longitude"),
-            shift_type=data.get("shift_type", "DAY"),
         )
         return Response(AttendanceSerializer(record).data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="batch")
     def batch(self, request):
-        """UC-12: Batch mark attendance for gang members or records array."""
+        """Batch mark attendance for gang members or records array."""
         serializer = BatchAttendanceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -186,7 +183,6 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
             org=request.user.organization,
             project_id=data.get("project_id"),
             date_val=data["date"],
-            shift_type=data.get("shift_type", "DAY"),
             records=data.get("records"),
             group_id=data.get("group_id"),
             group_status=data.get("group_status"),
@@ -200,7 +196,7 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         permission_classes=[roles_required(Role.PROJECT_MANAGER, Role.ORG_ADMIN)],
     )
     def approve(self, request):
-        """UC-15: Lock attendance records in scope."""
+        """Lock attendance records in scope."""
         serializer = ApproveAttendanceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -223,7 +219,7 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
         permission_classes=[roles_required(Role.ORG_ADMIN)],
     )
     def unlock(self, request):
-        """UC-15: ORG_ADMIN unlocks attendance records with mandatory reason."""
+        """ORG_ADMIN unlocks attendance records with mandatory reason."""
         serializer = UnlockAttendanceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -302,7 +298,9 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
     def summary(self, request):
         """Attendance summary counts and earnings for date range and filters."""
         from decimal import Decimal
+
         from attendance.models import AttendanceStatus
+
         qs = self.get_queryset()
 
         full_days = qs.filter(status=AttendanceStatus.PRESENT).count()
@@ -320,19 +318,23 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
             ot_rate = rec.employee.ot_hourly_rate or Decimal("0.00")
             total_earnings += (rec.ot_hours or Decimal("0.00")) * ot_rate
 
-        return Response({
-            "total_present": total_present,
-            "full_days": full_days,
-            "half_days": half_days,
-            "total_absent": total_absent,
-            "total_earnings": float(total_earnings),
-        })
+        return Response(
+            {
+                "total_present": total_present,
+                "full_days": full_days,
+                "half_days": half_days,
+                "total_absent": total_absent,
+                "total_earnings": float(total_earnings),
+            }
+        )
 
     @action(detail=False, methods=["get"], url_path="report")
     def report(self, request):
         """Aggregated per-employee attendance report with wage breakdown."""
         from decimal import Decimal
+
         from attendance.models import AttendanceStatus
+
         qs = self.get_queryset()
 
         worker_map = {}
@@ -340,7 +342,11 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
             emp = rec.employee
             if emp.id not in worker_map:
                 trade = (emp.trade or "").upper()
-                role = "KARIGAR" if trade in ["MASON", "CARPENTER", "ELECTRICIAN", "PLUMBER", "WELDER"] else "LABOUR"
+                role = (
+                    "KARIGAR"
+                    if trade in ["MASON", "CARPENTER", "ELECTRICIAN", "PLUMBER", "WELDER"]
+                    else "LABOUR"
+                )
                 worker_map[emp.id] = {
                     "employee_id": emp.id,
                     "employee_code": emp.employee_code,
@@ -414,9 +420,7 @@ class HolidayViewSet(TenantViewSet):
         org = self.request.user.organization
         proj = serializer.validated_data.get("project")
         hdate = serializer.validated_data.get("date")
-        existing = Holiday.all_objects.filter(
-            organization=org, project=proj, date=hdate
-        ).first()
+        existing = Holiday.all_objects.filter(organization=org, project=proj, date=hdate).first()
         if existing:
             existing.deleted_at = None
             for attr, val in serializer.validated_data.items():
@@ -426,60 +430,3 @@ class HolidayViewSet(TenantViewSet):
             serializer.instance = existing
             return
         serializer.save(organization=org)
-
-
-class NightShiftSessionViewSet(ProjectScopedMixin, TenantViewSet):
-    queryset = NightShiftSession.objects.all()
-    serializer_class = NightShiftSessionSerializer
-    permission_classes = [IsAuthenticated, IsTenantUser]
-    filterset_fields = ["project", "shift_date", "status"]
-    ordering = ["-shift_date", "-id"]
-
-    def get_queryset(self):
-        qs = super().get_queryset()
-        return self.filter_project_scope(qs).select_related("project", "supervisor")
-
-    def create(self, request, *args, **kwargs):
-        """UC-14: Start a night shift session with mandatory safety checklist."""
-        serializer = NightShiftCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-
-        session = create_night_shift_session(
-            user=request.user,
-            org=request.user.organization,
-            project_id=data["project_id"],
-            shift_date=data["shift_date"],
-            employee_ids=data["employee_ids"],
-            safety_checklist_signed=data["safety_checklist_signed"],
-            checklist_notes=data.get("checklist_notes", ""),
-        )
-        return Response(NightShiftSessionSerializer(session).data, status=status.HTTP_201_CREATED)
-
-    @action(detail=True, methods=["patch"], url_path="complete")
-    def complete(self, request, pk=None):
-        """Complete night shift session and record work summary."""
-        session = self.get_object()
-        serializer = NightShiftCompleteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-
-        completed = complete_night_shift_session(
-            user=request.user,
-            session=session,
-            end_time=data.get("end_time"),
-            work_completed=data.get("work_completed", ""),
-        )
-        return Response(NightShiftSessionSerializer(completed).data)
-
-    @action(
-        detail=True,
-        methods=["post"],
-        url_path="approve",
-        permission_classes=[roles_required(Role.PROJECT_MANAGER, Role.ORG_ADMIN)],
-    )
-    def approve(self, request, pk=None):
-        """Approve night shift session and lock roster attendance rows."""
-        session = self.get_object()
-        approved = approve_night_shift_session(user=request.user, session=session, request=request)
-        return Response(NightShiftSessionSerializer(approved).data)

@@ -44,9 +44,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
     client_name: '',
     client_phone: '',
     code: '',
-    geofence_lat: '19.076000',
-    geofence_lng: '72.877700',
-    geofence_radius_m: 200,
     status: 'ACTIVE',
   });
 
@@ -79,32 +76,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      toast.error('Project Name is required');
-      return;
-    }
-    if (!formData.location.trim()) {
-      toast.error('Location is required');
-      return;
-    }
-    if (!formData.description.trim()) {
-      toast.error('Project Description is required');
-      return;
-    }
-    if (!formData.client_name.trim()) {
-      toast.error('Client Name is required');
-      return;
-    }
-    const cleanPhone = formData.client_phone.replace(/\D/g, '');
-    if (!cleanPhone) {
-      toast.error('Client Mobile Number is required');
-      return;
-    }
-    if (cleanPhone.length !== 10) {
-      toast.error('Client Mobile Number must be exactly 10 digits');
-      return;
-    }
-
     setSubmitting(true);
     try {
       // Auto-generate code if empty
@@ -116,7 +87,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
         ...formData,
         code: generatedCode,
         estimated_budget: formData.estimated_budget ? formData.estimated_budget : '0.00',
-        geofence_radius_m: Number(formData.geofence_radius_m),
       });
 
       toast.success('Project created successfully!');
@@ -129,9 +99,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
         client_name: '',
         client_phone: '',
         code: '',
-        geofence_lat: '19.076000',
-        geofence_lng: '72.877700',
-        geofence_radius_m: 200,
         status: 'ACTIVE',
       });
       await fetchProjects();
@@ -185,7 +152,7 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
           </div>
           <h3 className="text-lg font-bold text-[var(--text-primary)]">No Projects Registered</h3>
           <p className="text-xs text-[var(--text-secondary)] max-w-sm mx-auto">
-            Get started by adding your first construction site with location, client contacts, and geofence.
+            Get started by adding your first construction site with location, client contacts, and budget.
           </p>
           {canCreate && (
             <Button
@@ -341,7 +308,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Project Name *"
-              required
               placeholder="e.g. Marina Bay Highrise"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -357,7 +323,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Location *"
-              required
               icon={MapPin}
               placeholder="e.g. Plot 42, Sector 18, Navi Mumbai"
               value={formData.location}
@@ -377,7 +342,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Client Name *"
-              required
               icon={User}
               placeholder="e.g. Lodha Developers Ltd"
               value={formData.client_name}
@@ -385,7 +349,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
             />
             <Input
               label="Client Mobile Number *"
-              required
               icon={Phone}
               type="tel"
               inputMode="numeric"
@@ -415,7 +378,6 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate })
               Project Description *
             </label>
             <textarea
-              required
               rows={3}
               placeholder="Describe scope of work, key structural milestones, architecture, and contractual timelines..."
               value={formData.description}

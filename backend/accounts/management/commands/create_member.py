@@ -12,12 +12,12 @@ python manage.py create_member
 """
 
 import getpass
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from accounts.models import Organization, User
 from core.roles import Role
-
 
 VALID_ROLES = [r.value for r in Role]
 
@@ -30,7 +30,9 @@ class Command(BaseCommand):
         parser.add_argument("--name", type=str, help="User Full Name")
         parser.add_argument("--role", type=str, help=f"Role ({', '.join(VALID_ROLES)})")
         parser.add_argument("--password", type=str, help="User Password")
-        parser.add_argument("--org", type=str, help="Organization Name (optional, defaults to primary org)")
+        parser.add_argument(
+            "--org", type=str, help="Organization Name (optional, defaults to primary org)"
+        )
 
     def handle(self, *args, **options):
         email = options.get("email")
@@ -43,11 +45,15 @@ class Command(BaseCommand):
         if org_name:
             org = Organization.objects.filter(name__iexact=org_name.strip()).first()
             if not org:
-                raise CommandError(f"Organization '{org_name}' not found. Please create admin first.")
+                raise CommandError(
+                    f"Organization '{org_name}' not found. Please create admin first."
+                )
         else:
             org = Organization.objects.first()
             if not org:
-                raise CommandError("No organization found. Please run 'python manage.py create_admin' first.")
+                raise CommandError(
+                    "No organization found. Please run 'python manage.py create_admin' first."
+                )
 
         # 2. Interactive prompts if needed
         if not name:
@@ -101,7 +107,7 @@ class Command(BaseCommand):
                     user.name = name
                     user.organization = org
                     user.role = role
-                    user.is_staff = (role == Role.ORG_ADMIN)
+                    user.is_staff = role == Role.ORG_ADMIN
                     user.is_active = True
 
                 user.set_password(password)

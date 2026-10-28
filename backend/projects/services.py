@@ -51,9 +51,6 @@ def create_project(org, user, data: dict, request=None) -> Project:
             start_date=data.get("start_date"),
             expected_end_date=data.get("expected_end_date"),
             estimated_budget=q2(Decimal(str(data.get("estimated_budget") or "0.00"))),
-            geofence_lat=data.get("geofence_lat"),
-            geofence_lng=data.get("geofence_lng"),
-            geofence_radius_m=data.get("geofence_radius_m", 200),
         )
 
         # Auto-add creator as member
@@ -92,12 +89,9 @@ def create_project(org, user, data: dict, request=None) -> Project:
 
 def update_project(project: Project, data: dict, user, request=None) -> Project:
     """
-    Update project attributes with audit logs for budget changes, geofence updates, and general edits.
+    Update project attributes with audit logs for budget changes and general edits.
     """
     old_budget = project.estimated_budget
-    old_lat = project.geofence_lat
-    old_lng = project.geofence_lng
-    old_radius = project.geofence_radius_m
 
     with transaction.atomic():
         for field, value in data.items():
@@ -123,24 +117,6 @@ def update_project(project: Project, data: dict, user, request=None) -> Project:
                         "old": str(old_budget),
                         "new": str(project.estimated_budget),
                     }
-                },
-                request=request,
-                organization=project.organization,
-            )
-
-        # Audit geofence changes
-        if any(f in data for f in ["geofence_lat", "geofence_lng", "geofence_radius_m"]):
-            log_action(
-                user=user,
-                action=AuditAction.GEOFENCE_CHANGED,
-                obj=project,
-                changes={
-                    "geofence_lat": {"old": str(old_lat), "new": str(project.geofence_lat)},
-                    "geofence_lng": {"old": str(old_lng), "new": str(project.geofence_lng)},
-                    "geofence_radius_m": {
-                        "old": str(old_radius),
-                        "new": str(project.geofence_radius_m),
-                    },
                 },
                 request=request,
                 organization=project.organization,

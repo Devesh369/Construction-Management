@@ -202,8 +202,12 @@ class WorkEntryViewSet(ProjectScopedMixin, TenantViewSet):
             .select_related("project", "created_by")
             .prefetch_related("employees")
         )
-        date_from = self.request.query_params.get("from_date") or self.request.query_params.get("date_from")
-        date_to = self.request.query_params.get("to_date") or self.request.query_params.get("date_to")
+        date_from = self.request.query_params.get("from_date") or self.request.query_params.get(
+            "date_from"
+        )
+        date_to = self.request.query_params.get("to_date") or self.request.query_params.get(
+            "date_to"
+        )
         if date_from:
             qs = qs.filter(date__gte=date_from)
         if date_to:
@@ -275,4 +279,3 @@ class WorkEntryViewSet(ProjectScopedMixin, TenantViewSet):
             },
             status=status.HTTP_200_OK,
         )
-

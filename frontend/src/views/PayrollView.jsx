@@ -560,7 +560,6 @@ export const PayrollView = ({ selectedProjectId }) => {
           <div className="form-group">
             <label className="form-label">Site Project *</label>
             <select
-              required
               className="form-control"
               value={runForm.project_id}
               onChange={(e) => setRunForm({ ...runForm, project_id: e.target.value })}
@@ -577,7 +576,6 @@ export const PayrollView = ({ selectedProjectId }) => {
               <label className="form-label">Period Start (e.g. Monday) *</label>
               <input
                 type="date"
-                required
                 max={new Date().toISOString().split('T')[0]}
                 className="form-control"
                 value={runForm.period_start}
@@ -588,7 +586,6 @@ export const PayrollView = ({ selectedProjectId }) => {
               <label className="form-label">Period End (e.g. Sunday) *</label>
               <input
                 type="date"
-                required
                 max={new Date().toISOString().split('T')[0]}
                 className="form-control"
                 value={runForm.period_end}
@@ -618,7 +615,6 @@ export const PayrollView = ({ selectedProjectId }) => {
           <div className="form-group">
             <label className="form-label">Site Project *</label>
             <select
-              required
               className="form-control"
               value={advanceForm.project}
               onChange={(e) => setAdvanceForm({ ...advanceForm, project: e.target.value })}
@@ -633,7 +629,6 @@ export const PayrollView = ({ selectedProjectId }) => {
           <div className="form-group">
             <label className="form-label">Worker *</label>
             <select
-              required
               className="form-control"
               value={advanceForm.employee}
               onChange={(e) => setAdvanceForm({ ...advanceForm, employee: e.target.value })}
@@ -688,7 +683,6 @@ export const PayrollView = ({ selectedProjectId }) => {
               <input
                 type="number"
                 step="0.01"
-                required
                 className="form-control"
                 placeholder="1500.00"
                 value={advanceForm.amount}
@@ -699,7 +693,6 @@ export const PayrollView = ({ selectedProjectId }) => {
               <label className="form-label">Advance Date *</label>
               <input
                 type="date"
-                required
                 max={todayStr}
                 className="form-control"
                 value={advanceForm.advance_date}
@@ -723,7 +716,6 @@ export const PayrollView = ({ selectedProjectId }) => {
             <label className="form-label">Reason *</label>
             <input
               type="text"
-              required
               className="form-control"
               placeholder="e.g. Medical emergency assistance"
               value={advanceForm.reason}

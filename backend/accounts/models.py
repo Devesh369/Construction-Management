@@ -75,12 +75,6 @@ class Organization(models.Model):
         default=Decimal("8.00"),
         help_text="Hours above this threshold count as overtime",
     )
-    night_shift_multiplier = models.DecimalField(
-        max_digits=3,
-        decimal_places=2,
-        default=Decimal("1.50"),
-        help_text="Multiplier applied to wage rate for night shifts",
-    )
     expense_approval_limit = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -91,6 +85,11 @@ class Organization(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Organization"
+        verbose_name_plural = "Organizations"
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
@@ -137,6 +136,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["name"]
 
+    class Meta:
+        verbose_name = "User"
+        verbose_name_plural = "Users"
+        ordering = ["-created_at"]
+
     def __str__(self):
         return f"{self.email} ({self.role})"
 
@@ -177,6 +181,11 @@ class Invitation(TenantModel):
         related_name="invitations_sent",
     )
 
+    class Meta:
+        verbose_name = "Invitation"
+        verbose_name_plural = "Invitations"
+        ordering = ["-created_at"]
+
     def is_valid(self):
         return self.used_at is None and timezone.now() < self.expires_at
 
@@ -199,6 +208,11 @@ class PasswordResetToken(models.Model):
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Password Reset Token"
+        verbose_name_plural = "Password Reset Tokens"
+        ordering = ["-created_at"]
 
     def is_valid(self):
         return self.used_at is None and timezone.now() < self.expires_at

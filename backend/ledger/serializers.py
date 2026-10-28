@@ -98,6 +98,16 @@ class ManualJournalEntryCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("A journal entry requires at least 2 lines.")
         return value
 
+    def validate(self, attrs):
+        lines = attrs.get("lines", [])
+        total_debit = sum(line["amount"] for line in lines if line["side"] in (Side.DR, "DR"))
+        total_credit = sum(line["amount"] for line in lines if line["side"] in (Side.CR, "CR"))
+        if total_debit != total_credit:
+            raise serializers.ValidationError(
+                f"Double-entry ledger out of balance: total debits ({total_debit}) must equal total credits ({total_credit})."
+            )
+        return attrs
+
 
 class ReverseJournalEntrySerializer(serializers.Serializer):
     reason = serializers.CharField(required=True, min_length=3)

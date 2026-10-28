@@ -81,6 +81,7 @@ class ProjectViewSet(ProjectScopedMixin, TenantViewSet):
 
         # Invalidate dashboard overview cache for tenant
         from django.core.cache import cache
+
         org_id = getattr(request.user, "organization_id", None)
         if org_id:
             cache.delete(f"dashboard_overview_{org_id}_all")

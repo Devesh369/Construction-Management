@@ -8,14 +8,34 @@ import os
 from datetime import date
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, letter
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from accounts.models import User
+from attendance.models import Attendance
+from attendance.services import AttendanceSummary, get_attendance_summary
+from audit.constants import AuditAction
+from audit.services import log_action
+from core.exceptions import BusinessRuleError
+from core.money import q2
+from core.sequences import next_number
+from ledger.services import post_journal_entry, reverse_entry
+from payroll.models import (
+    Advance,
+    AdvanceStatus,
+    PayrollRun,
+    PayrollRunStatus,
+    PayrollVoucher,
+    VoucherStatus,
+)
+from projects.models import Project
+from projects.services import update_spend
+from workforce.models import Employee
 
 LETTERHEAD_PATH = os.path.join(
     os.path.dirname(os.path.dirname(__file__)),
@@ -26,7 +46,7 @@ LETTERHEAD_PATH = os.path.join(
 
 
 def draw_letterhead_background(canvas_obj, doc):
-    """Draw official BuildSphere AI letterhead background for worker payslips."""
+    """Draw official BuildSphere letterhead background for worker payslips."""
     canvas_obj.saveState()
     page_w, page_h = doc.pagesize
     if os.path.exists(LETTERHEAD_PATH):
@@ -39,26 +59,6 @@ def draw_letterhead_background(canvas_obj, doc):
             preserveAspectRatio=False,
         )
     canvas_obj.restoreState()
-from attendance.models import Attendance, AttendanceStatus
-from attendance.services import AttendanceSummary, get_attendance_summary
-from audit.constants import AuditAction
-from audit.services import log_action
-from core.exceptions import BusinessRuleError
-from core.money import q2
-from core.sequences import next_number
-from ledger.services import post_journal_entry, reverse_entry
-from payroll.models import (
-    Advance,
-    AdvanceStatus,
-    Payment,
-    PayrollRun,
-    PayrollRunStatus,
-    PayrollVoucher,
-    VoucherStatus,
-)
-from projects.models import Project
-from projects.services import update_spend
-from workforce.models import Employee
 
 
 def calculate_voucher(
@@ -68,16 +68,14 @@ def calculate_voucher(
     org,
 ) -> dict:
     """
-    Pure calculation function for a single worker's wage breakdown (UC-24 / Section 6 worked example):
+    Pure calculation function for a single worker's wage breakdown:
     - basic_pay = (days_present + 0.5 * half_days + paid_holidays) * rate
     - ot_pay = ot_hours * ot_rate
-    - night_allowance = night_shifts * rate * (night_shift_multiplier - 1)
-    - gross = basic + ot + night
+    - gross = basic + ot
     - net = gross - advances_deducted (FIFO, bounded by open advances and gross)
     """
     rate = employee.effective_daily_rate
     ot_rate = q2(employee.ot_hourly_rate)
-    multiplier = Decimal(str(org.night_shift_multiplier))
 
     # Basic Pay calculation
     units = (
@@ -90,12 +88,8 @@ def calculate_voucher(
     # Overtime Pay calculation
     ot_pay = q2(Decimal(str(summary.ot_hours)) * ot_rate)
 
-    # Night Shift Allowance: rate * (multiplier - 1.0) per night shift
-    night_factor = max(Decimal("0.00"), multiplier - Decimal("1.00"))
-    night_allowance = q2(Decimal(str(summary.night_shifts)) * rate * night_factor)
-
     # Gross Pay
-    gross_pay = q2(basic_pay + ot_pay + night_allowance)
+    gross_pay = q2(basic_pay + ot_pay)
 
     # Advance deduction bounded by open advances and gross pay
     advances_deducted = min(q2(open_advances), gross_pay)
@@ -116,10 +110,8 @@ def calculate_voucher(
         "half_days": summary.half_days,
         "paid_holidays": summary.paid_holidays,
         "ot_hours": summary.ot_hours,
-        "night_shifts": summary.night_shifts,
         "basic_pay": basic_pay,
         "ot_pay": ot_pay,
-        "night_allowance": night_allowance,
         "gross_pay": gross_pay,
         "advances_deducted": advances_deducted,
         "net_pay": net_pay,
@@ -360,12 +352,10 @@ def recalculate_run(run: PayrollRun, user: User) -> list[str]:
                 half_days=calc["half_days"],
                 paid_holidays=calc["paid_holidays"],
                 ot_hours=calc["ot_hours"],
-                night_shifts=calc["night_shifts"],
                 daily_rate_used=calc["daily_rate_used"],
                 ot_rate_used=calc["ot_rate_used"],
                 basic_pay=calc["basic_pay"],
                 ot_pay=calc["ot_pay"],
-                night_allowance=calc["night_allowance"],
                 gross_pay=calc["gross_pay"],
                 advances_deducted=calc["advances_deducted"],
                 net_pay=calc["net_pay"],
@@ -729,7 +719,9 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
 
     # 1. Header
     org_name = (
-        voucher.organization.name if voucher.organization else "BuildSphere AI"
+        voucher.organization.name
+        if voucher.organization
+        else getattr(settings, "SITE_NAME", "BuildSphere")
     )
     elements.append(Paragraph(org_name, title_style))
     elements.append(Spacer(1, 4))

@@ -4,26 +4,27 @@ Validates all requirements from Construction Project Management - Module Archite
 """
 
 from decimal import Decimal
+
 import pytest
 from django.utils import timezone
+
 from accounts.models import User
 from attendance.models import Attendance, AttendanceStatus
 from core.exceptions import BusinessRuleError
 from core.roles import Role
-from expenses.models import CreditLog, CreditLogStatus, RunningCost
+from expenses.models import CreditLog, CreditLogStatus
 from expenses.services_credits import CreditLogsService
 from expenses.services_running_costs import RunningCostService
-from payroll.models import Payment, PaymentType, PaymentMethod, PaymentLifecycleStatus
+from payroll.models import PaymentLifecycleStatus, PaymentMethod, PaymentType
 from payroll.services_upad import UpadPaymentService
-from ledger.models import Transaction, TransactionType, TransactionCategory
-from ledger.services_transactions import TransactionService
-from workforce.models import Employee
 from projects.models import Project
+from workforce.models import Employee
 
 
 @pytest.fixture
 def test_setup(db):
     from accounts.models import Organization
+
     org = Organization.objects.create(name="Apex Builders")
 
     admin1 = User.objects.create_user(
@@ -38,8 +39,11 @@ def test_setup(db):
     )
 
     employee = Employee.objects.create(
-        organization=org, full_name="Ramesh Kumar", employee_code="EMP-101",
-        daily_rate=Decimal("600.00"), phone="9876543210"
+        organization=org,
+        full_name="Ramesh Kumar",
+        employee_code="EMP-101",
+        daily_rate=Decimal("600.00"),
+        phone="9876543210",
     )
 
     return {
@@ -58,20 +62,32 @@ def test_credit_log_fifo_deduction(test_setup):
 
     # Create 2 credit logs: Log1 (₹1000), Log2 (₹2000)
     log1 = CreditLog.objects.create(
-        organization=org, credited_by=admin, amount=Decimal("1000.00"),
-        description="Cash advance 1", transaction_date=timezone.now().date(),
-        remaining_balance=Decimal("1000.00"), status=CreditLogStatus.ACTIVE
+        organization=org,
+        credited_by=admin,
+        amount=Decimal("1000.00"),
+        description="Cash advance 1",
+        transaction_date=timezone.now().date(),
+        remaining_balance=Decimal("1000.00"),
+        status=CreditLogStatus.ACTIVE,
     )
     log2 = CreditLog.objects.create(
-        organization=org, credited_by=admin, amount=Decimal("2000.00"),
-        description="Cash advance 2", transaction_date=timezone.now().date(),
-        remaining_balance=Decimal("2000.00"), status=CreditLogStatus.ACTIVE
+        organization=org,
+        credited_by=admin,
+        amount=Decimal("2000.00"),
+        description="Cash advance 2",
+        transaction_date=timezone.now().date(),
+        remaining_balance=Decimal("2000.00"),
+        status=CreditLogStatus.ACTIVE,
     )
 
     # Deduct ₹1500 (should exhaust log1 and take ₹500 from log2)
     expenses = CreditLogsService.deduct_credit(
-        organization=org, user=admin, amount=Decimal("1500.00"),
-        description="Worker Cash Upad", date=timezone.now().date(), transaction_id="TXN-TEST-1"
+        organization=org,
+        user=admin,
+        amount=Decimal("1500.00"),
+        description="Worker Cash Upad",
+        date=timezone.now().date(),
+        transaction_id="TXN-TEST-1",
     )
 
     assert len(expenses) == 2
@@ -99,15 +115,22 @@ def test_insufficient_credit_throws_error(test_setup):
     admin = test_setup["admin1"]
 
     CreditLog.objects.create(
-        organization=org, credited_by=admin, amount=Decimal("500.00"),
-        description="Small cash", transaction_date=timezone.now().date(),
-        remaining_balance=Decimal("500.00"), status=CreditLogStatus.ACTIVE
+        organization=org,
+        credited_by=admin,
+        amount=Decimal("500.00"),
+        description="Small cash",
+        transaction_date=timezone.now().date(),
+        remaining_balance=Decimal("500.00"),
+        status=CreditLogStatus.ACTIVE,
     )
 
     with pytest.raises(BusinessRuleError, match="Insufficient cash credit balance"):
         CreditLogsService.deduct_credit(
-            organization=org, user=admin, amount=Decimal("600.00"),
-            description="Exceeding cash", date=timezone.now().date()
+            organization=org,
+            user=admin,
+            amount=Decimal("600.00"),
+            description="Exceeding cash",
+            date=timezone.now().date(),
         )
 
 
@@ -119,9 +142,13 @@ def test_upad_payment_creation_and_duplicate_detection(test_setup):
 
     # Provide cash credit first
     CreditLog.objects.create(
-        organization=org, credited_by=admin, amount=Decimal("5000.00"),
-        description="Pool", transaction_date=timezone.now().date(),
-        remaining_balance=Decimal("5000.00"), status=CreditLogStatus.ACTIVE
+        organization=org,
+        credited_by=admin,
+        amount=Decimal("5000.00"),
+        description="Pool",
+        transaction_date=timezone.now().date(),
+        remaining_balance=Decimal("5000.00"),
+        status=CreditLogStatus.ACTIVE,
     )
 
     pay = UpadPaymentService.create_payment(
@@ -215,4 +242,3 @@ def test_running_cost_creation_without_credit_dependency(test_setup):
     )
     assert rc.id is not None
     assert rc.amount == Decimal("400.00")
-

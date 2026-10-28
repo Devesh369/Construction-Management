@@ -61,12 +61,11 @@ class TestWorkflow1TenantOnboarding:
         admin_token = accept_res.data["access"]
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {admin_token}")
 
-        # Adjust Organization Settings: 8h workday, 1.5x night multiplier, 15,000 approval limit
+        # Adjust Organization Settings: 8h workday, 15,000 approval limit
         patch_org_res = self.client.patch(
             "/api/v1/org/current",
             {
                 "workday_hours": "8.00",
-                "night_shift_multiplier": "1.50",
                 "expense_approval_limit": "15000.00",
             },
             format="json",
@@ -74,7 +73,6 @@ class TestWorkflow1TenantOnboarding:
         assert patch_org_res.status_code == status.HTTP_200_OK
         org.refresh_from_db()
         assert org.expense_approval_limit == Decimal("15000.00")
-        assert org.night_shift_multiplier == Decimal("1.50")
 
         # ----------------------------------------------------------------------
         # Step 3: ORG_ADMIN Invites PM, ENG, SUP, ACC & Each Accepts
@@ -109,7 +107,7 @@ class TestWorkflow1TenantOnboarding:
         assert len(user_tokens) == 4
 
         # ----------------------------------------------------------------------
-        # Step 4: PM Creates Project with Budget + Geofence & Assigns Members
+        # Step 4: PM Creates Project with Budget & Assigns Members
         # ----------------------------------------------------------------------
         pm_client = APIClient()
         pm_client.credentials(HTTP_AUTHORIZATION=f"Bearer {user_tokens[Role.PROJECT_MANAGER]}")
@@ -120,9 +118,6 @@ class TestWorkflow1TenantOnboarding:
                 "name": "Skyline Heights",
                 "code": "PRJ-SKY",
                 "estimated_budget": "50000000.00",
-                "geofence_lat": "19.076000",
-                "geofence_lng": "72.877700",
-                "geofence_radius_m": 200,
                 "status": "ACTIVE",
             },
             format="json",
@@ -132,7 +127,6 @@ class TestWorkflow1TenantOnboarding:
 
         project_obj = Project.objects.get(id=project_id)
         assert project_obj.estimated_budget == Decimal("50000000.00")
-        assert project_obj.geofence_radius_m == 200
 
         # PM assigns Site Engineer and Supervisor
         sup_user = User.objects.get(email="sup@apexinfra.test")

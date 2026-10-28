@@ -1,12 +1,16 @@
-"""
-Serializers for Credits Module (Cash Credit Management).
-"""
+from decimal import Decimal
 
 from rest_framework import serializers
-from expenses.models import CreditLog, CreditLogExpense, CreditLogStatus
+
+from expenses.models import CreditLog, CreditLogExpense
 
 
 class CreditLogExpenseSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True
+    )
+    date = serializers.DateField(required=True)
+    description = serializers.CharField(required=True, allow_blank=False)
     recorded_by_name = serializers.CharField(source="recorded_by.get_full_name", read_only=True)
     recorded_by_email = serializers.CharField(source="recorded_by.email", read_only=True)
 
@@ -28,6 +32,13 @@ class CreditLogExpenseSerializer(serializers.ModelSerializer):
 
 
 class CreditLogSerializer(serializers.ModelSerializer):
+    amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01"), required=True
+    )
+    transaction_date = serializers.DateField(required=True)
+    description = serializers.CharField(required=True, allow_blank=False)
+    category = serializers.CharField(required=True, allow_blank=False)
+    payment_method = serializers.CharField(required=True, allow_blank=False)
     credited_by_name = serializers.CharField(source="credited_by.get_full_name", read_only=True)
     credited_by_email = serializers.CharField(source="credited_by.email", read_only=True)
     project_name = serializers.CharField(source="project.name", read_only=True, default=None)
