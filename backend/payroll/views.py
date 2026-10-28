@@ -3,23 +3,23 @@ Views for Worker Advances, Payroll Runs, and Itemized Vouchers.
 Single source of truth for UC-23, UC-24, and UC-25.
 """
 
+from decimal import Decimal
+
+from django.db import transaction
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from audit.constants import AuditAction
+from audit.services import log_action
 from core.permissions import IsTenantUser, roles_required
 from core.roles import Role
 from core.views import ProjectScopedMixin, TenantViewSet
-from decimal import Decimal
-from django.db import transaction
-from django.utils import timezone
-from audit.constants import AuditAction
-from audit.services import log_action
 from ledger.services import reverse_entry
 from payroll.models import Advance, AdvanceStatus, PayrollRun, PayrollRunStatus, PayrollVoucher
-from projects.services import update_spend
 from payroll.serializers import (
     AdvanceSerializer,
     PayrollRunCreateSerializer,
@@ -38,6 +38,7 @@ from payroll.services import (
     update_voucher,
 )
 from projects.models import Project
+from projects.services import update_spend
 
 
 class AdvanceViewSet(ProjectScopedMixin, TenantViewSet):
@@ -78,12 +79,15 @@ class AdvanceViewSet(ProjectScopedMixin, TenantViewSet):
             if adv.journal_entry:
                 try:
                     from ledger.services import reverse_entry
+
                     reverse_entry(adv.journal_entry, user=user, reason=f"Deleted Advance #{adv.id}")
                 except Exception:
                     pass
 
-            from payroll.models import Payment
             import re
+
+            from payroll.models import Payment
+
             Payment.objects.filter(
                 organization=org,
                 description__contains=f"[ADV-{adv.id}]",
@@ -182,20 +186,29 @@ class PayrollRunViewSet(ProjectScopedMixin, TenantViewSet):
 
         if user.role not in [Role.ORG_ADMIN, Role.ACCOUNTANT, Role.PROJECT_MANAGER]:
             return Response(
-                {"error": {"code": "permission_denied", "message": "You do not have permission to delete this payroll run."}},
+                {
+                    "error": {
+                        "code": "permission_denied",
+                        "message": "You do not have permission to delete this payroll run.",
+                    }
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         with transaction.atomic():
             if run.journal_entry:
                 try:
-                    reverse_entry(run.journal_entry, user=user, reason=f"Deleted Payroll Run #{run.id}")
+                    reverse_entry(
+                        run.journal_entry, user=user, reason=f"Deleted Payroll Run #{run.id}"
+                    )
                 except Exception:
                     pass
 
             if run.total_gross > Decimal("0.00") and run.status == PayrollRunStatus.APPROVED:
                 try:
-                    update_spend(run.project, -run.total_gross, reason=f"Deleted Payroll Run #{run.id}")
+                    update_spend(
+                        run.project, -run.total_gross, reason=f"Deleted Payroll Run #{run.id}"
+                    )
                 except Exception:
                     pass
 
@@ -244,7 +257,6 @@ class PayrollRunViewSet(ProjectScopedMixin, TenantViewSet):
             run.save(update_fields=["status", "deleted_at", "updated_at"])
 
         return Response(status=status.HTTP_204_NO_CONTENT)
-
 
 
 class PayrollVoucherViewSet(TenantViewSet):

@@ -17,7 +17,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from accounts.models import User
-from attendance.models import Attendance
+from attendance.models import Attendance, AttendanceStatus
 from attendance.services import AttendanceSummary, get_attendance_summary
 from audit.constants import AuditAction
 from audit.services import log_action
@@ -28,6 +28,7 @@ from ledger.services import post_journal_entry, reverse_entry
 from payroll.models import (
     Advance,
     AdvanceStatus,
+    Payment,
     PayrollRun,
     PayrollRunStatus,
     PayrollVoucher,
@@ -177,7 +178,8 @@ def record_advance(user: User, data: dict, request=None) -> Advance:
 
         # Sync to UPAD Payment module so it is visible in both UPAD and Workforce
         try:
-            from payroll.models import Payment, PaymentType, PaymentLifecycleStatus
+            from payroll.models import Payment, PaymentLifecycleStatus, PaymentType
+
             Payment.objects.create(
                 organization=org,
                 employee=adv.employee,
@@ -805,10 +807,13 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
     period_pmt_sum = sum((p.amount for p in period_pmts), Decimal("0.00"))
 
     open_adv_sum = sum(
-        (a.remaining_amount for a in Advance.objects.filter(
-            employee=emp,
-            status__in=[AdvanceStatus.OPEN, AdvanceStatus.PARTIALLY_ADJUSTED],
-        )),
+        (
+            a.remaining_amount
+            for a in Advance.objects.filter(
+                employee=emp,
+                status__in=[AdvanceStatus.OPEN, AdvanceStatus.PARTIALLY_ADJUSTED],
+            )
+        ),
         Decimal("0.00"),
     )
 
@@ -821,7 +826,14 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
     upad_str = f"Rs. {upad_amount:.2f}"
 
     att_data = [
-        ["Total Present", "Full Days", "Half Days", "Total Absents", "Upad (Advance)", "Overtime (Hrs)"],
+        [
+            "Total Present",
+            "Full Days",
+            "Half Days",
+            "Total Absents",
+            "Upad (Advance)",
+            "Overtime (Hrs)",
+        ],
         [
             total_present_str,
             str(full_days),

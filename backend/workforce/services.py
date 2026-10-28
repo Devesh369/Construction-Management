@@ -351,8 +351,9 @@ def record_employee_payment(
             approved_at=timezone.now(),
         )
 
-    from attendance.models import Attendance, AttendanceStatus
     from django.db.models import Sum
+
+    from attendance.models import Attendance, AttendanceStatus
 
     att_qs = Attendance.objects.filter(
         employee=employee,
@@ -442,7 +443,6 @@ def record_employee_upad(
 
 def get_employee_payment_history(employee: Employee) -> list:
     """Return chronological ledger of all advances (upad) and payments."""
-    from payroll.models import Payment
     history = []
 
     for v in employee.payroll_vouchers.filter(status="PAID").order_by("-paid_at", "-id"):
