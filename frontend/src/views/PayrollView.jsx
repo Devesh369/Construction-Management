@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Download,
   ShieldAlert,
+  Trash2,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { Badge } from '../components/Badge';
@@ -106,6 +107,23 @@ export const PayrollView = ({ selectedProjectId }) => {
     }
   };
 
+  const handleDeleteRun = async (runId) => {
+    if (
+      !window.confirm(
+        'Are you sure you want to delete this payroll run? This will remove the run, delete its itemized vouchers, and reverse any posted ledger entries.'
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.payroll.deleteRun(runId);
+      alert('Payroll run deleted successfully.');
+      await fetchData();
+    } catch (err) {
+      alert(`Delete error: ${err.message}`);
+    }
+  };
+
   const handleMarkPaid = async (voucherId) => {
     const ref = prompt('Enter payment transaction reference (e.g. UPI-TXN-101):', `TXN-${Date.now()}`);
     if (!ref) return;
@@ -115,6 +133,19 @@ export const PayrollView = ({ selectedProjectId }) => {
       await fetchData();
     } catch (err) {
       alert(`Payment error: ${err.message}`);
+    }
+  };
+
+  const handleDeleteAdvance = async (advanceId) => {
+    if (!window.confirm('Are you sure you want to delete this advance? Any linked Upad payment will also be deleted.')) {
+      return;
+    }
+    try {
+      await api.payroll.deleteAdvance(advanceId);
+      alert('Advance deleted successfully');
+      await loadAdvances();
+    } catch (err) {
+      alert(`Could not delete advance: ${err.message}`);
     }
   };
 
@@ -302,6 +333,27 @@ export const PayrollView = ({ selectedProjectId }) => {
                           <span>Approve & Post Ledger</span>
                         </button>
                       )}
+
+                      {['ORG_ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'].includes(role) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteRun(r.id);
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            color: '#ef4444',
+                            borderColor: 'rgba(239, 68, 68, 0.4)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                          title="Delete this payroll run"
+                        >
+                          <Trash2 size={14} />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -434,6 +486,7 @@ export const PayrollView = ({ selectedProjectId }) => {
                   <th>Reason</th>
                   <th style={{ textAlign: 'center', width: '120px' }}>Status</th>
                   <th>Site Project</th>
+                  <th style={{ textAlign: 'center', width: '90px' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -463,6 +516,23 @@ export const PayrollView = ({ selectedProjectId }) => {
                     <td>
                       <div style={{ fontWeight: 500 }}>{adv.project_name || `Site #${adv.project}`}</div>
                     </td>
+                    <td style={{ textAlign: 'center' }}>
+                      {adv.status === 'OPEN' && ['ORG_ADMIN', 'ACCOUNTANT'].includes(role) && (
+                        <button
+                          onClick={() => handleDeleteAdvance(adv.id)}
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            fontSize: '0.72rem',
+                            color: '#ef4444',
+                            borderColor: 'rgba(239, 68, 68, 0.3)',
+                            padding: '4px 8px',
+                          }}
+                          title="Delete Advance"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -474,7 +544,7 @@ export const PayrollView = ({ selectedProjectId }) => {
                   <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'var(--font-heading)', color: '#fbbf24', fontSize: '1rem' }}>
                     {formatCurrency(advances.reduce((acc, a) => acc + Number(a.amount || 0), 0))}
                   </td>
-                  <td colSpan={4} style={{ fontSize: '0.76rem', color: 'var(--text-subtle)' }}>
+                  <td colSpan={5} style={{ fontSize: '0.76rem', color: 'var(--text-subtle)' }}>
                     {advances.length} advance transactions recorded
                   </td>
                 </tr>

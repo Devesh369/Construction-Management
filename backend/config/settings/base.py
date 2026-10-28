@@ -12,8 +12,8 @@ env = environ.Env(
     DEBUG=(bool, False),
     TIME_ZONE=(str, "Asia/Kolkata"),
     SEED_PASSWORD=(str, "ChangeMe#12345"),
-    ACCESS_TOKEN_MINUTES=(int, 15),
-    REFRESH_TOKEN_DAYS=(int, 7),
+    ACCESS_TOKEN_MINUTES=(int, 10080),
+    REFRESH_TOKEN_DAYS=(int, 14),
     MAX_UPLOAD_MB=(int, 5),
 )
 

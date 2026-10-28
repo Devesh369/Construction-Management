@@ -12,6 +12,10 @@ import {
   Sparkles,
   Edit3,
   ExternalLink,
+  ArrowRight,
+  Activity,
+  Wallet,
+  TrendingUp,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../api/client';
@@ -22,7 +26,7 @@ import { Input } from '../components/ui/Input';
 import { useAuth } from '../context/AuthContext';
 import { ProjectDetailModal } from '../components/ProjectDetailModal';
 
-export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
+export const ProjectsView = ({ onSelectProject, onProjectsUpdated, onNavigate }) => {
   const { role } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +52,14 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
     try {
       const res = await api.projects.list();
       const list = Array.isArray(res) ? res : res.results || [];
-      setProjects(list);
+      const sorted = [...list].sort((a, b) => {
+        if (a.created_at && b.created_at) {
+          const diff = new Date(a.created_at) - new Date(b.created_at);
+          if (diff !== 0) return diff;
+        }
+        return (a.id || 0) - (b.id || 0);
+      });
+      setProjects(sorted);
       if (onProjectsUpdated) {
         onProjectsUpdated();
       }
@@ -155,111 +166,129 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
           )}
         </div>
       ) : (
-        /* Projects Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 animate-stagger-in">
+        /* Projects Grid - Sleek, Human-Crafted Compact Cards */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 animate-stagger-in">
           {projects.map((p) => {
             const budget = Number(p.estimated_budget || 0);
             const spend = Number(p.actual_spend || 0);
             const progress = Number(p.progress_percent || 0);
-            const util = budget > 0 ? ((spend / budget) * 100).toFixed(1) : 0;
+            const util = budget > 0 ? ((spend / budget) * 100).toFixed(0) : 0;
 
             return (
               <div
                 key={p.id}
-                className="group relative rounded-2xl border border-[var(--border-default)] dark:border-[var(--border-strong)] bg-white dark:bg-[var(--bg-tertiary)] p-5 shadow-sm hover:shadow-lg dark:hover:shadow-blue-500/10 hover:border-blue-400/50 dark:hover:border-blue-500/50 transition-all duration-200 flex flex-col justify-between"
+                className="group relative rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0f172a] p-4 sm:p-5 shadow-xs hover:shadow-lg hover:shadow-blue-500/5 hover:border-blue-500/40 dark:hover:border-blue-500/40 transition-all duration-200 flex flex-col justify-between overflow-hidden cursor-pointer hover:-translate-y-1"
+                onClick={() => setSelectedDetailProjectId(p.id)}
               >
-                <div
-                  className="space-y-4 cursor-pointer"
-                  onClick={() => setSelectedDetailProjectId(p.id)}
-                >
-                  {/* Top Bar: Title, Code, Status */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1 min-w-0">
-                      <h3 className="text-lg font-bold text-[var(--text-primary)] truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                {/* Subtle top color strip */}
+                <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-emerald-400 opacity-80 group-hover:h-1.5 transition-all duration-200" />
+
+                <div className="space-y-3">
+                  {/* Header: Title, Code, Status & Refined Icon */}
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                         {p.name}
                       </h3>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-semibold text-[var(--text-muted)] bg-slate-100 dark:bg-[var(--bg-secondary)] px-2 py-0.5 rounded-md">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-[10.5px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50/90 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200/60 dark:border-blue-800/60">
                           {p.code}
                         </span>
-                        <Badge status={p.status}>{p.status}</Badge>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 px-2 py-0.5 rounded-md">
+                          <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                          <span className="capitalize">{p.status?.toLowerCase() || 'active'}</span>
+                        </span>
                       </div>
                     </div>
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                      <Building2 className="w-5 h-5" />
+
+                    {/* Compact elegant icon */}
+                    <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-blue-600 group-hover:text-white transition-all duration-200 shadow-xs">
+                      <Building2 className="w-4 h-4" />
                     </div>
                   </div>
 
-                  {/* Location & Client details */}
-                  <div className="space-y-1.5 text-xs text-[var(--text-secondary)]">
+                  {/* Details: Location & Client */}
+                  <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 pt-0.5">
                     {p.location && (
                       <div className="flex items-center gap-2">
                         <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                        <span className="truncate">{p.location}</span>
+                        <span className="truncate font-medium text-slate-700 dark:text-slate-200">{p.location}</span>
                       </div>
                     )}
                     {p.client_name && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                         <User className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                         <span className="truncate">
-                          Client: <strong className="text-[var(--text-primary)]">{p.client_name}</strong>
-                          {p.client_phone && ` (${p.client_phone})`}
+                          <span className="text-slate-400 dark:text-slate-500">Client: </span>
+                          <strong className="font-semibold text-slate-700 dark:text-slate-200">{p.client_name}</strong>
+                          {p.client_phone && (
+                            <span className="font-mono text-[11px] text-slate-400 dark:text-slate-500 ml-1">({p.client_phone})</span>
+                          )}
                         </span>
                       </div>
                     )}
                     {p.description && (
-                      <p className="text-[11px] text-[var(--text-muted)] line-clamp-2 mt-1">
-                        {p.description}
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate italic pl-2 border-l-2 border-blue-400/50 dark:border-blue-500/40">
+                        "{p.description}"
                       </p>
                     )}
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-bold">
-                      <span className="text-[var(--text-muted)]">Work Completion</span>
-                      <span className="text-blue-600 dark:text-blue-400">{progress.toFixed(1)}%</span>
+                  {/* Progress Strip */}
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                      <span className="flex items-center gap-1.5">
+                        <Activity className="w-3 h-3 text-blue-500" />
+                        Work Completion
+                      </span>
+                      <span className="font-bold text-slate-700 dark:text-slate-200">
+                        {progress.toFixed(1)}%
+                      </span>
                     </div>
-                    <div className="h-2 bg-slate-100 dark:bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-blue-600 to-emerald-500 rounded-full transition-all duration-500"
+                        className="h-full bg-gradient-to-r from-blue-600 to-emerald-400 rounded-full transition-all duration-500"
                         style={{ width: `${Math.min(progress, 100)}%` }}
                       />
                     </div>
                   </div>
 
-                  {/* Financials Card */}
-                  <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[var(--bg-secondary)] border border-[var(--border-default)]">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  {/* Financial Strip: Spend & Budget */}
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 text-xs">
+                    <div className="space-y-0.5">
+                      <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        <Wallet className="w-2.5 h-2.5" />
                         Actual Spend
                       </span>
-                      <span className="text-sm font-black text-[var(--text-primary)]">
+                      <div className="text-sm font-black text-slate-900 dark:text-white">
                         {formatCurrency(spend)}
-                      </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                        Budget ({util}%)
+                    <div className="space-y-0.5 text-right pl-3 border-l border-slate-200/80 dark:border-slate-800">
+                      <span className="flex items-center justify-end gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        <TrendingUp className="w-2.5 h-2.5 text-blue-500" />
+                        Budget {budget > 0 ? `(${util}%)` : ''}
                       </span>
-                      <span className="text-sm font-black text-slate-500">
-                        {budget > 0 ? formatCurrency(budget) : 'Open Budget'}
-                      </span>
+                      <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        {budget > 0 ? (
+                          formatCurrency(budget)
+                        ) : (
+                          <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-1.5 py-0.5 rounded">
+                            Open Budget
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Card Actions */}
-                <div className="mt-4 pt-3 border-t border-[var(--border-default)]">
-                  <Button
-                    onClick={() => setSelectedDetailProjectId(p.id)}
-                    variant="secondary"
-                    size="sm"
-                    className="w-full font-bold text-xs"
-                    leftIcon={<Edit3 className="w-3.5 h-3.5 text-blue-500" />}
-                  >
-                    View / Edit
-                  </Button>
+                {/* Bottom Action Footer */}
+                <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  <span className="flex items-center gap-1.5">
+                    <Edit3 className="w-3.5 h-3.5 text-blue-500" />
+                    <span>View / Edit Details</span>
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </div>
               </div>
             );
@@ -383,6 +412,7 @@ export const ProjectsView = ({ onSelectProject, onProjectsUpdated }) => {
         isOpen={Boolean(selectedDetailProjectId)}
         onClose={() => setSelectedDetailProjectId(null)}
         onProjectUpdated={fetchProjects}
+        onNavigate={onNavigate}
       />
     </div>
   );

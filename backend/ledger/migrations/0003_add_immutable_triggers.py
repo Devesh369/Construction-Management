@@ -36,6 +36,16 @@ DROP FUNCTION IF EXISTS prevent_immutable_record_modification();
 """
 
 
+def apply_triggers(apps, schema_editor):
+    if schema_editor.connection.vendor == "postgresql":
+        schema_editor.execute(TRIGGER_SQL)
+
+
+def reverse_triggers(apps, schema_editor):
+    if schema_editor.connection.vendor == "postgresql":
+        schema_editor.execute(REVERSE_SQL)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -44,8 +54,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            sql=TRIGGER_SQL,
-            reverse_sql=REVERSE_SQL,
+        migrations.RunPython(
+            code=apply_triggers,
+            reverse_code=reverse_triggers,
         ),
     ]

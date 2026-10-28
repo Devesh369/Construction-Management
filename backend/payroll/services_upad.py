@@ -13,6 +13,7 @@ from django.utils import timezone
 from attendance.services_settlement import AttendanceSettlementService
 from core.exceptions import BusinessRuleError
 from ledger.models import Transaction, TransactionCategory, TransactionType
+from ledger.services import reverse_entry
 from ledger.services_transactions import TransactionService
 from payroll.models import Payment, PaymentLifecycleStatus, PaymentMethod, PaymentType
 from workforce.models import Employee
@@ -365,13 +366,31 @@ class UpadPaymentService:
         # 1. Reverse attendance settlements
         AttendanceSettlementService.reverse_settlement_by_payment_id(str(payment.id))
 
-        # 2. Delete linked Advance if created by this payment
+        # 2. Delete linked Advance if created by or linked to this payment
         from payroll.models import Advance
 
-        Advance.objects.filter(
+        adv_to_delete = Advance.objects.filter(
             organization=organization,
             reason__contains=f"[UPAD-{payment.id}]",
-        ).delete()
+        )
+
+        if payment.type in [PaymentType.ADVANCE, PaymentType.WITHDRAWAL]:
+            adv_to_delete = adv_to_delete | Advance.objects.filter(
+                organization=organization,
+                employee=payment.employee,
+                amount=payment.amount,
+                status="OPEN",
+            )
+
+        for adv in adv_to_delete.distinct():
+            if adv.journal_entry:
+                try:
+                    reverse_entry(
+                        adv.journal_entry, user=user, reason=f"Deleted Payment #{payment.id}"
+                    )
+                except Exception:
+                    pass
+            adv.delete()
 
         # 3. Delete linked transaction
         if payment.transaction_id:

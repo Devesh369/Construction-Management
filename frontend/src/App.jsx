@@ -43,6 +43,8 @@ const AppContent = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [attendanceNavState, setAttendanceNavState] = useState(null);
+  const [progressNavState, setProgressNavState] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const { theme } = useUIStore();
@@ -51,7 +53,15 @@ const AppContent = () => {
   const fetchProjects = async () => {
     try {
       const res = await api.projects.list();
-      setProjects(Array.isArray(res) ? res : res.results || []);
+      const list = Array.isArray(res) ? res : res.results || [];
+      const sorted = [...list].sort((a, b) => {
+        if (a.created_at && b.created_at) {
+          const diff = new Date(a.created_at) - new Date(b.created_at);
+          if (diff !== 0) return diff;
+        }
+        return (a.id || 0) - (b.id || 0);
+      });
+      setProjects(sorted);
     } catch (err) {
       console.warn('Could not load projects for topbar', err);
     }
@@ -62,6 +72,19 @@ const AppContent = () => {
       fetchProjects();
     }
   }, [isAuthenticated, refreshKey]);
+
+  const handleNavigate = (tab, navData) => {
+    if (navData && navData.projectId) {
+      setSelectedProjectId(navData.projectId);
+    }
+    if (tab === 'attendance' && navData) {
+      setAttendanceNavState(navData);
+    }
+    if (tab === 'progress' && navData) {
+      setProgressNavState(navData);
+    }
+    setActiveTab(tab);
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -145,14 +168,23 @@ const AppContent = () => {
                     setActiveTab('dashboard');
                   }}
                   onProjectsUpdated={fetchProjects}
+                  onNavigate={handleNavigate}
                 />
               )}
               {activeTab === 'workforce' && <WorkforceView />}
               {activeTab === 'attendance' && (
-                <AttendanceView selectedProjectId={selectedProjectId} />
+                <AttendanceView
+                  selectedProjectId={selectedProjectId}
+                  navState={attendanceNavState}
+                  onClearNavState={() => setAttendanceNavState(null)}
+                />
               )}
               {activeTab === 'progress' && (
-                <ProgressView selectedProjectId={selectedProjectId} />
+                <ProgressView
+                  selectedProjectId={selectedProjectId}
+                  navState={progressNavState}
+                  onClearNavState={() => setProgressNavState(null)}
+                />
               )}
               {activeTab === 'expenses' && (
                 <ExpensesView selectedProjectId={selectedProjectId} />

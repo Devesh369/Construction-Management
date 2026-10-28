@@ -147,6 +147,7 @@ class SetupAdminView(views.APIView):
         response = Response(
             {
                 "access": tokens["access"],
+                "refresh": tokens["refresh"],
                 "user": user_data,
                 "message": "System initialized and admin account created successfully!",
             },
@@ -183,6 +184,7 @@ class LoginView(views.APIView):
         response = Response(
             {
                 "access": tokens["access"],
+                "refresh": tokens["refresh"],
                 "user": user_data,
             },
             status=status.HTTP_200_OK,
@@ -201,7 +203,10 @@ class RefreshView(views.APIView):
             raise BusinessRuleError("Refresh token not provided.", code="token_required")
 
         tokens = refresh_user_token(refresh_str)
-        response = Response({"access": tokens["access"]}, status=status.HTTP_200_OK)
+        response = Response(
+            {"access": tokens["access"], "refresh": tokens["refresh"]},
+            status=status.HTTP_200_OK,
+        )
         set_refresh_cookie(response, tokens["refresh"])
         return response
 
@@ -213,7 +218,7 @@ class LogoutView(views.APIView):
         refresh_str = request.COOKIES.get("refresh_token") or request.data.get("refresh")
         logout_user(refresh_str, user=request.user, request=request)
         response = Response({"message": "Successfully logged out."}, status=status.HTTP_200_OK)
-        response.delete_cookie("refresh_token", path="/api/v1/auth/")
+        response.delete_cookie("refresh_token", path="/")
         return response
 
 
@@ -245,6 +250,7 @@ class AcceptInviteView(views.APIView):
         response = Response(
             {
                 "access": tokens["access"],
+                "refresh": tokens["refresh"],
                 "user": user_data,
             },
             status=status.HTTP_200_OK,
@@ -297,7 +303,10 @@ class ChangePasswordView(views.APIView):
             new_password=serializer.validated_data["new_password"],
             request=request,
         )
-        response = Response({"access": tokens["access"]}, status=status.HTTP_200_OK)
+        response = Response(
+            {"access": tokens["access"], "refresh": tokens["refresh"]},
+            status=status.HTTP_200_OK,
+        )
         set_refresh_cookie(response, tokens["refresh"])
         return response
 

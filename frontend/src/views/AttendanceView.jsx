@@ -29,7 +29,7 @@ import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
-export const AttendanceView = ({ selectedProjectId }) => {
+export const AttendanceView = ({ selectedProjectId, navState, onClearNavState }) => {
   const { role } = useAuth();
 
   // Active top-level tab: 'mark' | 'night' | 'present_absent' | 'history' | 'report' | 'salary' | 'holiday'
@@ -117,6 +117,38 @@ export const AttendanceView = ({ selectedProjectId }) => {
     }
   }, [selectedProjectId]);
 
+  // Handle direct navigation state (e.g. from Project Details -> Site Attendance History)
+  useEffect(() => {
+    if (navState) {
+      const targetSubTab = navState.subTab || 'history';
+      const targetProjectId = navState.projectId ? String(navState.projectId) : 'ALL';
+      const targetFromDate = navState.fromDate || '2020-01-01';
+      const targetToDate = navState.toDate || todayStr;
+
+      setActiveTab(targetSubTab);
+      setHistProjectFilter(targetProjectId);
+      setMarkProjectFilter(targetProjectId);
+      setPaProjectFilter(targetProjectId);
+      setRepProjectFilter(targetProjectId);
+      setHistFromDate(targetFromDate);
+      setHistToDate(targetToDate);
+      setHistEmpFilter('ALL');
+
+      if (targetSubTab === 'history') {
+        fetchHistory({
+          fromDate: targetFromDate,
+          toDate: targetToDate,
+          project: targetProjectId,
+          employee: 'ALL',
+        });
+      }
+
+      if (onClearNavState) {
+        onClearNavState();
+      }
+    }
+  }, [navState]);
+
   // Initial load - Fetch ALL employees without pagination cutoff
   const loadInitialData = async () => {
     setLoading(true);
@@ -186,6 +218,7 @@ export const AttendanceView = ({ selectedProjectId }) => {
           recordId: r.id,
           project: r.project,
           projectName: r.project_name,
+          is_locked: r.is_locked,
         };
       });
       setTodayRecordsMap(map);
@@ -224,12 +257,17 @@ export const AttendanceView = ({ selectedProjectId }) => {
   }, [paDate, paProjectFilter, activeTab]);
 
   // Fetch for Tab 3 (ATTENDANCE & HISTORY)
-  const fetchHistory = async () => {
+  const fetchHistory = async (overrideParams = null) => {
     setHistLoading(true);
     try {
-      const params = { date_from: histFromDate, date_to: histToDate, page_size: 1000 };
-      if (histProjectFilter !== 'ALL') params.project = histProjectFilter;
-      if (histEmpFilter !== 'ALL') params.employee = histEmpFilter;
+      const fDate = overrideParams?.fromDate ?? histFromDate;
+      const tDate = overrideParams?.toDate ?? histToDate;
+      const pFilter = overrideParams?.project ?? histProjectFilter;
+      const eFilter = overrideParams?.employee ?? histEmpFilter;
+
+      const params = { date_from: fDate, date_to: tDate, page_size: 1000 };
+      if (pFilter !== 'ALL') params.project = pFilter;
+      if (eFilter !== 'ALL') params.employee = eFilter;
 
       const [listRes, sumRes] = await Promise.all([
         api.attendance.list(params),
@@ -526,16 +564,18 @@ export const AttendanceView = ({ selectedProjectId }) => {
 
     const targetProjId = markProjectFilter !== 'ALL' ? Number(markProjectFilter) : null;
 
-    // STRICT VALIDATION: Once attendance is marked for an employee on a day, it cannot be changed for that same day!
-    const unmarkedTargets = targets.filter((emp) => !todayRecordsMap[emp.id]);
-    const alreadyMarkedCount = targets.length - unmarkedTargets.length;
+    // Allow updating attendance unless record is locked
+    const validTargets = targets.filter((emp) => {
+      const rec = todayRecordsMap[emp.id];
+      return !rec?.is_locked;
+    });
 
-    if (unmarkedTargets.length === 0) {
-      toast.error('Attendance has already been marked for the selected worker(s) on this date and cannot be changed.');
+    if (validTargets.length === 0) {
+      toast.error('Attendance for selected worker(s) on this date is locked and cannot be changed.');
       return;
     }
 
-    const recordsPayload = unmarkedTargets.map((emp) => {
+    const recordsPayload = validTargets.map((emp) => {
       const cfg = workerConfigs[emp.id] || {};
       const statusToApply =
         targetStatus === 'PRESENT' && cfg.shift === 'HALF' ? 'HALF_DAY' : targetStatus;
@@ -561,9 +601,8 @@ export const AttendanceView = ({ selectedProjectId }) => {
           ? ` for site ${projects.find((p) => String(p.id) === String(markProjectFilter))?.name || ''}`
           : '';
 
-      const unchangedNote = alreadyMarkedCount > 0 ? ` (${alreadyMarkedCount} already marked workers kept unchanged)` : '';
       toast.success(
-        `Successfully marked ${unmarkedTargets.length} workers as ${targetStatus}${siteName} for ${markDate}!${unchangedNote}`
+        `Successfully updated attendance for ${validTargets.length} worker(s) as ${targetStatus}${siteName} for ${markDate}!`
       );
       setSelectedEmpIds(new Set());
       await fetchMarkDateRecords();
@@ -604,13 +643,19 @@ export const AttendanceView = ({ selectedProjectId }) => {
   };
 
   // TAB 2: Present and Absent calculations
+  const activeEmployeeIds = useMemo(() => new Set(employees.map((e) => e.id)), [employees]);
+
   const presentRecords = useMemo(() => {
-    return paRecords.filter((r) => r.status === 'PRESENT' || r.status === 'HALF_DAY');
-  }, [paRecords]);
+    if (employees.length === 0) return [];
+    return paRecords.filter(
+      (r) => (r.status === 'PRESENT' || r.status === 'HALF_DAY') && activeEmployeeIds.has(r.employee)
+    );
+  }, [paRecords, employees, activeEmployeeIds]);
 
   const absentRecords = useMemo(() => {
-    return paRecords.filter((r) => r.status === 'ABSENT');
-  }, [paRecords]);
+    if (employees.length === 0) return [];
+    return paRecords.filter((r) => r.status === 'ABSENT' && activeEmployeeIds.has(r.employee));
+  }, [paRecords, employees, activeEmployeeIds]);
 
   const activePaList = useMemo(() => {
     const baseList = paFilterType === 'PRESENT' ? presentRecords : absentRecords;
@@ -1139,13 +1184,39 @@ export const AttendanceView = ({ selectedProjectId }) => {
                           {/* Action Column */}
                           <td className="py-4 px-4 text-center">
                             {markedInfo ? (
-                              <span
-                                title="Attendance recorded and locked for this date"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200"
-                              >
-                                <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
-                                Locked
-                              </span>
+                              <div className="flex items-center justify-center gap-1.5">
+                                {markedInfo.is_locked ? (
+                                  <span
+                                    title="Attendance recorded and locked for this date"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200"
+                                  >
+                                    <Lock size={12} className="text-emerald-600 shrink-0" />
+                                    Locked
+                                  </span>
+                                ) : (
+                                  <>
+                                    <span
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                        markedInfo.status === 'PRESENT'
+                                          ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                                          : markedInfo.status === 'HALF_DAY'
+                                          ? 'text-blue-700 bg-blue-50 border border-blue-200'
+                                          : 'text-rose-700 bg-rose-50 border border-rose-200'
+                                      }`}
+                                    >
+                                      {markedInfo.status === 'HALF_DAY' ? 'HALF DAY' : markedInfo.status}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteAttendance(markedInfo.recordId, emp.full_name)}
+                                      className="p-1 text-gray-400 hover:text-rose-600 rounded-md hover:bg-rose-50 transition-colors cursor-pointer"
+                                      title="Remove attendance record"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-gray-300 text-xs font-semibold">—</span>
                             )}
@@ -1347,13 +1418,25 @@ export const AttendanceView = ({ selectedProjectId }) => {
 
                         {/* Actions */}
                         <td className="py-4 px-5 text-right">
-                          <span
-                            className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 font-bold text-[11px] px-2.5 py-1 rounded-lg"
-                            title="Attendance record is permanent and locked for this day"
-                          >
-                            <Lock size={12} className="text-emerald-600" />
-                            <span>Locked</span>
-                          </span>
+                          {r.is_locked ? (
+                            <span
+                              className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 font-bold text-[11px] px-2.5 py-1 rounded-lg"
+                              title="Attendance record is permanent and locked for this day"
+                            >
+                              <Lock size={12} className="text-emerald-600" />
+                              <span>Locked</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAttendance(r.id, r.employee_name)}
+                              className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 font-bold text-xs px-2.5 py-1 rounded-lg hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                              title="Delete or clear this attendance record"
+                            >
+                              <Trash2 size={13} />
+                              <span>Delete</span>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1589,13 +1672,25 @@ export const AttendanceView = ({ selectedProjectId }) => {
 
                         {/* Actions */}
                         <td className="py-4 px-5 text-right">
-                          <span
-                            className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 font-bold text-[11px] px-2.5 py-1 rounded-lg"
-                            title="Attendance is locked once marked"
-                          >
-                            <Lock size={12} className="text-emerald-600" />
-                            <span>Locked</span>
-                          </span>
+                          {r.is_locked ? (
+                            <span
+                              className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 font-bold text-[11px] px-2.5 py-1 rounded-lg"
+                              title="Attendance is locked and approved"
+                            >
+                              <Lock size={12} className="text-emerald-600" />
+                              <span>Locked</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAttendance(r.id, r.employee_name)}
+                              className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 font-bold text-xs px-2.5 py-1 rounded-lg hover:bg-rose-50 border border-rose-200 transition-colors cursor-pointer"
+                              title="Delete or clear this attendance record"
+                            >
+                              <Trash2 size={13} />
+                              <span>Delete</span>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

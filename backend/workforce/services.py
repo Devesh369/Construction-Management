@@ -351,12 +351,28 @@ def record_employee_payment(
             approved_at=timezone.now(),
         )
 
+    from django.db.models import Sum
+
+    from attendance.models import Attendance, AttendanceStatus
+
+    att_qs = Attendance.objects.filter(
+        employee=employee,
+        date__gte=run.period_start,
+        date__lte=run.period_end,
+    )
+    p_count = att_qs.filter(status=AttendanceStatus.PRESENT).count()
+    h_count = att_qs.filter(status=AttendanceStatus.HALF_DAY).count()
+    ot_sum = att_qs.aggregate(total=Sum("ot_hours"))["total"] or Decimal("0.00")
+
     v_num = next_number(employee.organization, key="VOUCH", prefix="VOU-", width=5)
     voucher = PayrollVoucher.objects.create(
         organization=employee.organization,
         run=run,
         employee=employee,
         voucher_number=v_num,
+        days_present=p_count,
+        half_days=h_count,
+        ot_hours=ot_sum,
         daily_rate_used=employee.daily_rate,
         basic_pay=amount,
         gross_pay=amount,

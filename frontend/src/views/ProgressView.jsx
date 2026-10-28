@@ -25,7 +25,7 @@ import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils/cn';
 
-export const ProgressView = ({ selectedProjectId }) => {
+export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) => {
   const { user, role } = useAuth();
 
   // Navigation mode: 'create' (New Work Entry form) | 'entries' (Work Entries table) | 'department' (Department Entries)
@@ -80,9 +80,37 @@ export const ProgressView = ({ selectedProjectId }) => {
   useEffect(() => {
     if (selectedProjectId) {
       setEntryProject(selectedProjectId);
-      setFilterProject(selectedProjectId);
+      setFilterProject(String(selectedProjectId));
     }
   }, [selectedProjectId]);
+
+  // Handle direct navigation state (e.g. from Project Details -> Daily Reports (DPR))
+  useEffect(() => {
+    if (navState) {
+      const targetView = navState.view || 'entries';
+      const targetProjectId = navState.projectId ? String(navState.projectId) : 'all';
+      const targetFromDate = navState.fromDate || '2020-01-01';
+      const targetToDate = navState.toDate || new Date().toISOString().split('T')[0];
+
+      setCurrentView(targetView);
+      if (targetProjectId !== 'all') {
+        setEntryProject(Number(targetProjectId) || targetProjectId);
+      }
+      setFilterProject(targetProjectId);
+      setFilterFromDate(targetFromDate);
+      setFilterToDate(targetToDate);
+
+      fetchWorkEntries({
+        fromDate: targetFromDate,
+        toDate: targetToDate,
+        project: targetProjectId,
+      });
+
+      if (onClearNavState) {
+        onClearNavState();
+      }
+    }
+  }, [navState]);
 
   // Load present employees whenever date or project changes in New Entry form
   useEffect(() => {
@@ -113,13 +141,17 @@ export const ProgressView = ({ selectedProjectId }) => {
   }, [entryDate, entryProject]);
 
   // Load work entries list
-  const fetchWorkEntries = async () => {
+  const fetchWorkEntries = async (overrideParams = null) => {
     setLoading(true);
     try {
+      const fDate = overrideParams?.fromDate !== undefined ? overrideParams.fromDate : filterFromDate;
+      const tDate = overrideParams?.toDate !== undefined ? overrideParams.toDate : filterToDate;
+      const pFilter = overrideParams?.project !== undefined ? overrideParams.project : filterProject;
+
       const params = {};
-      if (filterFromDate) params.from_date = filterFromDate;
-      if (filterToDate) params.to_date = filterToDate;
-      if (filterProject && filterProject !== 'all') params.project = filterProject;
+      if (fDate) params.from_date = fDate;
+      if (tDate) params.to_date = tDate;
+      if (pFilter && pFilter !== 'all') params.project = pFilter;
 
       const res = await api.workEntries.list(params);
       const list = Array.isArray(res) ? res : res.results || [];
@@ -336,6 +368,63 @@ export const ProgressView = ({ selectedProjectId }) => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* SUB-NAVIGATION TABS                                                       */}
+      {/* ========================================================================= */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <button
+          type="button"
+          onClick={() => setCurrentView('create')}
+          className={cn(
+            "px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer",
+            currentView === 'create'
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-emerald-500/30"
+          )}
+        >
+          <Sparkles size={14} />
+          <span>New Work Entry</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCurrentView('entries')}
+          className={cn(
+            "px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer",
+            currentView === 'entries'
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-emerald-500/30"
+          )}
+        >
+          <ClipboardList size={14} />
+          <span>View Work Entries</span>
+          <span
+            className={cn(
+              "ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-black",
+              currentView === 'entries'
+                ? "bg-white/20 text-white"
+                : "bg-[var(--bg-secondary)] text-[var(--text-muted)]"
+            )}
+          >
+            {workEntries.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCurrentView('department')}
+          className={cn(
+            "px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer",
+            currentView === 'department'
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
+              : "bg-[var(--bg-primary)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-emerald-500/30"
+          )}
+        >
+          <FileText size={14} />
+          <span>Department Breakdown</span>
+        </button>
       </div>
 
       {/* ========================================================================= */}
@@ -624,14 +713,14 @@ export const ProgressView = ({ selectedProjectId }) => {
                   Project
                 </label>
                 <select
-                  value={filterProject}
+                  value={String(filterProject)}
                   onChange={(e) => setFilterProject(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-default)] text-[var(--text-primary)] text-xs font-semibold focus:outline-none cursor-pointer"
                 >
                   <option value="all">All Projects</option>
                   {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
+                    <option key={p.id} value={String(p.id)}>
+                      {p.name} {p.code ? `(${p.code})` : ''}
                     </option>
                   ))}
                 </select>

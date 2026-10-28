@@ -476,10 +476,13 @@ export const WorkforceView = () => {
             {/* Phone & Email */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <Input
+                id="add-employee-phone"
+                name="employee_mobile_number"
+                autoComplete="off"
                 label="Mobile Number (10 digits) *"
                 type="tel"
                 maxLength={10}
-                placeholder="9876543210"
+                placeholder="e.g. 9820012345"
                 value={addForm.phone}
                 onChange={(e) =>
                   setAddForm({ ...addForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })
@@ -537,10 +540,13 @@ export const WorkforceView = () => {
             {/* Emergency Contact & Joining Date */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <Input
+                id="add-employee-emergency-contact"
+                name="employee_emergency_contact"
+                autoComplete="off"
                 label="Emergency Contact (10 digits)"
                 type="tel"
                 maxLength={10}
-                placeholder="9876543210"
+                placeholder="e.g. 9811122233 (optional)"
                 value={addForm.emergency_contact}
                 onChange={(e) =>
                   setAddForm({
@@ -1243,10 +1249,13 @@ export const WorkforceView = () => {
                 onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
               />
               <Input
+                id="edit-employee-phone"
+                name="edit_employee_phone"
+                autoComplete="off"
                 label="Mobile Number (10 digits) *"
                 type="tel"
                 maxLength={10}
-                placeholder="9876543210"
+                placeholder="e.g. 9820012345"
                 value={editForm.phone}
                 onChange={(e) =>
                   setEditForm({ ...editForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })
@@ -1296,10 +1305,13 @@ export const WorkforceView = () => {
                 onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
               />
               <Input
+                id="edit-employee-emergency-contact"
+                name="edit_employee_emergency"
+                autoComplete="off"
                 label="Emergency Contact (10 digits)"
                 type="tel"
                 maxLength={10}
-                placeholder="9876543210"
+                placeholder="e.g. 9811122233 (optional)"
                 value={editForm.emergency_contact}
                 onChange={(e) =>
                   setEditForm({

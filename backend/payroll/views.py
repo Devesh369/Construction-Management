@@ -3,16 +3,23 @@ Views for Worker Advances, Payroll Runs, and Itemized Vouchers.
 Single source of truth for UC-23, UC-24, and UC-25.
 """
 
+from decimal import Decimal
+
+from django.db import transaction
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from audit.constants import AuditAction
+from audit.services import log_action
 from core.permissions import IsTenantUser, roles_required
 from core.roles import Role
 from core.views import ProjectScopedMixin, TenantViewSet
-from payroll.models import Advance, PayrollRun, PayrollVoucher
+from ledger.services import reverse_entry
+from payroll.models import Advance, AdvanceStatus, PayrollRun, PayrollRunStatus, PayrollVoucher
 from payroll.serializers import (
     AdvanceSerializer,
     PayrollRunCreateSerializer,
@@ -31,6 +38,7 @@ from payroll.services import (
     update_voucher,
 )
 from projects.models import Project
+from projects.services import update_spend
 
 
 class AdvanceViewSet(ProjectScopedMixin, TenantViewSet):
@@ -60,6 +68,42 @@ class AdvanceViewSet(ProjectScopedMixin, TenantViewSet):
         serializer.is_valid(raise_exception=True)
         adv = record_advance(user=request.user, data=serializer.validated_data, request=request)
         return Response(self.get_serializer(adv).data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete an advance, reversing ledger entries and deleting linked UPAD payments."""
+        adv = self.get_object()
+        user = request.user
+        org = adv.organization
+
+        with transaction.atomic():
+            if adv.journal_entry:
+                try:
+                    from ledger.services import reverse_entry
+
+                    reverse_entry(adv.journal_entry, user=user, reason=f"Deleted Advance #{adv.id}")
+                except Exception:
+                    pass
+
+            import re
+
+            from payroll.models import Payment
+
+            Payment.objects.filter(
+                organization=org,
+                description__contains=f"[ADV-{adv.id}]",
+            ).delete()
+
+            if adv.reason:
+                m = re.search(r"\[UPAD-(\d+)\]", adv.reason)
+                if m:
+                    Payment.objects.filter(
+                        id=int(m.group(1)),
+                        organization=org,
+                    ).delete()
+
+            adv.delete()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PayrollRunViewSet(ProjectScopedMixin, TenantViewSet):
@@ -134,6 +178,85 @@ class PayrollRunViewSet(ProjectScopedMixin, TenantViewSet):
         reason = request.data.get("reason", "")
         cancelled = cancel_run(run, user=request.user, reason=reason, request=request)
         return Response(PayrollRunSerializer(cancelled).data)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete a payroll run (DRAFT or APPROVED), reversing ledger postings and restoring advances."""
+        run = self.get_object()
+        user = request.user
+
+        if user.role not in [Role.ORG_ADMIN, Role.ACCOUNTANT, Role.PROJECT_MANAGER]:
+            return Response(
+                {
+                    "error": {
+                        "code": "permission_denied",
+                        "message": "You do not have permission to delete this payroll run.",
+                    }
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        with transaction.atomic():
+            if run.journal_entry:
+                try:
+                    reverse_entry(
+                        run.journal_entry, user=user, reason=f"Deleted Payroll Run #{run.id}"
+                    )
+                except Exception:
+                    pass
+
+            if run.total_gross > Decimal("0.00") and run.status == PayrollRunStatus.APPROVED:
+                try:
+                    update_spend(
+                        run.project, -run.total_gross, reason=f"Deleted Payroll Run #{run.id}"
+                    )
+                except Exception:
+                    pass
+
+            if run.status == PayrollRunStatus.APPROVED:
+                for voucher in run.vouchers.all():
+                    deduction_to_restore = voucher.advances_deducted
+                    if deduction_to_restore > Decimal("0.00"):
+                        adjusted_advances = Advance.objects.filter(
+                            employee=voucher.employee,
+                            adjusted_amount__gt=Decimal("0.00"),
+                        ).order_by("-advance_date", "-id")
+
+                        for adv in adjusted_advances:
+                            if deduction_to_restore <= Decimal("0.00"):
+                                break
+                            already_adjusted = adv.adjusted_amount
+                            if already_adjusted <= deduction_to_restore:
+                                adv.adjusted_amount = Decimal("0.00")
+                                adv.status = AdvanceStatus.OPEN
+                                deduction_to_restore -= already_adjusted
+                            else:
+                                adv.adjusted_amount -= deduction_to_restore
+                                adv.status = AdvanceStatus.PARTIALLY_ADJUSTED
+                                deduction_to_restore = Decimal("0.00")
+                            adv.save(update_fields=["adjusted_amount", "status", "updated_at"])
+
+            try:
+                log_action(
+                    user=user,
+                    action=AuditAction.PAYROLL_CANCELLED,
+                    obj=run,
+                    changes={"deleted": True, "previous_status": run.status},
+                    request=request,
+                    organization=run.organization,
+                )
+            except Exception:
+                pass
+
+            now = timezone.now()
+            for v in run.vouchers.all():
+                v.deleted_at = now
+                v.save(update_fields=["deleted_at", "updated_at"])
+
+            run.status = PayrollRunStatus.CANCELLED
+            run.deleted_at = now
+            run.save(update_fields=["status", "deleted_at", "updated_at"])
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PayrollVoucherViewSet(TenantViewSet):

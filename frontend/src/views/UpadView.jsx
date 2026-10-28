@@ -20,6 +20,7 @@ import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils/cn';
+import { Modal } from '../components/ui/Modal';
 
 export const UpadView = ({ selectedProjectId }) => {
   const { user, role } = useAuth();
@@ -844,32 +845,58 @@ export const UpadView = ({ selectedProjectId }) => {
       {/* ========================================================================= */}
       {/* 4. MODAL: + PROCESS UPAD                                                  */}
       {/* ========================================================================= */}
-      {isProcessModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-scale-in">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <Plus size={20} strokeWidth={3} />
-                </div>
-                <div>
-                  <h3 className="text-base font-black uppercase tracking-tight text-slate-900 dark:text-white">
-                    Process Upad Advance
-                  </h3>
-                  <p className="text-xs text-slate-400 font-medium">
-                    Disburse worker advance and update financial ledgers
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setIsProcessModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center cursor-pointer transition-colors"
+      <Modal
+        isOpen={isProcessModalOpen}
+        onClose={() => setIsProcessModalOpen(false)}
+        title="Process Upad Advance"
+        subtitle="Disburse worker advance and update financial ledgers"
+        size="lg"
+      >
+        <form onSubmit={handleProcessUpad} className="space-y-4">
+          {/* Row 1: Employee & Project Selection */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Employee *
+              </label>
+              <select
+                required
+                value={processForm.employee_id}
+                onChange={(e) =>
+                  setProcessForm({ ...processForm, employee_id: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
-                <X size={16} />
-              </button>
+                <option value="">Select Employee...</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.full_name} ({emp.role || 'Worker'})
+                  </option>
+                ))}
+              </select>
             </div>
+
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Project *
+              </label>
+              <select
+                required
+                value={processForm.project_id}
+                onChange={(e) =>
+                  setProcessForm({ ...processForm, project_id: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">Select Project...</option>
+                {projects.map((proj) => (
+                  <option key={proj.id} value={proj.id}>
+                    {proj.name} {proj.code ? `(${proj.code})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
             {/* Modal Form */}
             <form onSubmit={handleProcessUpad}>
@@ -950,6 +977,7 @@ export const UpadView = ({ selectedProjectId }) => {
                     ))}
                   </select>
                 </div>
+              )}
 
                 {/* Amount & Date */}
                 <div className="grid grid-cols-2 gap-3">
@@ -985,56 +1013,9 @@ export const UpadView = ({ selectedProjectId }) => {
                     />
                   </div>
                 </div>
-
-                {/* Status & Payment Method */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                      Payment Method *
-                    </label>
-                    <select
-                      value={processForm.method}
-                      onChange={(e) =>
-                        setProcessForm({ ...processForm, method: e.target.value })
-                      }
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
-                    >
-                      <option value="upi">UPI / Online</option>
-                      <option value="cash">Cash</option>
-                      <option value="bank_transfer">Bank Transfer (NEFT/RTGS)</option>
-                      <option value="cheque">Cheque</option>
-                    </select>
-                  </div>
-
-                  {canChangeStatus ? (
-                    <div>
-                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                        Status *
-                      </label>
-                      <select
-                        value={processForm.status || 'paid'}
-                        onChange={(e) =>
-                          setProcessForm({ ...processForm, status: e.target.value })
-                        }
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
-                      >
-                        <option value="paid">Confirmed / Paid</option>
-                        <option value="pending">Pending Approval</option>
-                      </select>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-400 mb-1.5">
-                        Status
-                      </label>
-                      <input
-                        type="text"
-                        disabled
-                        value="Pending Approval"
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-500 text-xs font-semibold"
-                      />
-                    </div>
-                  )}
+                <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60 shadow-xs">
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Current Balance</div>
+                  <div className="text-xs font-black text-indigo-600 dark:text-indigo-400 mt-0.5">₹{empCurrentBalance}</div>
                 </div>
 
                 {/* Description */}
@@ -1054,28 +1035,138 @@ export const UpadView = ({ selectedProjectId }) => {
                 </div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/40">
-                <button
-                  type="button"
-                  onClick={() => setIsProcessModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/20 disabled:opacity-50"
-                >
-                  <Plus size={14} strokeWidth={3} />
-                  <span>{submitting ? 'Processing...' : 'Disburse Upad'}</span>
-                </button>
-              </div>
-            </form>
+              {enteredUpad > 0 && (
+                <div className="text-[11px] text-center font-semibold text-slate-600 dark:text-slate-300 pt-1 border-t border-blue-100 dark:border-slate-700/60">
+                  Taking <span className="font-bold text-blue-600 dark:text-blue-400">₹{enteredUpad}</span> Upad from daily wage ₹{empDailyWage || empCurrentBalance} leaves <span className="font-black text-emerald-600 dark:text-emerald-400">₹{projectedBalance}</span> remaining salary.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Row 2: Amount & Date */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Amount (₹) *
+              </label>
+              <input
+                type="number"
+                required
+                min="1"
+                step="1"
+                placeholder="e.g. 2000"
+                value={processForm.amount}
+                onChange={(e) =>
+                  setProcessForm({ ...processForm, amount: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Date *
+              </label>
+              <input
+                type="date"
+                required
+                max={todayStr}
+                value={processForm.date}
+                onChange={(e) =>
+                  setProcessForm({ ...processForm, date: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
           </div>
-        </div>
-      )}
+
+          {/* Row 3: Payment Method & Status */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Payment Method *
+              </label>
+              <select
+                value={processForm.method}
+                onChange={(e) =>
+                  setProcessForm({ ...processForm, method: e.target.value })
+                }
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="upi">UPI / Online</option>
+                <option value="cash">Cash</option>
+                <option value="bank_transfer">Bank Transfer (NEFT/RTGS)</option>
+                <option value="cheque">Cheque</option>
+              </select>
+            </div>
+
+            {canChangeStatus ? (
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                  Status *
+                </label>
+                <select
+                  value={processForm.status || 'paid'}
+                  onChange={(e) =>
+                    setProcessForm({ ...processForm, status: e.target.value })
+                  }
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="paid">Confirmed / Paid</option>
+                  <option value="pending">Pending Approval</option>
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                  Status
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value="Pending Approval"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-500 text-xs font-semibold"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Row 4: Description */}
+          <div>
+            <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              Description / Purpose
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. GPY કર્યા દવા માટે, કાળું એ લીધા"
+              value={processForm.description}
+              onChange={(e) =>
+                setProcessForm({ ...processForm, description: e.target.value })
+              }
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+
+          {/* Modal Footer */}
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsProcessModalOpen(false)}
+              className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/20 disabled:opacity-50"
+            >
+              <Plus size={14} strokeWidth={3} />
+              <span>{submitting ? 'Processing...' : 'Disburse Upad'}</span>
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

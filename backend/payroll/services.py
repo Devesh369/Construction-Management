@@ -17,7 +17,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from accounts.models import User
-from attendance.models import Attendance
+from attendance.models import Attendance, AttendanceStatus
 from attendance.services import AttendanceSummary, get_attendance_summary
 from audit.constants import AuditAction
 from audit.services import log_action
@@ -28,6 +28,7 @@ from ledger.services import post_journal_entry, reverse_entry
 from payroll.models import (
     Advance,
     AdvanceStatus,
+    Payment,
     PayrollRun,
     PayrollRunStatus,
     PayrollVoucher,
@@ -174,6 +175,29 @@ def record_advance(user: User, data: dict, request=None) -> Advance:
         )
         adv.journal_entry = entry
         adv.save(update_fields=["journal_entry"])
+
+        # Sync to UPAD Payment module so it is visible in both UPAD and Workforce
+        try:
+            from payroll.models import Payment, PaymentLifecycleStatus, PaymentType
+
+            Payment.objects.create(
+                organization=org,
+                employee=adv.employee,
+                project=adv.project,
+                type=PaymentType.ADVANCE,
+                base_salary=adv.employee.daily_rate or Decimal("0.00"),
+                amount=amount,
+                method=payment_mode.lower(),
+                status=PaymentLifecycleStatus.PAID,
+                date_from=adv.advance_date,
+                date_to=adv.advance_date,
+                description=f"[ADV-{adv.id}] {adv.reason}".strip(),
+                created_by=user,
+                processed_by=user,
+                processed_at=timezone.now(),
+            )
+        except Exception:
+            pass
 
         log_action(
             user=user,
@@ -741,23 +765,92 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
     elements.append(meta_table)
     elements.append(Spacer(1, 14))
 
-    # 3. Attendance Summary Table
+    # 3. Attendance & Upad Summary Table
+    att_qs = Attendance.objects.filter(
+        employee=emp,
+        date__gte=run.period_start,
+        date__lte=run.period_end,
+    )
+    att_present = att_qs.filter(status=AttendanceStatus.PRESENT).count()
+    att_half = att_qs.filter(status=AttendanceStatus.HALF_DAY).count()
+    total_absents = att_qs.filter(status=AttendanceStatus.ABSENT).count()
+
+    full_days = voucher.days_present if voucher.days_present > 0 else att_present
+    half_days = voucher.half_days if voucher.half_days > 0 else att_half
+
+    if half_days > 0:
+        eff_present = full_days + (Decimal("0.5") * half_days)
+        total_present_str = f"{eff_present:g}"
+    else:
+        total_present_str = str(full_days)
+
+    if voucher.days_present == 0 and att_present > 0:
+        voucher.days_present = att_present
+        voucher.half_days = att_half
+        voucher.save(update_fields=["days_present", "half_days"])
+
+    # Calculate Upad (Advance) for employee
+    period_adv = Advance.objects.filter(
+        employee=emp,
+        advance_date__gte=run.period_start,
+        advance_date__lte=run.period_end,
+    )
+    period_adv_sum = sum((a.amount for a in period_adv), Decimal("0.00"))
+
+    period_pmts = Payment.objects.filter(
+        employee=emp,
+        type="advance",
+        status="paid",
+        created_at__date__gte=run.period_start,
+        created_at__date__lte=run.period_end,
+    )
+    period_pmt_sum = sum((p.amount for p in period_pmts), Decimal("0.00"))
+
+    open_adv_sum = sum(
+        (
+            a.remaining_amount
+            for a in Advance.objects.filter(
+                employee=emp,
+                status__in=[AdvanceStatus.OPEN, AdvanceStatus.PARTIALLY_ADJUSTED],
+            )
+        ),
+        Decimal("0.00"),
+    )
+
+    upad_amount = voucher.advances_deducted
+    if upad_amount <= Decimal("0.00"):
+        upad_amount = max(period_adv_sum, period_pmt_sum, open_adv_sum)
+    else:
+        upad_amount = max(upad_amount, period_adv_sum)
+
+    upad_str = f"Rs. {upad_amount:.2f}"
+
     att_data = [
-        ["Days Present", "Half Days", "Paid Holidays", "Overtime (Hrs)"],
         [
-            str(voucher.days_present),
-            str(voucher.half_days),
-            str(voucher.paid_holidays),
+            "Total Present",
+            "Full Days",
+            "Half Days",
+            "Total Absents",
+            "Upad (Advance)",
+            "Overtime (Hrs)",
+        ],
+        [
+            total_present_str,
+            str(full_days),
+            str(half_days),
+            str(total_absents),
+            upad_str,
             f"{voucher.ot_hours} hrs",
         ],
     ]
-    att_table = Table(att_data, colWidths=[135, 135, 135, 135])
+    att_table = Table(att_data, colWidths=[90, 85, 85, 95, 105, 80])
     att_table.setStyle(
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EDF2F7")),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#CBD5E0")),
                 ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
                 ("PADDING", (0, 0), (-1, -1), 5),
@@ -775,7 +868,7 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
         [
             "Basic Wage",
             f"{voucher.daily_rate_used}/day",
-            f"{voucher.days_present + (0.5 * voucher.half_days) + voucher.paid_holidays} units",
+            f"{full_days + (Decimal('0.5') * half_days) + voucher.paid_holidays} units",
             f"{voucher.basic_pay}",
         ],
         [
@@ -785,7 +878,7 @@ def generate_voucher_pdf(voucher: PayrollVoucher) -> bytes:
             f"{voucher.ot_pay}",
         ],
         ["TOTAL GROSS WAGE", "", "", f"{voucher.gross_pay}"],
-        ["Less: Worker Advance Deduction", "", "", f"-{voucher.advances_deducted}"],
+        ["Less: Upad / Advance Deduction", "", "", f"-{voucher.advances_deducted}"],
         ["NET AMOUNT PAYABLE", "", "", f"{voucher.net_pay}"],
     ]
     wage_table = Table(wage_data, colWidths=[200, 110, 110, 120])
