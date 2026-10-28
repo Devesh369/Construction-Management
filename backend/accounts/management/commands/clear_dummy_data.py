@@ -35,17 +35,28 @@ class Command(BaseCommand):
         self.stdout.write(self.style.MIGRATE_HEADING("=== Removing All Dummy Data ==="))
 
         with connection.cursor() as cursor:
-            # Query all application tables excluding internal django metadata
-            cursor.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public';")
-            excluded = {"django_migrations", "django_content_type", "auth_permission"}
-            tables = [row[0] for row in cursor.fetchall() if row[0] not in excluded]
+            excluded = {"django_migrations", "django_content_type", "auth_permission", "sqlite_sequence"}
+            if connection.vendor == "postgresql":
+                # Query all application tables excluding internal django metadata
+                cursor.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public';")
+                tables = [row[0] for row in cursor.fetchall() if row[0] not in excluded]
 
-            if tables:
-                truncate_sql = f'TRUNCATE TABLE {", ".join(f"{t}" for t in tables)} CASCADE;'
-                cursor.execute(truncate_sql)
-                self.stdout.write(
-                    self.style.SUCCESS(f"Successfully truncated {len(tables)} application tables.")
-                )
+                if tables:
+                    truncate_sql = f'TRUNCATE TABLE {", ".join(f"{t}" for t in tables)} CASCADE;'
+                    cursor.execute(truncate_sql)
+                    self.stdout.write(
+                        self.style.SUCCESS(f"Successfully truncated {len(tables)} application tables.")
+                    )
+            elif connection.vendor == "sqlite":
+                tables = [t for t in connection.introspection.table_names() if t not in excluded]
+                if tables:
+                    cursor.execute("PRAGMA foreign_keys = OFF;")
+                    for t in tables:
+                        cursor.execute(f'DELETE FROM "{t}";')
+                    cursor.execute("PRAGMA foreign_keys = ON;")
+                    self.stdout.write(
+                        self.style.SUCCESS(f"Successfully cleared {len(tables)} application tables.")
+                    )
 
         # Clear uploaded media files if any exist
         media_root = Path(settings.MEDIA_ROOT)

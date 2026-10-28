@@ -36,16 +36,41 @@ DROP FUNCTION IF EXISTS prevent_immutable_record_modification();
 """
 
 
+SQLITE_TRIGGER_SQL = """
+CREATE TRIGGER IF NOT EXISTS trg_journalentry_immutable_upd BEFORE UPDATE ON ledger_journalentry BEGIN SELECT RAISE(ABORT, 'Modifications prohibited on immutable table'); END;
+CREATE TRIGGER IF NOT EXISTS trg_journalentry_immutable_del BEFORE DELETE ON ledger_journalentry BEGIN SELECT RAISE(ABORT, 'Deletions prohibited on immutable table'); END;
+CREATE TRIGGER IF NOT EXISTS trg_journalline_immutable_upd BEFORE UPDATE ON ledger_journalline BEGIN SELECT RAISE(ABORT, 'Modifications prohibited on immutable table'); END;
+CREATE TRIGGER IF NOT EXISTS trg_journalline_immutable_del BEFORE DELETE ON ledger_journalline BEGIN SELECT RAISE(ABORT, 'Deletions prohibited on immutable table'); END;
+CREATE TRIGGER IF NOT EXISTS trg_auditlog_immutable_upd BEFORE UPDATE ON audit_auditlog BEGIN SELECT RAISE(ABORT, 'Modifications prohibited on immutable table'); END;
+CREATE TRIGGER IF NOT EXISTS trg_auditlog_immutable_del BEFORE DELETE ON audit_auditlog BEGIN SELECT RAISE(ABORT, 'Deletions prohibited on immutable table'); END;
+"""
+
+SQLITE_REVERSE_SQL = """
+DROP TRIGGER IF EXISTS trg_journalentry_immutable_upd;
+DROP TRIGGER IF EXISTS trg_journalentry_immutable_del;
+DROP TRIGGER IF EXISTS trg_journalline_immutable_upd;
+DROP TRIGGER IF EXISTS trg_journalline_immutable_del;
+DROP TRIGGER IF EXISTS trg_auditlog_immutable_upd;
+DROP TRIGGER IF EXISTS trg_auditlog_immutable_del;
+"""
+
+
 def apply_triggers(apps, schema_editor):
     if schema_editor.connection.vendor == "postgresql":
         with schema_editor.connection.cursor() as cursor:
             cursor.execute(TRIGGER_SQL)
+    elif schema_editor.connection.vendor == "sqlite":
+        with schema_editor.connection.cursor() as cursor:
+            cursor.executescript(SQLITE_TRIGGER_SQL)
 
 
 def reverse_triggers(apps, schema_editor):
     if schema_editor.connection.vendor == "postgresql":
         with schema_editor.connection.cursor() as cursor:
             cursor.execute(REVERSE_SQL)
+    elif schema_editor.connection.vendor == "sqlite":
+        with schema_editor.connection.cursor() as cursor:
+            cursor.executescript(SQLITE_REVERSE_SQL)
 
 
 class Migration(migrations.Migration):

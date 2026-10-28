@@ -92,8 +92,8 @@ ASGI_APPLICATION = "config.asgi.application"
 # Custom User Model (Must be set before the first migration)
 AUTH_USER_MODEL = "accounts.User"
 
-# Database Configuration (PostgreSQL by default, or SQLite when USE_SQLITE=True)
-USE_SQLITE = env.bool("USE_SQLITE", default=False)
+# Database Configuration (Migrated to SQLite as default)
+USE_SQLITE = env.bool("USE_SQLITE", default=True)
 
 if USE_SQLITE:
     DATABASES = {
@@ -103,6 +103,7 @@ if USE_SQLITE:
         }
     }
 else:
+    # PostgreSQL Configuration (Previous):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
