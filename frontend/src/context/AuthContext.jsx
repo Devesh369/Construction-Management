@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api, getToken, setToken, getStoredUser, setStoredUser } from '../api/client';
+import { api, getToken, setToken, getRefreshToken, setRefreshToken, getStoredUser, setStoredUser } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -29,8 +29,20 @@ export const AuthProvider = ({ children }) => {
         setUser(me);
         setStoredUser(me);
       } catch (err) {
+        try {
+          const refreshed = await api.auth.refresh();
+          if (refreshed?.access) {
+            const me = await api.auth.me();
+            setUser(me);
+            setStoredUser(me);
+            return;
+          }
+        } catch (refreshErr) {
+          console.warn('Session refresh failed:', refreshErr);
+        }
         console.warn('Session expired, clearing token', err);
         setToken(null);
+        setRefreshToken(null);
         setUser(null);
         setStoredUser(null);
       } finally {
@@ -45,6 +57,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.auth.login(email, password);
       setToken(res.access);
+      if (res.refresh) setRefreshToken(res.refresh);
       setUser(res.user);
       setStoredUser(res.user);
       return res.user;
@@ -58,6 +71,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.auth.setupAdmin(data);
       setToken(res.access);
+      if (res.refresh) setRefreshToken(res.refresh);
       setUser(res.user);
       setStoredUser(res.user);
       return res.user;
@@ -66,10 +80,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    setStoredUser(null);
+  const logout = async () => {
+    try {
+      await api.auth.logout();
+    } catch {
+      // ignore
+    } finally {
+      setToken(null);
+      setRefreshToken(null);
+      setUser(null);
+      setStoredUser(null);
+    }
   };
 
   const quickLogin = async (demoKey) => {

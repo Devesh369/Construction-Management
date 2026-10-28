@@ -319,12 +319,38 @@ class UpadPaymentService:
         # 1. Reverse attendance settlements
         AttendanceSettlementService.reverse_settlement_by_payment_id(str(payment.id))
 
-        # 2. Delete linked Advance if created by this payment
+        # 2. Delete linked Advance if created by or linked to this payment
+        import re
         from payroll.models import Advance
-        Advance.objects.filter(
+        from ledger.services import reverse_entry
+
+        adv_ids = []
+        if payment.description:
+            m = re.search(r"\[ADV-(\d+)\]", payment.description)
+            if m:
+                adv_ids.append(int(m.group(1)))
+
+        adv_to_delete = Advance.objects.filter(id__in=adv_ids, organization=organization)
+        adv_to_delete = adv_to_delete | Advance.objects.filter(
             organization=organization,
             reason__contains=f"[UPAD-{payment.id}]",
-        ).delete()
+        )
+
+        if payment.type in [PaymentType.ADVANCE, PaymentType.WITHDRAWAL]:
+            adv_to_delete = adv_to_delete | Advance.objects.filter(
+                organization=organization,
+                employee=payment.employee,
+                amount=payment.amount,
+                status="OPEN",
+            )
+
+        for adv in adv_to_delete.distinct():
+            if adv.journal_entry:
+                try:
+                    reverse_entry(adv.journal_entry, user=user, reason=f"Deleted Payment #{payment.id}")
+                except Exception:
+                    pass
+            adv.delete()
 
         # 3. Delete linked transaction
         if payment.transaction_id:

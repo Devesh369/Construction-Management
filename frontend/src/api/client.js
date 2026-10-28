@@ -12,6 +12,12 @@ export const setToken = (token) => {
   else localStorage.removeItem('cmp_access_token');
 };
 
+export const getRefreshToken = () => localStorage.getItem('cmp_refresh_token') || '';
+export const setRefreshToken = (token) => {
+  if (token) localStorage.setItem('cmp_refresh_token', token);
+  else localStorage.removeItem('cmp_refresh_token');
+};
+
 export const getStoredUser = () => {
   try {
     const raw = localStorage.getItem('cmp_user');
@@ -48,10 +54,41 @@ export async function apiRequest(endpoint, options = {}) {
     options.body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     ...options,
     headers,
+    credentials: 'include',
   });
+
+  // Automatic silent token refresh if access token expired
+  if (response.status === 401 && !options._retry && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      try {
+        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh: refreshToken }),
+          credentials: 'include',
+        });
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          if (refreshData?.access) {
+            setToken(refreshData.access);
+            if (refreshData?.refresh) setRefreshToken(refreshData.refresh);
+            headers['Authorization'] = `Bearer ${refreshData.access}`;
+            response = await fetch(url, {
+              ...options,
+              headers,
+              credentials: 'include',
+            });
+          }
+        }
+      } catch (refreshErr) {
+        console.warn('Auto refresh failed:', refreshErr);
+      }
+    }
+  }
 
   // Handle binary blob responses (PDF / Excel downloads)
   const contentType = response.headers.get('content-type') || '';
@@ -126,16 +163,49 @@ export const api = {
   // Authentication & Session
   auth: {
     getSystemStatus: () => apiRequest('/auth/system-status'),
-    setupAdmin: (data) =>
-      apiRequest('/auth/setup-admin', {
+    setupAdmin: async (data) => {
+      const res = await apiRequest('/auth/setup-admin', {
         method: 'POST',
         body: data,
-      }),
-    login: (email, password) =>
-      apiRequest('/auth/login', {
+      });
+      if (res?.access) setToken(res.access);
+      if (res?.refresh) setRefreshToken(res.refresh);
+      return res;
+    },
+    login: async (email, password) => {
+      const res = await apiRequest('/auth/login', {
         method: 'POST',
         body: { email, password },
-      }),
+      });
+      if (res?.access) setToken(res.access);
+      if (res?.refresh) setRefreshToken(res.refresh);
+      return res;
+    },
+    refresh: async () => {
+      const refreshToken = getRefreshToken();
+      const res = await apiRequest('/auth/refresh', {
+        method: 'POST',
+        body: refreshToken ? { refresh: refreshToken } : {},
+      });
+      if (res?.access) setToken(res.access);
+      if (res?.refresh) setRefreshToken(res.refresh);
+      return res;
+    },
+    logout: async () => {
+      try {
+        const refreshToken = getRefreshToken();
+        await apiRequest('/auth/logout', {
+          method: 'POST',
+          body: refreshToken ? { refresh: refreshToken } : {},
+        });
+      } catch (err) {
+        console.warn('Logout API error:', err);
+      } finally {
+        setToken(null);
+        setRefreshToken(null);
+        setStoredUser(null);
+      }
+    },
     me: () => apiRequest('/users/me'),
     updateMe: (data) =>
       apiRequest('/users/me', {
@@ -366,6 +436,10 @@ export const api = {
         method: 'POST',
         body: {},
       }),
+    deleteRun: (id) =>
+      apiRequest(`/payroll/runs/${id}`, {
+        method: 'DELETE',
+      }),
     markVoucherPaid: (id, ref) =>
       apiRequest(`/payroll/vouchers/${id}/mark-paid`, {
         method: 'POST',
@@ -381,6 +455,7 @@ export const api = {
         method: 'POST',
         body: data,
       }),
+    deleteAdvance: (id) => apiRequest(`/payroll/advances/${id}`, { method: 'DELETE' }),
   },
 
   // Double-Entry Ledger

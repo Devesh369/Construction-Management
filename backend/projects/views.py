@@ -31,7 +31,7 @@ class ProjectViewSet(ProjectScopedMixin, TenantViewSet):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Project.objects.none()
-        qs = super().get_queryset()
+        qs = super().get_queryset().order_by("created_at", "id")
         return self.filter_project_scope(qs).prefetch_related("budget_categories")
 
     def create(self, request, *args, **kwargs):

@@ -533,7 +533,14 @@ export const ProjectDetailModal = ({
                     size="sm"
                     onClick={() => {
                       onClose();
-                      onNavigate && onNavigate('attendance');
+                      if (onNavigate && project) {
+                        onNavigate('attendance', {
+                          subTab: 'history',
+                          projectId: project.id,
+                          fromDate: '2020-01-01',
+                          toDate: new Date().toISOString().split('T')[0],
+                        });
+                      }
                     }}
                   >
                     Site Attendance
@@ -543,7 +550,14 @@ export const ProjectDetailModal = ({
                     size="sm"
                     onClick={() => {
                       onClose();
-                      onNavigate && onNavigate('progress');
+                      if (onNavigate && project) {
+                        onNavigate('progress', {
+                          view: 'entries',
+                          projectId: project.id,
+                          fromDate: '2020-01-01',
+                          toDate: new Date().toISOString().split('T')[0],
+                        });
+                      }
                     }}
                   >
                     Daily Reports (DPR)
@@ -553,7 +567,9 @@ export const ProjectDetailModal = ({
                     size="sm"
                     onClick={() => {
                       onClose();
-                      onNavigate && onNavigate('expenses');
+                      if (onNavigate && project) {
+                        onNavigate('expenses', { projectId: project.id });
+                      }
                     }}
                   >
                     Site Expenses

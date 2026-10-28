@@ -233,6 +233,21 @@ def get_employee_financials(employee: Employee) -> dict:
     total_pagar = max(voucher_pagar, attendance_pagar)
 
     # 2. Total Upad (Advances):
+    # Auto-cleanup orphaned advances whose linked payment was soft-deleted
+    import re
+    from django.db.models import Q
+    for adv in employee.advances.filter(deleted_at__isnull=True):
+        upad_id_match = re.search(r"\[UPAD-(\d+)\]", adv.reason) if adv.reason else None
+        linked_del = Payment.all_objects.filter(
+            organization=employee.organization,
+            deleted_at__isnull=False,
+        ).filter(
+            Q(description__contains=f"[ADV-{adv.id}]")
+            | (Q(id=int(upad_id_match.group(1))) if upad_id_match else Q(pk__in=[]))
+        ).exists()
+        if linked_del:
+            adv.delete()
+
     adv_sum = (
         employee.advances.filter(deleted_at__isnull=True).aggregate(total=Sum("amount"))["total"]
         or Decimal("0.00")
@@ -357,12 +372,27 @@ def record_employee_payment(
             approved_at=timezone.now(),
         )
 
+    from attendance.models import Attendance, AttendanceStatus
+    from django.db.models import Sum
+
+    att_qs = Attendance.objects.filter(
+        employee=employee,
+        date__gte=run.period_start,
+        date__lte=run.period_end,
+    )
+    p_count = att_qs.filter(status=AttendanceStatus.PRESENT).count()
+    h_count = att_qs.filter(status=AttendanceStatus.HALF_DAY).count()
+    ot_sum = att_qs.aggregate(total=Sum("ot_hours"))["total"] or Decimal("0.00")
+
     v_num = next_number(employee.organization, key="VOUCH", prefix="VOU-", width=5)
     voucher = PayrollVoucher.objects.create(
         organization=employee.organization,
         run=run,
         employee=employee,
         voucher_number=v_num,
+        days_present=p_count,
+        half_days=h_count,
+        ot_hours=ot_sum,
         daily_rate_used=employee.daily_rate,
         basic_pay=amount,
         gross_pay=amount,
@@ -432,6 +462,7 @@ def record_employee_upad(
 
 def get_employee_payment_history(employee: Employee) -> list:
     """Return chronological ledger of all advances (upad) and payments."""
+    from payroll.models import Payment
     history = []
 
     for v in employee.payroll_vouchers.filter(status="PAID").order_by("-paid_at", "-id"):
@@ -446,7 +477,19 @@ def get_employee_payment_history(employee: Employee) -> list:
             "notes": v.payment_reference or "Direct wage payout",
         })
 
-    for a in employee.advances.all().order_by("-advance_date", "-id"):
+    for a in employee.advances.filter(deleted_at__isnull=True).order_by("-advance_date", "-id"):
+        # Skip if linked UPAD payment was soft-deleted
+        import re
+        from django.db.models import Q
+        upad_id_match = re.search(r"\[UPAD-(\d+)\]", a.reason) if a.reason else None
+        if Payment.all_objects.filter(
+            organization=employee.organization,
+            deleted_at__isnull=False,
+        ).filter(
+            Q(description__contains=f"[ADV-{a.id}]")
+            | (Q(id=int(upad_id_match.group(1))) if upad_id_match else Q(pk__in=[]))
+        ).exists():
+            continue
         history.append({
             "id": f"upad-{a.id}",
             "type": "UPAD",

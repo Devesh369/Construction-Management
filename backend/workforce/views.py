@@ -65,6 +65,14 @@ class EmployeeViewSet(TenantViewSet):
         )
         return Response(self.get_serializer(updated).data)
 
+    def perform_destroy(self, instance):
+        from django.utils import timezone
+        now = timezone.now()
+        instance.deleted_at = now
+        instance.save(update_fields=["deleted_at", "updated_at"])
+        from attendance.models import Attendance
+        Attendance.objects.filter(employee=instance).update(deleted_at=now, updated_at=now)
+
     def destroy(self, request, *args, **kwargs):
         if request.user.role != Role.ORG_ADMIN:
             return Response(

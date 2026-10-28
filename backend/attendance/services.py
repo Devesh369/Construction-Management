@@ -402,8 +402,8 @@ def batch_mark_attendance(
             ).first()
 
             if existing:
-                if existing.deleted_at is None:
-                    # Once attendance is marked for any employee, it cannot be changed for that same day.
+                if existing.is_locked:
+                    # Once approved and locked, attendance cannot be modified
                     skipped_count += 1
                     continue
                 else:
@@ -415,7 +415,7 @@ def batch_mark_attendance(
                     existing.marked_by = marked_user
                     existing.project = item_proj
                     existing.save()
-                    created_count += 1
+                    updated_count += 1
             else:
                 Attendance.objects.create(
                     organization=org,

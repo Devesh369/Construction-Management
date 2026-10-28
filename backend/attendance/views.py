@@ -57,6 +57,7 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         qs = self.filter_project_scope(qs).select_related("employee", "project")
+        qs = qs.filter(employee__deleted_at__isnull=True)
 
         date_from = self.request.query_params.get("date_from") or self.request.query_params.get("from_date")
         date_to = self.request.query_params.get("date_to") or self.request.query_params.get("to_date")

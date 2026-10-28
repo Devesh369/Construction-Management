@@ -64,7 +64,7 @@ class Project(TenantModel):
     )
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering = ["created_at", "id"]
         unique_together = ("organization", "code")
         indexes = [
             models.Index(fields=["organization", "status"]),
