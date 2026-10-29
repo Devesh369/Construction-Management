@@ -56,11 +56,13 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
   }
 
   const projects = data?.projects || [];
-  const presentTrend = data?.attendance_trend?.map((t) => t.present) || [18, 22, 25, 24, 28, 30, data?.workers_on_site_today || 32];
-  const absentTrend = data?.attendance_trend?.map((t) => t.absent) || [4, 5, 3, 6, 2, 4, 3];
-  const absentToday = data?.attendance_trend?.length
+  const presentTrend = data?.attendance_trend?.map((t) => t.present) || [0, 0, 0, 0, 0, 0, data?.workers_on_site_today ?? 0];
+  const absentTrend = data?.attendance_trend?.map((t) => t.absent) || [0, 0, 0, 0, 0, 0, data?.workers_absent_today ?? 0];
+  const absentToday = data?.workers_absent_today !== undefined
+    ? data.workers_absent_today
+    : data?.attendance_trend?.length
     ? data.attendance_trend[data.attendance_trend.length - 1].absent
-    : Math.max(0, (data?.active_workers || 0) - (data?.workers_on_site_today || 0));
+    : 0;
 
   // 6 Distinct Stat Cards with individual relevant background images
   const statCards = [
@@ -109,7 +111,7 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
     {
       id: 'present',
       title: "Today's Present",
-      value: data?.workers_on_site_today || 0,
+      value: data?.workers_on_site_today ?? 0,
       subtext: 'GPS verified on-site check-ins',
       gradient: 'from-amber-500 to-orange-600',
       shadow: 'hover:shadow-amber-500/20',

@@ -82,6 +82,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const acceptInvite = async (data) => {
+    setLoading(true);
+    try {
+      const res = await api.auth.acceptInvite(data.token, data.password, data.name, data.email);
+      if (res?.access) setToken(res.access);
+      if (res?.refresh) setRefreshToken(res.refresh);
+      if (res?.user) {
+        setUser(res.user);
+        setStoredUser(res.user);
+      }
+      return res?.user || res;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
       await api.auth.logout();
@@ -107,16 +123,22 @@ export const AuthProvider = ({ children }) => {
     user?.role === 'SITE_MANAGER';
   const isFinance = user?.role === 'ORG_ADMIN' || user?.role === 'ACCOUNTANT';
 
+  const activeOrg =
+    typeof user?.organization === 'object' && user?.organization !== null
+      ? user.organization
+      : { id: Number(user?.organization || 10), name: 'My Workspace' };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         role: user?.role,
-        organization: user?.organization,
+        organization: activeOrg,
         isAuthenticated: Boolean(user),
         loading,
         login,
         setupAdmin,
+        acceptInvite,
         logout,
         quickLogin,
         isAdminOrPM,

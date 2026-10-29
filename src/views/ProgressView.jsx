@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calendar,
   FolderKanban,
@@ -25,7 +25,7 @@ import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils/cn';
 
-export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) => {
+export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onNavigateToAttendance }) => {
   const { user, role } = useAuth();
 
   // Navigation mode: 'create' (New Work Entry form) | 'entries' (Work Entries table) | 'department' (Department Entries)
@@ -122,9 +122,20 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
           date: entryDate,
           project: entryProject || '',
         });
-        const emps = res.employees || [];
+        const emps = Array.isArray(res) ? res : (res.employees || res.results || []);
         setPresentEmployees(emps);
-        setPresentByRole(res.by_role || {});
+
+        let byRole = res.by_role;
+        if (!byRole || Object.keys(byRole).length === 0) {
+          byRole = {};
+          emps.forEach((emp) => {
+            const roleName = emp.role || emp.trade || 'Worker';
+            if (!byRole[roleName]) byRole[roleName] = [];
+            byRole[roleName].push(emp);
+          });
+        }
+        setPresentByRole(byRole);
+
         // By default, select all present employees
         setSelectedEmployeeIds(emps.map((e) => e.id));
       } catch (err) {
@@ -184,6 +195,21 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
     }
   };
 
+
+  // Compute roles grouping for present employees
+  const computedByRole = useMemo(() => {
+    if (presentByRole && Object.keys(presentByRole).length > 0) {
+      return presentByRole;
+    }
+    const grouped = {};
+    presentEmployees.forEach((emp) => {
+      const roleName = emp.role || emp.trade || 'Worker';
+      if (!grouped[roleName]) grouped[roleName] = [];
+      grouped[roleName].push(emp);
+    });
+    return grouped;
+  }, [presentByRole, presentEmployees]);
+
   // Submit New Work Entry (Pressing OK button - matches Screenshot 1)
   const handleCreateWorkEntry = async (e) => {
     if (e) e.preventDefault();
@@ -237,7 +263,7 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
         date: entry.date,
         project: entry.project,
       });
-      const presentList = res.employees || [];
+      const presentList = Array.isArray(res) ? res : (res.employees || res.results || []);
 
       // Combine with entry.employee_details in case some were assigned
       const combined = [...presentList];
@@ -516,17 +542,27 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
                     Fetching attendance records for {entryDate}...
                   </div>
                 ) : presentEmployees.length === 0 ? (
-                  <div className="p-8 rounded-xl bg-[var(--bg-secondary)]/50 border border-[var(--border-default)] text-center">
+                  <div className="p-8 rounded-xl bg-[var(--bg-secondary)]/50 border border-[var(--border-default)] text-center space-y-3">
                     <p className="text-xs font-semibold text-[var(--text-muted)]">
-                      No employees present on this date
+                      No employees marked present for this project on {entryDate}
                     </p>
-                    <p className="text-[11px] text-[var(--text-muted)] opacity-75 mt-1">
-                      Mark worker attendance in the Attendance module to allocate them to this task.
+                    <p className="text-[11px] text-[var(--text-muted)] opacity-75 max-w-md mx-auto">
+                      Mark worker attendance in the Attendance module for {entryDate} to allocate them to this task.
                     </p>
+                    {onNavigateToAttendance && (
+                      <button
+                        type="button"
+                        onClick={onNavigateToAttendance}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                      >
+                        <Calendar size={14} />
+                        <span>Go to Attendance Module</span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3.5 p-4 rounded-xl bg-[var(--bg-secondary)]/60 border border-[var(--border-default)]">
-                    {Object.entries(presentByRole).map(([roleName, emps]) => (
+                    {Object.entries(computedByRole).map(([roleName, emps]) => (
                       <div key={roleName} className="space-y-2">
                         <div className="text-[11px] font-black uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

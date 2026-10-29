@@ -135,8 +135,16 @@ const AppContent = () => {
     );
   }
 
-  if (!isAuthenticated) {
-    return <LoginView />;
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const isExplicitAuthView =
+    urlParams &&
+    (urlParams.has('invite') ||
+      urlParams.get('mode') === 'setup' ||
+      urlParams.get('mode') === 'login' ||
+      urlParams.get('register') === 'true');
+
+  if (!isAuthenticated || isExplicitAuthView) {
+    return <LoginView isAlreadyAuthenticated={isAuthenticated} />;
   }
 
   const isDark = theme === 'dark';
@@ -205,6 +213,7 @@ const AppContent = () => {
                   selectedProjectId={selectedProjectId}
                   navState={progressNavState}
                   onClearNavState={() => setProgressNavState(null)}
+                  onNavigateToAttendance={() => setActiveTab('attendance')}
                 />
               )}
               {activeTab === 'expenses' && (

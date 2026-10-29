@@ -101,10 +101,10 @@ export const api = {
         method: 'PATCH',
         body: data,
       }),
-    acceptInvite: (token, password, name) =>
+    acceptInvite: (token, password, name, email) =>
       apiRequest('/auth/accept-invite', {
         method: 'POST',
-        body: { token, password, name },
+        body: { token, password, name, email },
       }),
     getTeam: () => apiRequest('/users'),
   },

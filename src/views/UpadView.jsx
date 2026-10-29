@@ -137,31 +137,34 @@ export const UpadView = ({ selectedProjectId }) => {
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
       // Date filter
-      const pDate = p.date_from || p.date_to || (p.created_at ? p.created_at.split('T')[0] : '');
-      if (fromDate && pDate && pDate < fromDate) return false;
-      if (toDate && pDate && pDate > toDate) return false;
+      const rawDate = p.payment_date || p.date_from || p.date_to || p.advance_date || p.date || (p.created_at ? p.created_at.split('T')[0] : '');
+      const cleanDate = rawDate ? String(rawDate).split('T')[0] : '';
+      if (fromDate && cleanDate && cleanDate < fromDate) return false;
+      if (toDate && cleanDate && cleanDate > toDate) return false;
 
       // Employee filter
+      const empId = p.employee || p.employee_id;
       if (isEmployeeLabour) {
         if (
-          p.employee !== currentEmpId &&
-          p.employee_id !== currentEmpId &&
-          String(p.employee) !== String(currentEmpId)
+          empId !== currentEmpId &&
+          String(empId) !== String(currentEmpId)
         ) {
           return false;
         }
-      } else if (employeeFilter !== 'all' && String(p.employee) !== String(employeeFilter)) {
+      } else if (employeeFilter !== 'all' && String(empId) !== String(employeeFilter)) {
         return false;
       }
 
       // Project filter
-      if (projectFilter !== 'all' && String(p.project) !== String(projectFilter)) {
+      const empObj = employees.find((e) => String(e.id) === String(empId));
+      const projId = p.project || p.project_id || empObj?.primary_project;
+      if (projectFilter !== 'all' && String(projId) !== String(projectFilter)) {
         return false;
       }
 
       return true;
     });
-  }, [payments, fromDate, toDate, employeeFilter, projectFilter, isEmployeeLabour, currentEmpId]);
+  }, [payments, employees, fromDate, toDate, employeeFilter, projectFilter, isEmployeeLabour, currentEmpId]);
 
   // Summary Metrics (Matches Screenshot 1 & 2) - Dynamically recalculates when status changes
   const paidTotal = useMemo(() => {
@@ -198,20 +201,28 @@ export const UpadView = ({ selectedProjectId }) => {
   };
 
   // Format date: DD/MM/YYYY
-  const formatDateDMY = (dateStr) => {
-    if (!dateStr) return '—';
+  const formatDateDMY = (dateVal) => {
+    if (!dateVal) return '—';
     try {
-      const parts = dateStr.split('-');
-      if (parts.length === 3) {
-        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      const str = String(dateVal).trim();
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+        return str;
       }
-      const d = new Date(dateStr);
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
+      const ymdMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (ymdMatch) {
+        const [, year, month, day] = ymdMatch;
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      }
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+      return str;
     } catch {
-      return dateStr;
+      return dateVal;
     }
   };
 
@@ -233,16 +244,28 @@ export const UpadView = ({ selectedProjectId }) => {
 
     setSubmitting(true);
     try {
+      const selectedProject = projects.find((pr) => String(pr.id) === String(processForm.project_id));
       await api.payments.create({
         employee: Number(processForm.employee_id),
-        project: processForm.project_id ? Number(processForm.project_id) : null,
+        employee_id: Number(processForm.employee_id),
+        employee_name: selectedEmp?.full_name || 'Worker',
+        employee_code: selectedEmp?.employee_code || '',
+        project: processForm.project_id ? Number(processForm.project_id) : (selectedEmp?.primary_project || null),
+        project_id: processForm.project_id ? Number(processForm.project_id) : (selectedEmp?.primary_project || null),
+        project_name: selectedProject?.name || 'General Site',
         amount: Number(processForm.amount),
         method: processForm.method,
+        payment_mode: (processForm.method || 'cash').toUpperCase(),
         type: processForm.type || 'advance',
+        payment_type: (processForm.type || 'advance').toUpperCase(),
         status: processForm.status || 'paid',
+        payment_date: processForm.date,
         date_from: processForm.date,
         date_to: processForm.date,
+        date: processForm.date,
+        advance_date: processForm.date,
         description: processForm.description.trim() || 'Upad advance payment',
+        notes: processForm.description.trim() || 'Upad advance payment',
       });
 
       toast.success('Upad payment recorded successfully!');
@@ -298,8 +321,18 @@ export const UpadView = ({ selectedProjectId }) => {
     }
     const headers = ['NO,DATE,EMPLOYEE,PROJECT,AMOUNT,PAID_BY,PAYMENT_METHOD,STATUS,DESCRIPTION'];
     const rows = filteredPayments.map((p, idx) => {
-      const pDate = p.date_from || p.date_to || '';
-      return `${idx + 1},"${pDate}","${p.employee_name || ''}","${p.project_name || ''}",${p.amount},"${p.approved_by_admin_name || user?.name || 'NARESH'}","${p.method}","${p.status}","${p.description || ''}"`;
+      const empId = p.employee || p.employee_id;
+      const empObj = employees.find((e) => String(e.id) === String(empId));
+      const projId = p.project || p.project_id || empObj?.primary_project;
+      const projObj = projects.find((pr) => String(pr.id) === String(projId));
+
+      const empName = p.employee_name || empObj?.full_name || empObj?.name || 'Worker';
+      const projName = p.project_name || projObj?.name || projObj?.title || 'General Site';
+      const rawDate = p.payment_date || p.date_from || p.date_to || p.advance_date || p.date || (p.created_at ? p.created_at.split('T')[0] : '');
+      const formattedDate = formatDateDMY(rawDate);
+      const method = (p.method || p.payment_mode || 'UPI').toUpperCase();
+
+      return `${idx + 1},"${formattedDate}","${empName}","${projName}",${p.amount},"${p.approved_by_admin_name || user?.name || 'NARESH'}","${method}","${p.status || 'PAID'}","${p.description || p.notes || ''}"`;
     });
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -554,8 +587,17 @@ export const UpadView = ({ selectedProjectId }) => {
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                     {paginatedPayments.map((p) => {
-                      const pDate = p.date_from || p.date_to || '';
-                      const isCash = p.method?.toLowerCase() === 'cash';
+                      const empId = p.employee || p.employee_id;
+                      const empObj = employees.find((e) => String(e.id) === String(empId));
+                      const projId = p.project || p.project_id || empObj?.primary_project;
+                      const projObj = projects.find((pr) => String(pr.id) === String(projId));
+
+                      const empName = p.employee_name || empObj?.full_name || empObj?.name || 'Worker';
+                      const projName = p.project_name || projObj?.name || projObj?.title || 'General Site';
+                      const rawDate = p.payment_date || p.date_from || p.date_to || p.advance_date || p.date || (p.created_at ? p.created_at.split('T')[0] : '');
+                      const formattedDate = formatDateDMY(rawDate);
+                      const isCash = (p.method || p.payment_mode || '').toLowerCase() === 'cash';
+
                       return (
                         <tr
                           key={p.id}
@@ -563,15 +605,19 @@ export const UpadView = ({ selectedProjectId }) => {
                         >
                           <td className="py-3.5 px-5">
                             <div className="font-bold text-slate-900 dark:text-white">
-                              {p.employee_name || 'Worker'}
+                              {empName}
                             </div>
-                            {(() => {
-                              const empObj = employees.find((e) => String(e.id) === String(p.employee));
-                              if (!empObj) return null;
+                            {empObj && (() => {
                               const wage = Number(empObj.daily_rate || empObj.wage_rate || 0);
                               const bal = Number(empObj.balance ?? (empObj.financials?.balance ?? wage));
                               return (
                                 <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5">
+                                  {empObj.employee_code && (
+                                    <>
+                                      <span className="font-mono text-slate-400">{empObj.employee_code}</span>
+                                      <span>•</span>
+                                    </>
+                                  )}
                                   <span>₹{wage}/d</span>
                                   <span>•</span>
                                   <span className="text-emerald-600 dark:text-emerald-400 font-bold">Remain: ₹{bal}</span>
@@ -582,11 +628,11 @@ export const UpadView = ({ selectedProjectId }) => {
                           <td className="py-3.5 px-5 font-semibold text-slate-700 dark:text-slate-300">
                             <span className="inline-flex items-center gap-1.5">
                               <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                              {p.project_name || 'General Site'}
+                              {projName}
                             </span>
                           </td>
                           <td className="py-3.5 px-5 font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                            {formatDateDMY(pDate)}
+                            {formattedDate}
                           </td>
                           <td className="py-3.5 px-5 font-black text-slate-900 dark:text-white">
                             {formatCurrency(p.amount)}
@@ -784,27 +830,37 @@ export const UpadView = ({ selectedProjectId }) => {
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                     {paginatedPayments.map((p) => {
-                      const pDate = p.date_from || p.date_to || '';
-                      const isCash = p.method?.toLowerCase() === 'cash';
+                      const empId = p.employee || p.employee_id;
+                      const empObj = employees.find((e) => String(e.id) === String(empId));
+                      const projId = p.project || p.project_id || empObj?.primary_project;
+                      const projObj = projects.find((pr) => String(pr.id) === String(projId));
+
+                      const empName = p.employee_name || empObj?.full_name || empObj?.name || 'Worker';
+                      const projName = p.project_name || projObj?.name || projObj?.title || 'General Site';
+                      const rawDate = p.payment_date || p.date_from || p.date_to || p.advance_date || p.date || (p.created_at ? p.created_at.split('T')[0] : '');
+                      const formattedDate = formatDateDMY(rawDate);
+                      const isCash = (p.method || p.payment_mode || '').toLowerCase() === 'cash';
+
                       return (
                         <tr
                           key={p.id}
                           className="hover:bg-white/60 dark:hover:bg-slate-800/40 transition-colors"
                         >
                           <td className="py-3.5 px-5 font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                            {formatDateDMY(pDate)}
+                            {formattedDate}
                           </td>
                           <td className="py-3.5 px-6">
                             <div className="font-bold text-slate-900 dark:text-white text-xs">
-                              {p.employee_name || 'Worker'}
+                              {empName}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
                               <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase">
                                 {isCash ? 'CASH' : 'UPI'}
                               </span>
-                              {(() => {
-                                const empObj = employees.find((e) => String(e.id) === String(p.employee));
-                                if (!empObj) return null;
+                              <span className="text-[10px] text-slate-400 font-semibold">
+                                • {projName}
+                              </span>
+                              {empObj && (() => {
                                 const wage = Number(empObj.daily_rate || empObj.wage_rate || 0);
                                 const bal = Number(empObj.balance ?? (empObj.financials?.balance ?? wage));
                                 return (

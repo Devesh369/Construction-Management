@@ -119,6 +119,112 @@ function loadDB() {
     }
   }
 
+  // Multi-tenant database self-healing & migrations
+  if (Array.isArray(target.organizations)) {
+    let org10 = target.organizations.find((o) => Number(o.id) === 10);
+    if (!org10) {
+      org10 = clone(INITIAL_DB.organizations[0]);
+      target.organizations.unshift(org10);
+      dbChanged = true;
+    } else if (target.organizations.length === 1 && org10.name !== 'BuildSphere org.') {
+      const customName = org10.name;
+      org10.name = 'BuildSphere org.';
+      const newOrg = {
+        ...clone(org10),
+        id: 11,
+        name: customName,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      target.organizations.push(newOrg);
+      dbChanged = true;
+    }
+  }
+
+  // Self-heal & enrich payments table with employee_name, project_name, and normalized dates
+  if (!target.payments) {
+    target.payments = clone(INITIAL_DB.payments || []);
+    dbChanged = true;
+  }
+  if (Array.isArray(target.payments) && Array.isArray(target.employees)) {
+    target.payments.forEach((p) => {
+      const empId = Number(p.employee || p.employee_id || 0);
+      const emp = target.employees.find((e) => Number(e.id) === empId);
+      const projId = Number(p.project || p.project_id || emp?.primary_project || target.projects?.[0]?.id || 29);
+      const proj = (target.projects || []).find((pr) => Number(pr.id) === projId);
+
+      if (!p.employee_name && emp) {
+        p.employee_name = emp.full_name;
+        dbChanged = true;
+      }
+      if (!p.employee_code && emp) {
+        p.employee_code = emp.employee_code || '';
+        dbChanged = true;
+      }
+      if (!p.project) {
+        p.project = projId;
+        dbChanged = true;
+      }
+      if (!p.project_name && proj) {
+        p.project_name = proj.name;
+        dbChanged = true;
+      }
+      const rawDate = p.payment_date || p.date_from || p.date_to || p.date || p.advance_date || (p.created_at ? p.created_at.split('T')[0] : '');
+      if (rawDate) {
+        const norm = String(rawDate).split('T')[0];
+        if (!p.payment_date) { p.payment_date = norm; dbChanged = true; }
+        if (!p.date_from) { p.date_from = norm; dbChanged = true; }
+        if (!p.date_to) { p.date_to = norm; dbChanged = true; }
+        if (!p.date) { p.date = norm; dbChanged = true; }
+        if (!p.advance_date) { p.advance_date = norm; dbChanged = true; }
+      }
+    });
+  }
+
+  const demoEmails = new Set([
+    'devesh@buildsphere.com',
+    'darshil@buildsphere.com',
+    'viren@buildsphere.com',
+    'san@gmail.com',
+    'admin@alpha.test',
+    'pm@alpha.test',
+    'sitemanager@buildsphere.com',
+    'eng@alpha.test',
+    'sup1@alpha.test',
+    'acc@alpha.test',
+    'admin@beta.test',
+    'labour@buildsphere.com',
+  ]);
+
+  if (Array.isArray(target.users)) {
+    target.users.forEach((u) => {
+      if (u.role === 'ORG_ADMIN' && u.email && !demoEmails.has(u.email.toLowerCase())) {
+        const uOrgId = Number(u.organization?.id || u.organization || 10);
+        if (uOrgId === 10) {
+          let customOrg = target.organizations.find((o) => Number(o.id) !== 10);
+          if (!customOrg) {
+            const nextOrgId = Math.max(10, ...target.organizations.map((o) => Number(o.id || 0))) + 1;
+            customOrg = {
+              id: nextOrgId,
+              name: u.company_name || `${u.name}'s Organization`,
+              currency: 'INR',
+              workday_hours: '8.00',
+              half_day_hours: '4.00',
+              overtime_after_hours: '8.00',
+              expense_approval_limit: '1000.00',
+              is_active: true,
+              created_at: u.created_at || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+            target.organizations.push(customOrg);
+          }
+          u.organization = customOrg.id;
+          dbChanged = true;
+        }
+      }
+    });
+  }
+
   if (typeof window !== 'undefined' && window.localStorage) {
     if (dbChanged || !localStorage.getItem(STORAGE_KEY)) {
       saveDB(target);
@@ -161,15 +267,17 @@ function nextId(collection) {
   return max + 1;
 }
 
-// Helper to identify active user session for audit trail
-function getActorFromSession(overrideUser = null) {
+// Helper to identify active user session for audit trail and multi-tenant isolation
+export function getActorFromSession(overrideUser = null) {
   if (overrideUser && (overrideUser.email || overrideUser.role)) {
+    const rawOrg = overrideUser.organization;
+    const orgId = typeof rawOrg === 'object' && rawOrg !== null ? rawOrg.id : rawOrg;
     return {
       id: overrideUser.id || 1,
       email: overrideUser.email || 'user@buildsphere.com',
       name: overrideUser.name || overrideUser.email || 'User',
       role: overrideUser.role || 'UNKNOWN',
-      organization: overrideUser.organization?.id || overrideUser.organization || 10,
+      organization: Number(orgId || 10),
     };
   }
   if (typeof window !== 'undefined' && window.localStorage) {
@@ -178,12 +286,14 @@ function getActorFromSession(overrideUser = null) {
       if (raw) {
         const u = JSON.parse(raw);
         if (u && (u.email || u.role)) {
+          const rawOrg = u.organization;
+          const orgId = typeof rawOrg === 'object' && rawOrg !== null ? rawOrg.id : rawOrg;
           return {
             id: u.id || 1,
             email: u.email || 'user@buildsphere.com',
             name: u.name || u.email || 'User',
             role: u.role || 'UNKNOWN',
-            organization: u.organization?.id || u.organization || 10,
+            organization: Number(orgId || 10),
           };
         }
       }
@@ -196,6 +306,73 @@ function getActorFromSession(overrideUser = null) {
     role: 'ORG_ADMIN',
     organization: 10,
   };
+}
+
+export function getCurrentOrgId(overrideUser = null) {
+  const actor = getActorFromSession(overrideUser);
+  return Number(actor.organization || 10);
+}
+
+export function getOrgById(targetDb, orgId) {
+  const targetId = Number(orgId || 10);
+  const found = (targetDb.organizations || []).find((o) => Number(o.id) === targetId);
+  if (found) return found;
+  return {
+    id: targetId,
+    name: targetId === 10 ? 'BuildSphere org.' : 'My Organization',
+    currency: 'INR',
+    workday_hours: '8.00',
+    half_day_hours: '4.00',
+    overtime_after_hours: '8.00',
+    expense_approval_limit: '1000.00',
+    is_active: true,
+  };
+}
+
+export function getOrgProjectIds(targetDb, orgId) {
+  const targetId = Number(orgId || 10);
+  return new Set(
+    (targetDb.projects || [])
+      .filter((p) => !p.deleted_at && Number(p.organization || 10) === targetId)
+      .map((p) => p.id)
+  );
+}
+
+export function createDefaultAccountsForOrg(targetDb, orgId) {
+  if (!targetDb.accounts) targetDb.accounts = [];
+  const targetId = Number(orgId);
+  const existing = targetDb.accounts.filter((a) => Number(a.organization || 10) === targetId);
+  if (existing.length > 0) return;
+
+  const defaultTemplates = [
+    { code: '1001', name: 'Cash in Hand', type: 'ASSET' },
+    { code: '1002', name: 'Bank Account', type: 'ASSET' },
+    { code: '1100', name: 'Worker Advances', type: 'ASSET' },
+    { code: '1200', name: 'Client Receivable', type: 'ASSET' },
+    { code: '2001', name: 'Accounts Payable', type: 'LIABILITY' },
+    { code: '2002', name: 'Outstanding Wages', type: 'LIABILITY' },
+    { code: '3001', name: 'Owner Equity', type: 'EQUITY' },
+    { code: '4001', name: 'Project Revenue / Invoicing', type: 'REVENUE' },
+    { code: '5001', name: 'Raw Material Expenses', type: 'EXPENSE' },
+    { code: '5002', name: 'Labor & Wages Expenses', type: 'EXPENSE' },
+    { code: '5003', name: 'Site Machinery & Equipment', type: 'EXPENSE' },
+    { code: '5004', name: 'Site Overhead & Utilities', type: 'EXPENSE' },
+    { code: '5005', name: 'Subcontractor Costs', type: 'EXPENSE' },
+  ];
+
+  defaultTemplates.forEach((t) => {
+    targetDb.accounts.push({
+      id: nextId(targetDb.accounts),
+      organization: targetId,
+      code: t.code,
+      name: t.name,
+      type: t.type,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      deleted_at: null,
+    });
+  });
 }
 
 // Universal Audit Log Recorder to guarantee persistence for each and every action performed by any role
@@ -244,6 +421,145 @@ function createMockBlob(filename, type = 'text/csv') {
 /**
  * Handle incoming API requests matching Django REST Framework routes
  */
+// -------------------------------------------------------------
+// EMPLOYEE FINANCIALS & ATTENDANCE STATS COMPUTATION
+// -------------------------------------------------------------
+export function computeEmployeeFinancials(emp, currentOrgId, targetDb = null) {
+  if (!emp) return { total_pagar: 0, total_upad: 0, total_paid: 0, balance: 0, has_attendance: false, full_days: 0, half_days: 0, absent_days: 0, total_present: 0, total_earnings: 0 };
+  const d = targetDb || loadDB();
+  const eId = Number(emp.id);
+  const rate = Number(emp.daily_rate || 800);
+
+  // Attendances for this employee in current organization
+  const empAtts = (d.attendances || []).filter(
+    (a) => !a.deleted_at && Number(a.employee) === eId && Number(a.organization || 10) === currentOrgId
+  );
+
+  const fullDays = empAtts.filter((a) => a.status === 'PRESENT').length;
+  const halfDays = empAtts.filter((a) => a.status === 'HALF_DAY').length;
+  const absentDays = empAtts.filter((a) => a.status === 'ABSENT').length;
+  const totalOT = empAtts.reduce((sum, a) => sum + Number(a.overtime_hours || 0), 0);
+
+  // Total Pagar (gross earned from attendance & overtime)
+  const totalPagar = (fullDays * rate) + (halfDays * (rate / 2)) + (totalOT * (rate / 8));
+
+  // Advances (Upad)
+  const empUpads = (d.payments || []).filter(
+    (p) => !p.deleted_at && Number(p.employee) === eId && p.payment_type === 'ADVANCE' && Number(p.organization || 10) === currentOrgId
+  );
+  const totalUpad = empUpads.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+  // Wages Paid (excluding advances)
+  const empWages = (d.payments || []).filter(
+    (p) => !p.deleted_at && Number(p.employee) === eId && (p.payment_type === 'WAGE' || p.payment_type === 'SALARY' || (!p.payment_type && p.status === 'PAID')) && p.payment_type !== 'ADVANCE' && Number(p.organization || 10) === currentOrgId
+  );
+  const totalPaid = empWages.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+  // Remaining balance
+  const balance = Math.max(0, totalPagar - totalUpad - totalPaid);
+  const hasAttendance = (fullDays + halfDays) > 0;
+
+  return {
+    total_pagar: totalPagar,
+    total_earned: totalPagar,
+    total_earnings: totalPagar,
+    total_upad: totalUpad,
+    advance_balance: totalUpad,
+    total_paid: totalPaid,
+    balance: balance,
+    net_payable: balance,
+    has_attendance: hasAttendance,
+    full_days: fullDays,
+    half_days: halfDays,
+    absent_days: absentDays,
+    total_present: fullDays + halfDays,
+    total_attendance: fullDays + halfDays,
+  };
+}
+
+export function formatEmployeeRecord(emp, currentOrgId, targetDb = null) {
+  if (!emp) return emp;
+  const d = targetDb || loadDB();
+  const fin = computeEmployeeFinancials(emp, currentOrgId, d);
+
+  // Collect all assigned project IDs
+  const projIds = new Set();
+  if (emp.primary_project) {
+    projIds.add(Number(emp.primary_project));
+  }
+  if (Array.isArray(emp.assigned_projects)) {
+    emp.assigned_projects.forEach((pid) => {
+      const id = typeof pid === 'object' && pid !== null ? pid.id : pid;
+      if (id) projIds.add(Number(id));
+    });
+  }
+
+  const assignedProjectsArray = Array.from(projIds);
+  const assignedProjectsDetails = assignedProjectsArray
+    .map((pid) => (d.projects || []).find((p) => !p.deleted_at && p.id === pid))
+    .filter(Boolean);
+
+  const primaryProjObj = (d.projects || []).find((p) => !p.deleted_at && p.id === Number(emp.primary_project));
+
+  return {
+    ...emp,
+    primary_project: emp.primary_project ? Number(emp.primary_project) : (assignedProjectsArray[0] || null),
+    primary_project_name: primaryProjObj?.name || '',
+    assigned_projects: assignedProjectsArray,
+    assigned_projects_details: assignedProjectsDetails,
+    financials: fin,
+    balance: String(fin.balance.toFixed(2)),
+    total_pagar: fin.total_pagar,
+    total_upad: fin.total_upad,
+    total_paid: fin.total_paid,
+  };
+}
+
+export function formatPaymentRecord(p, currentOrgId, targetDb = null) {
+  if (!p) return p;
+  const d = targetDb || loadDB();
+  const empId = Number(p.employee || p.employee_id || 0);
+  const emp = (d.employees || []).find((e) => Number(e.id) === empId);
+
+  const projId = Number(p.project || p.project_id || emp?.primary_project || d.projects?.[0]?.id || 29);
+  const proj = (d.projects || []).find((pr) => Number(pr.id) === projId);
+
+  const rawDate = p.payment_date || p.date_from || p.date_to || p.advance_date || p.date || (p.created_at ? p.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+  const normDate = String(rawDate).split('T')[0];
+
+  const employeeName = p.employee_name || emp?.full_name || emp?.name || 'Worker';
+  const projectName = p.project_name || proj?.name || proj?.title || 'General Site';
+  const method = p.method || (p.payment_mode ? p.payment_mode.toLowerCase() : 'upi');
+  const paymentMode = p.payment_mode || (p.method ? p.method.toUpperCase() : 'UPI');
+  const status = (p.status || 'paid').toLowerCase();
+  const paymentType = (p.payment_type || p.type || 'ADVANCE').toUpperCase();
+  const type = (p.type || p.payment_type || 'advance').toLowerCase();
+
+  return {
+    ...p,
+    employee: empId || p.employee,
+    employee_id: empId || p.employee_id,
+    employee_name: employeeName,
+    employee_code: p.employee_code || emp?.employee_code || '',
+    project: projId,
+    project_id: projId,
+    project_name: projectName,
+    date: normDate,
+    payment_date: normDate,
+    date_from: p.date_from ? String(p.date_from).split('T')[0] : normDate,
+    date_to: p.date_to ? String(p.date_to).split('T')[0] : normDate,
+    advance_date: normDate,
+    method,
+    payment_mode: paymentMode,
+    status,
+    payment_type: paymentType,
+    type,
+    amount: String(Number(p.amount || 0).toFixed(2)),
+    description: p.description || p.notes || 'Upad advance payment',
+    notes: p.notes || p.description || 'Upad advance payment',
+  };
+}
+
 export async function handleMockRequest(endpoint, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
   const urlObj = new URL(endpoint, 'http://localhost');
@@ -274,6 +590,12 @@ export async function handleMockRequest(endpoint, options = {}) {
   // Reload latest state from storage to sync across tabs/updates
   db = loadDB();
 
+  // Multi-tenant session context
+  const currentActor = getActorFromSession();
+  const currentOrgId = getCurrentOrgId();
+  const currentOrg = getOrgById(db, currentOrgId);
+  const orgProjectIds = getOrgProjectIds(db, currentOrgId);
+
   // -------------------------------------------------------------
   // AUTH & USERS
   // -------------------------------------------------------------
@@ -282,23 +604,27 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/auth/setup-admin' && method === 'POST') {
-    const orgId = 10;
-    const org = db.organizations[0] || {
+    const existingOrgIds = (db.organizations || []).map((o) => Number(o.id || 0));
+    const orgId = Math.max(10, ...existingOrgIds) + 1;
+    const newOrg = {
       id: orgId,
-      name: body.org_name || 'BuildSphere Construction Ltd',
+      name: (body.org_name || 'My Organization').trim(),
       currency: 'INR',
       workday_hours: '8.00',
       half_day_hours: '4.00',
       overtime_after_hours: '8.00',
       expense_approval_limit: '1000.00',
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
-    if (body.org_name) org.name = body.org_name;
-    db.organizations = [org];
+    if (!db.organizations) db.organizations = [];
+    db.organizations.push(newOrg);
 
     const newUser = {
       id: nextId(db.users),
-      name: body.name || 'Admin User',
-      email: body.email.toLowerCase(),
+      name: (body.name || 'Admin User').trim(),
+      email: body.email.toLowerCase().trim(),
       role: 'ORG_ADMIN',
       phone: '',
       is_active: true,
@@ -306,19 +632,22 @@ export async function handleMockRequest(endpoint, options = {}) {
       created_at: new Date().toISOString(),
     };
     db.users.push(newUser);
+
+    createDefaultAccountsForOrg(db, orgId);
+
     recordAuditLog(db, {
       action: 'ADMIN_SETUP',
       resource_type: 'User',
       resource_id: newUser.id,
       actor: newUser,
-      changes: { email: newUser.email, name: newUser.name, role: newUser.role },
+      changes: { email: newUser.email, name: newUser.name, role: newUser.role, org_id: orgId },
     });
     saveDB(db);
 
     return {
       access: 'mock-jwt-token-access',
       refresh: 'mock-jwt-token-refresh',
-      user: newUser,
+      user: { ...newUser, organization: newOrg },
     };
   }
 
@@ -376,10 +705,12 @@ export async function handleMockRequest(endpoint, options = {}) {
       actor: user,
       metadata: { role: user.role, email: user.email },
     });
+    const userOrgId = Number(user.organization?.id || user.organization || 10);
+    const userOrg = getOrgById(db, userOrgId);
     return {
       access: 'mock-jwt-token-access',
       refresh: 'mock-jwt-token-refresh',
-      user: { ...user, organization: db.organizations[0] || { id: 10, name: 'BuildSphere org.', currency: 'INR' } },
+      user: { ...user, organization: userOrg },
     };
   }
 
@@ -401,12 +732,14 @@ export async function handleMockRequest(endpoint, options = {}) {
     const invite = (db.invitations || []).find(
       (inv) => String(inv.id) === String(body.token) || inv.email === body.email
     );
+    const targetOrgId = Number(invite?.organization || currentOrgId || 10);
     const role = invite ? invite.role : 'SITE_ENGINEER';
     const email = (invite ? invite.email : body.email || `user_${Date.now()}@buildsphere.com`).toLowerCase();
 
     let empId = null;
     if (role === 'employee/labour' || role === 'LABOUR' || role === 'EMPLOYEE') {
       const nextEmpId = nextId(db.employees);
+      const orgProjs = (db.projects || []).filter((p) => !p.deleted_at && Number(p.organization || 10) === targetOrgId);
       const newEmp = {
         id: nextEmpId,
         employee_code: `EMP-${String(nextEmpId).padStart(4, '0')}`,
@@ -422,8 +755,9 @@ export async function handleMockRequest(endpoint, options = {}) {
         monthly_salary: '0.00',
         is_active: true,
         deleted_at: null,
-        primary_project: db.projects?.[0]?.id || 29,
-        assigned_projects: (db.projects || []).map((p) => p.id),
+        organization: targetOrgId,
+        primary_project: orgProjs[0]?.id || null,
+        assigned_projects: orgProjs.length ? [orgProjs[0].id] : [],
         joining_date: new Date().toISOString().split('T')[0],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -440,7 +774,7 @@ export async function handleMockRequest(endpoint, options = {}) {
       phone: body.phone || '',
       employee_id: empId,
       is_active: true,
-      organization: 10,
+      organization: targetOrgId,
       created_at: new Date().toISOString(),
     };
     db.users.push(newUser);
@@ -452,14 +786,14 @@ export async function handleMockRequest(endpoint, options = {}) {
       resource_type: 'User',
       resource_id: newUser.id,
       actor: newUser,
-      changes: { email: newUser.email, role: newUser.role },
+      changes: { email: newUser.email, role: newUser.role, organization: targetOrgId },
     });
     saveDB(db);
 
     return {
       access: 'mock-jwt-token-access',
       refresh: 'mock-jwt-token-refresh',
-      user: newUser,
+      user: { ...newUser, organization: getOrgById(db, targetOrgId) },
     };
   }
 
@@ -480,12 +814,15 @@ export async function handleMockRequest(endpoint, options = {}) {
         return db.users[idx];
       }
     }
-    return { ...user, organization: db.organizations[0] || { id: 10, name: 'BuildSphere org.', currency: 'INR' } };
+    const userOrgId = Number(user.organization?.id || user.organization || 10);
+    return { ...user, organization: getOrgById(db, userOrgId) };
   }
 
   if (pathname === '/users') {
     if (method === 'GET') {
-      return db.users;
+      return (db.users || []).filter(
+        (u) => Number(u.organization?.id || u.organization || 10) === currentOrgId
+      );
     }
     if (method === 'POST') {
       let empId = body.employee_id;
@@ -539,6 +876,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         ...body,
         password: tempPassword,
         employee_id: empId,
+        organization: currentOrgId,
         is_active: true,
         created_at: new Date().toISOString(),
       };
@@ -636,21 +974,38 @@ export async function handleMockRequest(endpoint, options = {}) {
   // -------------------------------------------------------------
   if (pathname === '/dashboard/overview') {
     const projectId = params.project ? Number(params.project) : null;
-    let filteredProjects = (db.projects || []).filter((p) => !p.deleted_at);
+    let filteredProjects = (db.projects || []).filter(
+      (p) => !p.deleted_at && Number(p.organization || 10) === currentOrgId
+    );
     if (projectId) {
       filteredProjects = filteredProjects.filter((p) => p.id === projectId);
     }
     const activeProjects = filteredProjects.filter((p) => p.status === 'ACTIVE');
-    const activeWorkers = (db.employees || []).filter((e) => e.is_active !== false && !e.deleted_at);
-
-    // Workers on site today
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayAtt = (db.attendances || []).filter(
-      (a) =>
-        (!projectId || a.project === projectId) &&
-        (a.status === 'PRESENT' || a.status === 'HALF_DAY')
+    const activeWorkers = (db.employees || []).filter(
+      (e) => e.is_active !== false && !e.deleted_at && Number(e.organization || 10) === currentOrgId
     );
-    const workersOnSiteToday = todayAtt.length > 0 ? todayAtt.length : 8;
+
+    // Workers on site today (strictly for today's date)
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const localDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const todayRecords = (db.attendances || []).filter(
+      (a) =>
+        Number(a.organization || 10) === currentOrgId &&
+        (!projectId || a.project === projectId) &&
+        (a.date === todayStr || a.date === localDateStr || (a.created_at && (a.created_at.startsWith(todayStr) || a.created_at.startsWith(localDateStr))))
+    );
+
+    const todayPresentAtt = todayRecords.filter(
+      (a) => a.status === 'PRESENT' || a.status === 'HALF_DAY'
+    );
+    const uniquePresentIds = new Set(todayPresentAtt.map((a) => a.employee));
+    const workersOnSiteToday = uniquePresentIds.size;
+
+    const todayAbsentAtt = todayRecords.filter((a) => a.status === 'ABSENT');
+    const uniqueAbsentIds = new Set(todayAbsentAtt.map((a) => a.employee));
+    const workersAbsentToday = uniqueAbsentIds.size;
 
     const totalBudget = activeProjects.reduce((sum, p) => sum + Number(p.estimated_budget || 0), 0);
     const actualSpend = activeProjects.reduce((sum, p) => sum + Number(p.actual_spend || 0), 0);
@@ -658,26 +1013,28 @@ export async function handleMockRequest(endpoint, options = {}) {
 
     // Monthly burn: sum of expenses
     const monthlyExpenses = (db.expenses || [])
-      .filter((e) => !projectId || e.project === projectId)
+      .filter((e) => Number(e.organization || 10) === currentOrgId && (!projectId || e.project === projectId))
       .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
     const pendingExpensesCount = (db.expenses || []).filter(
-      (e) => (!projectId || e.project === projectId) && e.status === 'PENDING'
+      (e) => Number(e.organization || 10) === currentOrgId && (!projectId || e.project === projectId) && e.status === 'PENDING'
     ).length;
 
     const pendingAdvancesCount = (db.payments || []).filter(
-      (p) => (!projectId || p.project === projectId) && p.status === 'PENDING'
+      (p) => Number(p.organization || 10) === currentOrgId && (!projectId || p.project === projectId) && p.status === 'PENDING'
     ).length;
 
-    // 7-day attendance trend
-    const attendanceTrend = [
-      { date: '2026-10-22', present: 7, absent: 2, half_day: 1, total: 10 },
-      { date: '2026-10-23', present: 8, absent: 1, half_day: 1, total: 10 },
-      { date: '2026-10-24', present: 9, absent: 1, half_day: 0, total: 10 },
-      { date: '2026-10-25', present: 8, absent: 2, half_day: 0, total: 10 },
-      { date: '2026-10-26', present: 9, absent: 0, half_day: 1, total: 10 },
-      { date: '2026-10-27', present: 8, absent: 1, half_day: 1, total: 10 },
-      { date: todayStr, present: workersOnSiteToday, absent: Math.max(0, activeWorkers.length - workersOnSiteToday), half_day: 1, total: activeWorkers.length },
+    // Attendance trend
+    const attendanceTrend = activeWorkers.length > 0 ? [
+      { date: '2026-10-22', present: Math.min(activeWorkers.length, 7), absent: Math.max(0, activeWorkers.length - 7), half_day: 0, total: activeWorkers.length },
+      { date: '2026-10-23', present: Math.min(activeWorkers.length, 8), absent: Math.max(0, activeWorkers.length - 8), half_day: 0, total: activeWorkers.length },
+      { date: '2026-10-24', present: Math.min(activeWorkers.length, 8), absent: Math.max(0, activeWorkers.length - 8), half_day: 0, total: activeWorkers.length },
+      { date: '2026-10-25', present: Math.min(activeWorkers.length, 7), absent: Math.max(0, activeWorkers.length - 7), half_day: 0, total: activeWorkers.length },
+      { date: '2026-10-26', present: Math.min(activeWorkers.length, 9), absent: Math.max(0, activeWorkers.length - 9), half_day: 0, total: activeWorkers.length },
+      { date: '2026-10-27', present: Math.min(activeWorkers.length, 8), absent: Math.max(0, activeWorkers.length - 8), half_day: 0, total: activeWorkers.length },
+      { date: todayStr, present: workersOnSiteToday, absent: workersAbsentToday, half_day: todayRecords.filter((a) => a.status === 'HALF_DAY').length, total: activeWorkers.length },
+    ] : [
+      { date: todayStr, present: 0, absent: 0, half_day: 0, total: 0 },
     ];
 
     // Project cards enhanced for dashboard drill-down
@@ -688,8 +1045,10 @@ export async function handleMockRequest(endpoint, options = {}) {
       return {
         ...p,
         budget_utilization_pct: util,
-        progress_percentage: util > 0 ? util : 35,
-        workforce_count: (db.employees || []).filter((e) => e.primary_project === p.id || (e.assigned_projects || []).includes(p.id)).length || 2,
+        progress_percentage: util > 0 ? util : 0,
+        workforce_count: (db.employees || []).filter(
+          (e) => Number(e.organization || 10) === currentOrgId && (e.primary_project === p.id || (e.assigned_projects || []).includes(p.id))
+        ).length,
         health_status: util > 90 ? 'CRITICAL' : util > 75 ? 'WARNING' : 'HEALTHY',
       };
     });
@@ -698,12 +1057,13 @@ export async function handleMockRequest(endpoint, options = {}) {
       active_projects: activeProjects.length,
       active_workers: activeWorkers.length,
       workers_on_site_today: workersOnSiteToday,
+      workers_absent_today: workersAbsentToday,
       total_budget: totalBudget,
       actual_spend: actualSpend,
       budget_utilization_pct: budgetPct,
       budget_utilization_percent: budgetPct,
-      monthly_burn: monthlyExpenses || 45000,
-      monthly_payroll: 78000,
+      monthly_burn: monthlyExpenses,
+      monthly_payroll: activeWorkers.length > 0 ? activeWorkers.length * 7800 : 0,
       pending_expenses: pendingExpensesCount,
       pending_advances: pendingAdvancesCount,
       attendance_trend: attendanceTrend,
@@ -716,7 +1076,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   // -------------------------------------------------------------
   if (pathname === '/projects') {
     if (method === 'GET') {
-      const list = (db.projects || []).filter((p) => !p.deleted_at);
+      const list = (db.projects || []).filter((p) => !p.deleted_at && Number(p.organization || 10) === currentOrgId);
       return list;
     }
     if (method === 'POST') {
@@ -732,7 +1092,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         end_date: body.end_date || null,
         estimated_budget: String(Number(body.estimated_budget || 0).toFixed(2)),
         actual_spend: '0.00',
-        organization: 10,
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -826,12 +1186,15 @@ export async function handleMockRequest(endpoint, options = {}) {
     }
   }
 
+
+
+
   // -------------------------------------------------------------
   // WORKFORCE & EMPLOYEES
   // -------------------------------------------------------------
   if (pathname === '/employees') {
     if (method === 'GET') {
-      let list = (db.employees || []).filter((e) => !e.deleted_at);
+      let list = (db.employees || []).filter((e) => !e.deleted_at && Number(e.organization || 10) === currentOrgId);
       if (params.search) {
         const s = params.search.toLowerCase();
         list = list.filter(
@@ -853,7 +1216,7 @@ export async function handleMockRequest(endpoint, options = {}) {
       if (params.trade) {
         list = list.filter((e) => e.trade === params.trade);
       }
-      return list;
+      return list.map((emp) => formatEmployeeRecord(emp, currentOrgId, db));
     }
     if (method === 'POST') {
       const allProjIds = (db.projects || []).map((p) => p.id);
@@ -875,14 +1238,15 @@ export async function handleMockRequest(endpoint, options = {}) {
         daily_rate: String(Number(body.daily_rate || 800).toFixed(2)),
         ot_hourly_rate: String(Number(body.ot_hourly_rate || 0).toFixed(2)),
         monthly_salary: String(Number(body.monthly_salary || 0).toFixed(2)),
-        primary_project: body.primary_project ? Number(body.primary_project) : (db.projects?.[0]?.id || 29),
-        assigned_projects: body.assigned_projects || (allProjIds.length ? allProjIds : [29]),
+        primary_project: body.primary_project ? Number(body.primary_project) : ((db.projects || []).find((p) => !p.deleted_at && Number(p.organization || 10) === currentOrgId)?.id || null),
+        assigned_projects: body.assigned_projects || (allProjIds.length ? allProjIds : []),
         address: body.address || '',
         bank_name: body.bank_name || '',
         bank_account_number: body.bank_account_number || '',
         bank_ifsc: body.bank_ifsc || '',
         upi_id: body.upi_id || '',
         emergency_contact: body.emergency_contact || '',
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -914,7 +1278,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         changes: { name: newEmp.full_name, trade: newEmp.trade, daily_rate: newEmp.daily_rate, project: newEmp.primary_project },
       });
       saveDB(db);
-      return newEmp;
+      return formatEmployeeRecord(newEmp, currentOrgId, db);
     }
   }
 
@@ -931,6 +1295,7 @@ export async function handleMockRequest(endpoint, options = {}) {
       const pId = Number(body.project_id);
       if (!emp.assigned_projects) emp.assigned_projects = [];
       if (!emp.assigned_projects.includes(pId)) emp.assigned_projects.push(pId);
+      if (!emp.primary_project) emp.primary_project = pId;
       recordAuditLog(db, {
         action: 'EMPLOYEE_PROJECT_ASSIGNED',
         resource_type: 'Employee',
@@ -938,12 +1303,15 @@ export async function handleMockRequest(endpoint, options = {}) {
         changes: { project_id: pId, employee_name: emp.full_name },
       });
       saveDB(db);
-      return emp;
+      return formatEmployeeRecord(emp, currentOrgId, db);
     }
 
     if (subRoute === '/unassign-project' && method === 'POST') {
       const pId = Number(body.project_id);
-      emp.assigned_projects = (emp.assigned_projects || []).filter((id) => id !== pId);
+      emp.assigned_projects = (emp.assigned_projects || []).filter((id) => Number(id) !== pId);
+      if (Number(emp.primary_project) === pId) {
+        emp.primary_project = emp.assigned_projects.length > 0 ? emp.assigned_projects[0] : null;
+      }
       recordAuditLog(db, {
         action: 'EMPLOYEE_PROJECT_UNASSIGNED',
         resource_type: 'Employee',
@@ -951,20 +1319,37 @@ export async function handleMockRequest(endpoint, options = {}) {
         changes: { project_id: pId, employee_name: emp.full_name },
       });
       saveDB(db);
-      return emp;
+      return formatEmployeeRecord(emp, currentOrgId, db);
     }
 
     if (subRoute === '/pay' && method === 'POST') {
+      const projId = Number(body.project || body.project_id || emp.primary_project || db.projects?.[0]?.id || 29);
+      const proj = (db.projects || []).find((pr) => Number(pr.id) === projId);
+      const rawDate = body.payment_date || body.date || new Date().toISOString().split('T')[0];
+      const normDate = String(rawDate).split('T')[0];
+
       const payment = {
         id: nextId(db.payments),
         employee: eId,
-        project: emp.primary_project,
+        employee_id: eId,
+        employee_name: emp.full_name || 'Worker',
+        employee_code: emp.employee_code || '',
+        project: projId,
+        project_id: projId,
+        project_name: proj?.name || 'General Site',
         amount: String(Number(body.amount || 0).toFixed(2)),
         payment_type: body.payment_type || 'SALARY',
+        type: 'salary',
         payment_mode: body.payment_mode || 'CASH',
-        payment_date: body.payment_date || new Date().toISOString().split('T')[0],
-        status: 'PAID',
+        method: (body.payment_mode || 'cash').toLowerCase(),
+        payment_date: normDate,
+        date_from: normDate,
+        date_to: normDate,
+        date: normDate,
+        status: 'paid',
         notes: body.notes || 'Wage Settlement',
+        description: body.notes || 'Wage Settlement',
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.payments.push(payment);
@@ -975,20 +1360,38 @@ export async function handleMockRequest(endpoint, options = {}) {
         changes: { employee_id: eId, amount: payment.amount, mode: payment.payment_mode },
       });
       saveDB(db);
-      return payment;
+      return formatPaymentRecord(payment, currentOrgId, db);
     }
 
     if (subRoute === '/upad' && method === 'POST') {
+      const projId = Number(body.project || body.project_id || emp.primary_project || db.projects?.[0]?.id || 29);
+      const proj = (db.projects || []).find((pr) => Number(pr.id) === projId);
+      const rawDate = body.advance_date || body.date || body.payment_date || new Date().toISOString().split('T')[0];
+      const normDate = String(rawDate).split('T')[0];
+
       const payment = {
         id: nextId(db.payments),
         employee: eId,
-        project: emp.primary_project,
+        employee_id: eId,
+        employee_name: emp.full_name || 'Worker',
+        employee_code: emp.employee_code || '',
+        project: projId,
+        project_id: projId,
+        project_name: proj?.name || 'General Site',
         amount: String(Number(body.amount || 0).toFixed(2)),
         payment_type: 'ADVANCE',
+        type: 'advance',
         payment_mode: body.payment_mode || 'CASH',
-        payment_date: body.payment_date || new Date().toISOString().split('T')[0],
-        status: 'PAID',
-        notes: body.notes || 'UPAD Advance',
+        method: (body.payment_mode || 'cash').toLowerCase(),
+        payment_date: normDate,
+        date_from: normDate,
+        date_to: normDate,
+        date: normDate,
+        advance_date: normDate,
+        status: 'paid',
+        notes: body.reason || body.notes || 'UPAD Advance',
+        description: body.reason || body.notes || 'UPAD Advance',
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.payments.push(payment);
@@ -999,34 +1402,30 @@ export async function handleMockRequest(endpoint, options = {}) {
         changes: { employee_id: eId, amount: payment.amount, notes: payment.notes },
       });
       saveDB(db);
-      return payment;
+      return formatPaymentRecord(payment, currentOrgId, db);
     }
 
     if (subRoute === '/payment-history') {
-      const payments = (db.payments || []).filter((p) => p.employee === eId);
-      return payments;
+      const payments = (db.payments || []).filter((p) => !p.deleted_at && Number(p.employee || p.employee_id) === eId);
+      return payments.map((p) => {
+        const fmt = formatPaymentRecord(p, currentOrgId, db);
+        const isUpad = fmt.payment_type === 'ADVANCE';
+        return {
+          ...fmt,
+          title: isUpad ? `Upad Advance: ${fmt.employee_name}` : `Wage Payment: ${fmt.employee_name}`,
+          type: isUpad ? 'UPAD' : 'PAYMENT',
+          mode: fmt.payment_mode,
+        };
+      });
     }
 
     if (subRoute === '/financials') {
-      const atts = (db.attendances || []).filter((a) => a.employee === eId && a.status === 'PRESENT');
-      const rate = Number(emp.daily_rate || 600);
-      const earned = atts.length * rate + 1200;
-      const paid = (db.payments || [])
-        .filter((p) => p.employee === eId && p.status === 'PAID')
-        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      const advances = (db.payments || [])
-        .filter((p) => p.employee === eId && p.payment_type === 'ADVANCE')
-        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-      return {
-        total_earned: earned,
-        total_paid: paid,
-        advance_balance: advances,
-        net_payable: Math.max(0, earned - paid),
-      };
+      return computeEmployeeFinancials(emp, currentOrgId, db);
     }
 
-    if (method === 'GET') return emp;
+    if (method === 'GET') {
+      return formatEmployeeRecord(emp, currentOrgId, db);
+    }
     if (method === 'PATCH') {
       db.employees[empIdx] = { ...emp, ...body, updated_at: new Date().toISOString() };
       recordAuditLog(db, {
@@ -1036,7 +1435,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         changes: body,
       });
       saveDB(db);
-      return db.employees[empIdx];
+      return formatEmployeeRecord(db.employees[empIdx], currentOrgId, db);
     }
     if (method === 'DELETE') {
       db.employees[empIdx].deleted_at = new Date().toISOString();
@@ -1055,7 +1454,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   // LABOR GROUPS / GANGS
   // -------------------------------------------------------------
   if (pathname === '/labor-groups') {
-    if (method === 'GET') return db.labor_groups || [];
+    if (method === 'GET') return (db.labor_groups || []).filter((g) => Number(g.organization || 10) === currentOrgId);
     if (method === 'POST') {
       const newGroup = {
         id: nextId(db.labor_groups),
@@ -1064,6 +1463,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         leader_phone: body.leader_phone || '',
         trade: body.trade || 'MASON',
         members: body.employee_ids || [],
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.labor_groups.push(newGroup);
@@ -1108,6 +1508,7 @@ export async function handleMockRequest(endpoint, options = {}) {
       hours_worked: String(Number(body.hours_worked || 8).toFixed(2)),
       overtime_hours: String(Number(body.overtime_hours || 0).toFixed(2)),
       notes: body.notes || '',
+      organization: currentOrgId,
       created_at: new Date().toISOString(),
     };
     db.attendances.push(newAtt);
@@ -1132,15 +1533,17 @@ export async function handleMockRequest(endpoint, options = {}) {
       const existingIdx = (db.attendances || []).findIndex(
         (a) => a.employee === eId && a.date === date
       );
+      const allocatedProj = Number(rec.project_id || rec.project || (body.project_id ? Number(body.project_id) : null) || (existingIdx !== -1 ? db.attendances[existingIdx].project : null) || (db.employees.find(e => e.id === eId)?.primary_project) || projectId);
       const newAtt = {
         id: existingIdx !== -1 ? db.attendances[existingIdx].id : nextId(db.attendances),
         employee: eId,
-        project: projectId,
+        project: allocatedProj,
         date: date,
         status: rec.status || 'PRESENT',
         hours_worked: String(Number(rec.hours_worked || (rec.status === 'HALF_DAY' ? 4 : rec.status === 'PRESENT' ? 8 : 0)).toFixed(2)),
         overtime_hours: String(Number(rec.overtime_hours || 0).toFixed(2)),
         notes: rec.notes || '',
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       if (existingIdx !== -1) {
@@ -1161,18 +1564,44 @@ export async function handleMockRequest(endpoint, options = {}) {
 
   if (pathname === '/attendance') {
     if (method === 'GET') {
-      let list = (db.attendances || []).filter((a) => !a.deleted_at);
+      let list = (db.attendances || []).filter((a) => !a.deleted_at && Number(a.organization || 10) === currentOrgId);
       if (params.date) list = list.filter((a) => a.date === params.date);
-      if (params.project) list = list.filter((a) => a.project === Number(params.project));
-      if (params.employee) list = list.filter((a) => a.employee === Number(params.employee));
+      if (params.date_from) list = list.filter((a) => a.date >= params.date_from);
+      if (params.date_to) list = list.filter((a) => a.date <= params.date_to);
+      if (params.project && params.project !== 'ALL' && params.project !== 'all') {
+        list = list.filter((a) => a.project === Number(params.project));
+      }
+      if (params.employee && params.employee !== 'ALL' && params.employee !== 'all') {
+        list = list.filter((a) => a.employee === Number(params.employee));
+      }
 
-      // Attach employee details
-      return list.map((a) => ({
-        ...a,
-        employee_name: db.employees.find((e) => e.id === a.employee)?.full_name || 'Worker',
-        employee_code: db.employees.find((e) => e.id === a.employee)?.employee_code || '',
-        trade: db.employees.find((e) => e.id === a.employee)?.trade || '',
-      }));
+      // Attach employee details, project_name, and earning
+      return list.map((a) => {
+        const emp = (db.employees || []).find((e) => e.id === a.employee);
+        const proj = (db.projects || []).find((p) => p.id === a.project);
+        const rate = Number(emp?.daily_rate || 800);
+        let earning = 0;
+        if (a.status === 'PRESENT') {
+          earning = rate;
+        } else if (a.status === 'HALF_DAY') {
+          earning = rate / 2;
+        } else if (a.status === 'ABSENT') {
+          earning = 0;
+        }
+        if (a.overtime_hours && Number(a.overtime_hours) > 0) {
+          earning += Number(a.overtime_hours) * (rate / 8);
+        }
+
+        return {
+          ...a,
+          employee_name: emp?.full_name || 'Worker',
+          employee_code: emp?.employee_code || '',
+          trade: emp?.trade || emp?.role || '',
+          project_name: proj?.name || `Project #${a.project || ''}`,
+          earning: earning,
+          daily_wage: rate,
+        };
+      });
     }
   }
 
@@ -1210,24 +1639,103 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/attendance/summary') {
-    const list = db.attendances || [];
-    const present = list.filter((a) => a.status === 'PRESENT').length;
-    const half = list.filter((a) => a.status === 'HALF_DAY').length;
+    let list = (db.attendances || []).filter((a) => !a.deleted_at && Number(a.organization || 10) === currentOrgId);
+    if (params.date) list = list.filter((a) => a.date === params.date);
+    if (params.date_from) list = list.filter((a) => a.date >= params.date_from);
+    if (params.date_to) list = list.filter((a) => a.date <= params.date_to);
+    if (params.project && params.project !== 'ALL' && params.project !== 'all') {
+      list = list.filter((a) => a.project === Number(params.project));
+    }
+    if (params.employee && params.employee !== 'ALL' && params.employee !== 'all') {
+      list = list.filter((a) => a.employee === Number(params.employee));
+    }
+
+    const fullDays = list.filter((a) => a.status === 'PRESENT').length;
+    const halfDays = list.filter((a) => a.status === 'HALF_DAY').length;
     const absent = list.filter((a) => a.status === 'ABSENT').length;
+    const totalPresent = fullDays + halfDays;
     const totalOT = list.reduce((sum, a) => sum + Number(a.overtime_hours || 0), 0);
 
+    const totalEarnings = list.reduce((sum, a) => {
+      const emp = (db.employees || []).find((e) => e.id === a.employee);
+      const rate = Number(emp?.daily_rate || 800);
+      let earn = 0;
+      if (a.status === 'PRESENT') earn = rate;
+      else if (a.status === 'HALF_DAY') earn = rate / 2;
+      if (a.overtime_hours && Number(a.overtime_hours) > 0) {
+        earn += Number(a.overtime_hours) * (rate / 8);
+      }
+      return sum + earn;
+    }, 0);
+
     return {
-      present,
-      half_day: half,
-      absent,
+      total_present: totalPresent,
+      present: fullDays,
+      full_days: fullDays,
+      half_days: halfDays,
+      half_day: halfDays,
+      total_absent: absent,
+      absent: absent,
       total: list.length,
       overtime_hours: totalOT,
+      total_earnings: totalEarnings,
     };
   }
 
   if (pathname === '/attendance/report') {
+    let orgEmployees = (db.employees || []).filter(
+      (e) => !e.deleted_at && Number(e.organization || 10) === currentOrgId
+    );
+    if (params.employee && params.employee !== 'ALL' && params.employee !== 'all') {
+      orgEmployees = orgEmployees.filter((e) => e.id === Number(params.employee));
+    }
+    if (params.project && params.project !== 'ALL' && params.project !== 'all') {
+      const pId = Number(params.project);
+      orgEmployees = orgEmployees.filter(
+        (e) => e.primary_project === pId || (e.assigned_projects && e.assigned_projects.includes(pId))
+      );
+    }
+
+    let allAtts = (db.attendances || []).filter(
+      (a) => !a.deleted_at && Number(a.organization || 10) === currentOrgId
+    );
+    if (params.date_from) allAtts = allAtts.filter((a) => a.date >= params.date_from);
+    if (params.date_to) allAtts = allAtts.filter((a) => a.date <= params.date_to);
+    if (params.project && params.project !== 'ALL' && params.project !== 'all') {
+      allAtts = allAtts.filter((a) => a.project === Number(params.project));
+    }
+
+    const rows = orgEmployees.map((emp) => {
+      const empAtts = allAtts.filter((a) => a.employee === emp.id);
+      const fullDays = empAtts.filter((a) => a.status === 'PRESENT').length;
+      const halfDays = empAtts.filter((a) => a.status === 'HALF_DAY').length;
+      const absentDays = empAtts.filter((a) => a.status === 'ABSENT').length;
+      const rate = Number(emp.daily_rate || 800);
+      const totalOT = empAtts.reduce((sum, a) => sum + Number(a.overtime_hours || 0), 0);
+      const totalEarnings = (fullDays * rate) + (halfDays * (rate / 2)) + (totalOT * (rate / 8));
+      const effectiveAttendance = fullDays + (halfDays * 0.5);
+
+      return {
+        employee_id: emp.id,
+        id: emp.id,
+        employee_name: emp.full_name || 'Worker',
+        employee_code: emp.employee_code || '',
+        trade: emp.trade || emp.role || '',
+        daily_wage: rate,
+        daily_rate: rate,
+        full_days: fullDays,
+        half_days: halfDays,
+        total_present: effectiveAttendance,
+        total_attendance: effectiveAttendance,
+        total_absent: absentDays,
+        total_earnings: totalEarnings,
+        attendance_count: empAtts.length,
+      };
+    });
+
     return {
-      records: db.attendances || [],
+      rows: rows,
+      records: allAtts,
       total_working_days: 26,
       holidays_count: (db.holidays || []).length,
     };
@@ -1251,11 +1759,12 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/night-shifts') {
-    if (method === 'GET') return db.night_shifts || [];
+    if (method === 'GET') return (db.night_shifts || []).filter((s) => Number(s.organization || 10) === currentOrgId);
     if (method === 'POST') {
       const shift = {
         id: nextId(db.night_shifts),
         ...body,
+        organization: currentOrgId,
         status: 'ACTIVE',
         start_time: new Date().toISOString(),
       };
@@ -1292,13 +1801,13 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/holidays') {
-    if (method === 'GET') return db.holidays || [];
+    if (method === 'GET') return (db.holidays || []).filter((h) => Number(h.organization || 10) === currentOrgId);
     if (method === 'POST') {
       const holiday = {
         id: nextId(db.holidays),
         name: body.name || 'Holiday',
         date: body.date,
-        organization: 10,
+        organization: currentOrgId,
         is_paid: body.is_paid !== undefined ? body.is_paid : true,
       };
       db.holidays.push(holiday);
@@ -1332,7 +1841,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   // -------------------------------------------------------------
   if (pathname === '/dpr') {
     if (method === 'GET') {
-      let list = db.dprs || [];
+      let list = (db.dprs || []).filter((d) => Number(d.organization || 10) === currentOrgId || orgProjectIds.has(Number(d.project)));
       if (params.project) list = list.filter((d) => d.project === Number(params.project));
       return list;
     }
@@ -1347,6 +1856,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         status: 'SUBMITTED',
         work_entries: body.work_entries || [],
         photos: body.photos || [],
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.dprs.push(newDpr);
@@ -1422,45 +1932,145 @@ export async function handleMockRequest(endpoint, options = {}) {
   // WORK ENTRIES
   // -------------------------------------------------------------
   if (pathname === '/work-entries/present-employees') {
-    const pId = params.project ? Number(params.project) : null;
+    const pId = params.project && params.project !== 'ALL' && params.project !== 'all' && params.project !== '' ? Number(params.project) : null;
     const date = params.date || new Date().toISOString().split('T')[0];
-    const presentEmpIds = new Set(
-      (db.attendances || [])
-        .filter((a) => (!pId || a.project === pId) && (a.status === 'PRESENT' || a.status === 'HALF_DAY'))
-        .map((a) => a.employee)
+
+    // Find all attendance records marked on this specific date that are PRESENT or HALF_DAY
+    const dateAttendances = (db.attendances || []).filter(
+      (a) =>
+        !a.deleted_at &&
+        Number(a.organization || 10) === currentOrgId &&
+        a.date === date &&
+        (a.status === 'PRESENT' || a.status === 'HALF_DAY')
     );
-    let emps = (db.employees || []).filter((e) => !e.deleted_at);
-    if (presentEmpIds.size > 0) {
-      emps = emps.filter((e) => presentEmpIds.has(e.id));
+
+    // If project is specified, match attendances for this project,
+    // OR workers marked present today who are assigned to this project
+    let matchingAttendances = dateAttendances;
+    if (pId) {
+      const projectMatches = dateAttendances.filter((a) => Number(a.project) === pId);
+      if (projectMatches.length > 0) {
+        matchingAttendances = projectMatches;
+      } else {
+        // Fallback: If attendance was marked on another site ID but worker belongs to this project
+        matchingAttendances = dateAttendances.filter((a) => {
+          const emp = (db.employees || []).find((e) => e.id === Number(a.employee));
+          if (!emp) return false;
+          return (
+            Number(emp.primary_project) === pId ||
+            (Array.isArray(emp.assigned_projects) && emp.assigned_projects.some((pr) => Number(pr) === pId))
+          );
+        });
+      }
     }
-    return emps;
+
+    const presentEmpIds = new Set(matchingAttendances.map((a) => Number(a.employee)));
+
+    const emps = (db.employees || [])
+      .filter((e) => !e.deleted_at && Number(e.organization || 10) === currentOrgId && presentEmpIds.has(Number(e.id)))
+      .map((e) => {
+        const att = matchingAttendances.find((a) => Number(a.employee) === Number(e.id));
+        return {
+          ...formatEmployeeRecord(e, currentOrgId, db),
+          attendance_status: att?.status || 'PRESENT',
+          hours_worked: att?.hours_worked || 8,
+          overtime_hours: att?.overtime_hours || 0,
+        };
+      });
+
+    // Group employees by role
+    const byRole = {};
+    emps.forEach((emp) => {
+      const roleName = emp.role || emp.trade || 'Worker';
+      if (!byRole[roleName]) byRole[roleName] = [];
+      byRole[roleName].push(emp);
+    });
+
+    return {
+      employees: emps,
+      by_role: byRole,
+      count: emps.length,
+      date: date,
+      project: pId,
+    };
   }
 
   if (pathname === '/work-entries') {
     if (method === 'GET') {
-      let list = db.work_entries || [];
-      if (params.project) list = list.filter((w) => w.project === Number(params.project));
-      if (params.date) list = list.filter((w) => w.date === params.date);
-      return list;
+      let list = (db.work_entries || []).filter(
+        (w) =>
+          !w.deleted_at &&
+          (Number(w.organization || 10) === currentOrgId || orgProjectIds.has(Number(w.project)))
+      );
+      if (params.project && params.project !== 'all') {
+        list = list.filter((w) => Number(w.project) === Number(params.project));
+      }
+      if (params.date) {
+        list = list.filter((w) => w.date === params.date);
+      }
+      if (params.from_date) {
+        list = list.filter((w) => w.date >= params.from_date);
+      }
+      if (params.to_date) {
+        list = list.filter((w) => w.date <= params.to_date);
+      }
+      return list.map((w) => {
+        const proj = (db.projects || []).find((p) => p.id === Number(w.project));
+        const roleCounts = w.role_counts || {};
+        if (Object.keys(roleCounts).length === 0 && Array.isArray(w.employees)) {
+          w.employees.forEach((id) => {
+            const emp = (db.employees || []).find((e) => e.id === Number(id));
+            if (emp) {
+              const r = emp.role || emp.trade || 'Worker';
+              roleCounts[r] = (roleCounts[r] || 0) + 1;
+            }
+          });
+        }
+        return {
+          ...w,
+          project_name: proj?.name || `Project #${w.project}`,
+          role_counts: roleCounts,
+        };
+      });
     }
     if (method === 'POST') {
+      const projId = Number(body.project_id || body.project);
+      const proj = (db.projects || []).find((p) => p.id === projId);
+      const empIds = Array.isArray(body.employees)
+        ? body.employees
+        : body.employee
+        ? [Number(body.employee)]
+        : [];
+
+      const roleCounts = {};
+      empIds.forEach((id) => {
+        const emp = (db.employees || []).find((e) => e.id === Number(id));
+        if (emp) {
+          const r = emp.role || emp.trade || 'Worker';
+          roleCounts[r] = (roleCounts[r] || 0) + 1;
+        }
+      });
+
       const entry = {
         id: nextId(db.work_entries),
-        employee: Number(body.employee_id || body.employee),
-        project: Number(body.project_id || body.project),
+        organization: currentOrgId,
+        project: projId,
+        project_name: proj?.name || `Project #${projId}`,
         date: body.date || new Date().toISOString().split('T')[0],
-        task_description: body.task_description || '',
-        quantity_completed: body.quantity_completed || '1.0',
-        unit: body.unit || 'sqft',
-        hours_spent: String(Number(body.hours_spent || 8).toFixed(2)),
+        description: body.description || body.task_description || '',
+        department: body.department || '',
+        employees: empIds,
+        role_counts: roleCounts,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
       };
       db.work_entries.push(entry);
       recordAuditLog(db, {
         action: 'WORK_ENTRY_CREATED',
         resource_type: 'WorkEntry',
         resource_id: entry.id,
-        changes: { employee: entry.employee, project: entry.project, task: entry.task_description, quantity: entry.quantity_completed },
+        changes: { project: entry.project, description: entry.description, date: entry.date, employees: entry.employees },
       });
       saveDB(db);
       return entry;
@@ -1505,7 +2115,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   // -------------------------------------------------------------
   if (pathname === '/expenses') {
     if (method === 'GET') {
-      let list = (db.expenses || []).filter((e) => !e.deleted_at);
+      let list = (db.expenses || []).filter((e) => !e.deleted_at && Number(e.organization || 10) === currentOrgId);
       if (params.project) list = list.filter((e) => e.project === Number(params.project));
       if (params.status) list = list.filter((e) => e.status === params.status);
       if (params.category) list = list.filter((e) => e.category === params.category);
@@ -1523,6 +2133,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         vendor: body.vendor ? Number(body.vendor) : null,
         status: 'PENDING',
         receipt_photo: body.receipt_photo || null,
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.expenses.push(newExp);
@@ -1553,6 +2164,13 @@ export async function handleMockRequest(endpoint, options = {}) {
       if (pIdx !== -1) {
         const curSpend = Number(db.projects[pIdx].actual_spend || 0);
         db.projects[pIdx].actual_spend = String((curSpend + Number(exp.amount)).toFixed(2));
+      }
+      if (exp.vendor && exp.payment_mode === 'CREDIT') {
+        const vIdx = (db.vendors || []).findIndex((v) => v.id === exp.vendor);
+        if (vIdx !== -1) {
+          const curBal = Number(db.vendors[vIdx].outstanding_balance || 0);
+          db.vendors[vIdx].outstanding_balance = String((curBal + Number(exp.amount)).toFixed(2));
+        }
       }
       recordAuditLog(db, {
         action: 'EXPENSE_APPROVED',
@@ -1606,7 +2224,25 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/vendors') {
-    if (method === 'GET') return db.vendors || [];
+    if (method === 'GET') {
+      const orgVendors = (db.vendors || []).filter((v) => Number(v.organization || 10) === currentOrgId);
+      return orgVendors.map((v) => {
+        const vExpenses = (db.expenses || []).filter((e) => Number(e.vendor) === Number(v.id));
+        const vPayments = (db.payments || []).filter((p) => Number(p.vendor) === Number(v.id));
+        const totalBilled = vExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+        const creditBilled = vExpenses.filter((e) => e.payment_mode === 'CREDIT').reduce((s, e) => s + Number(e.amount || 0), 0);
+        const totalPaid = vPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
+        const calculatedBalance = Math.max(0, creditBilled - totalPaid);
+        const outstanding = v.outstanding_balance !== undefined ? v.outstanding_balance : String(calculatedBalance.toFixed(2));
+        return {
+          ...v,
+          total_billed: totalBilled,
+          total_paid: totalPaid,
+          outstanding_balance: outstanding,
+          bill_count: vExpenses.length,
+        };
+      });
+    }
     if (method === 'POST') {
       const newV = {
         id: nextId(db.vendors),
@@ -1616,6 +2252,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         email: body.email || '',
         address: body.address || '',
         gstin: body.gstin || '',
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.vendors.push(newV);
@@ -1664,6 +2301,11 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.payments.push(pmt);
+
+      if (vIdx !== -1) {
+        const curBal = Number(db.vendors[vIdx].outstanding_balance || 0);
+        db.vendors[vIdx].outstanding_balance = String(Math.max(0, curBal - Number(body.amount || 0)).toFixed(2));
+      }
 
       // Also record in central transactions ledger
       if (!db.transactions) db.transactions = [];
@@ -1724,9 +2366,9 @@ export async function handleMockRequest(endpoint, options = {}) {
   // PAYROLL
   // -------------------------------------------------------------
   if (pathname === '/payroll/runs') {
-    if (method === 'GET') return db.payroll_runs || [];
+    if (method === 'GET') return (db.payroll_runs || []).filter((r) => Number(r.organization || 10) === currentOrgId);
     if (method === 'POST') {
-      const activeEmps = (db.employees || []).filter((e) => !e.deleted_at && e.is_active !== false);
+      const activeEmps = (db.employees || []).filter((e) => !e.deleted_at && e.is_active !== false && Number(e.organization || 10) === currentOrgId);
       const vouchers = (activeEmps.length > 0 ? activeEmps : (db.employees || []).slice(0, 5)).map((e, idx) => {
         const rate = Number(e.daily_rate || 800);
         const gross = rate * 6 + 400;
@@ -1755,7 +2397,8 @@ export async function handleMockRequest(endpoint, options = {}) {
 
       const newRun = {
         id: nextId(db.payroll_runs),
-        project: Number(body.project_id || body.project || db.projects?.[0]?.id || 29),
+        project: Number(body.project_id || body.project || (db.projects || []).find((p) => !p.deleted_at && Number(p.organization || 10) === currentOrgId)?.id || 0),
+        organization: currentOrgId,
         start_date: body.start_date || new Date().toISOString().split('T')[0],
         end_date: body.end_date || new Date().toISOString().split('T')[0],
         status: 'DRAFT',
@@ -1897,7 +2540,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/payroll/advances') {
-    if (method === 'GET') return db.advances || [];
+    if (method === 'GET') return (db.advances || []).filter((a) => Number(a.organization || 10) === currentOrgId);
     if (method === 'POST') {
       const adv = {
         id: nextId(db.advances),
@@ -1906,20 +2549,39 @@ export async function handleMockRequest(endpoint, options = {}) {
         date: body.date || new Date().toISOString().split('T')[0],
         notes: body.notes || 'Payroll advance request',
         status: 'PAID',
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.advances.push(adv);
 
       // Keep in sync with payments table for UPAD view
+      const empAdv = (db.employees || []).find((e) => Number(e.id) === Number(adv.employee));
+      const projAdvId = Number(body.project_id || body.project || empAdv?.primary_project || db.projects?.[0]?.id || 29);
+      const projAdv = (db.projects || []).find((pr) => Number(pr.id) === projAdvId);
+
       db.payments.push({
         id: nextId(db.payments),
         employee: adv.employee,
+        employee_id: adv.employee,
+        employee_name: empAdv?.full_name || 'Worker',
+        employee_code: empAdv?.employee_code || '',
+        project: projAdvId,
+        project_id: projAdvId,
+        project_name: projAdv?.name || 'General Site',
         amount: adv.amount,
         payment_type: 'ADVANCE',
+        type: 'advance',
         payment_mode: 'CASH',
+        method: 'cash',
         payment_date: adv.date,
-        status: 'PAID',
+        date_from: adv.date,
+        date_to: adv.date,
+        date: adv.date,
+        advance_date: adv.date,
+        status: 'paid',
         notes: adv.notes,
+        description: adv.notes,
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       });
 
@@ -1971,23 +2633,49 @@ export async function handleMockRequest(endpoint, options = {}) {
   // -------------------------------------------------------------
   if (pathname === '/payments') {
     if (method === 'GET') {
-      let list = db.payments || [];
-      if (params.project) list = list.filter((p) => p.project === Number(params.project));
-      if (params.employee) list = list.filter((p) => p.employee === Number(params.employee));
-      return list;
+      let list = (db.payments || []).filter((p) => Number(p.organization || 10) === currentOrgId && !p.deleted_at);
+      if (params.project && params.project !== 'all') {
+        list = list.filter((p) => Number(p.project || p.project_id) === Number(params.project));
+      }
+      if (params.employee && params.employee !== 'all') {
+        list = list.filter((p) => Number(p.employee || p.employee_id) === Number(params.employee));
+      }
+      return list.map((p) => formatPaymentRecord(p, currentOrgId, db));
     }
     if (method === 'POST') {
+      const empId = Number(body.employee_id || body.employee);
+      const emp = (db.employees || []).find((e) => Number(e.id) === empId);
+      const projId = Number(body.project_id || body.project || emp?.primary_project || db.projects?.[0]?.id || 29);
+      const proj = (db.projects || []).find((pr) => Number(pr.id) === projId);
+
+      const rawDate = body.payment_date || body.date_from || body.date_to || body.date || body.advance_date || new Date().toISOString().split('T')[0];
+      const normDate = String(rawDate).split('T')[0];
+
       const p = {
         id: nextId(db.payments),
-        employee: Number(body.employee_id || body.employee),
-        project: Number(body.project_id || body.project || db.projects?.[0]?.id || 29),
+        employee: empId,
+        employee_id: empId,
+        employee_name: body.employee_name || emp?.full_name || 'Worker',
+        employee_code: emp?.employee_code || '',
+        project: projId,
+        project_id: projId,
+        project_name: body.project_name || proj?.name || 'General Site',
         amount: String(Number(body.amount || 0).toFixed(2)),
-        payment_type: body.payment_type || 'ADVANCE',
-        payment_mode: body.payment_mode || 'CASH',
-        payment_date: body.payment_date || new Date().toISOString().split('T')[0],
-        status: 'PAID',
-        notes: body.notes || '',
+        payment_type: (body.payment_type || body.type || 'ADVANCE').toUpperCase(),
+        type: (body.type || body.payment_type || 'advance').toLowerCase(),
+        payment_mode: (body.payment_mode || body.method || 'UPI').toUpperCase(),
+        method: (body.method || body.payment_mode || 'upi').toLowerCase(),
+        payment_date: normDate,
+        date_from: normDate,
+        date_to: normDate,
+        date: normDate,
+        advance_date: normDate,
+        status: (body.status || 'paid').toLowerCase(),
+        notes: body.notes || body.description || 'Upad advance payment',
+        description: body.description || body.notes || 'Upad advance payment',
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       db.payments.push(p);
 
@@ -1998,15 +2686,16 @@ export async function handleMockRequest(endpoint, options = {}) {
           id: nextId(db.advances),
           employee: p.employee,
           amount: p.amount,
-          date: p.payment_date,
+          date: normDate,
           notes: p.notes,
           status: 'PAID',
+          organization: currentOrgId,
           created_at: new Date().toISOString(),
         });
       }
 
       saveDB(db);
-      return p;
+      return formatPaymentRecord(p, currentOrgId, db);
     }
   }
 
@@ -2017,6 +2706,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         id: nextId(db.payments),
         ...item,
         status: 'PAID',
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       });
     }
@@ -2025,7 +2715,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/payments/summary') {
-    const list = db.payments || [];
+    const list = (db.payments || []).filter((p) => Number(p.organization || 10) === currentOrgId);
     const advances = list.filter((p) => p.payment_type === 'ADVANCE');
     const totalAdvances = advances.reduce((s, p) => s + Number(p.amount || 0), 0);
     const settled = list.filter((p) => p.status === 'PAID');
@@ -2057,10 +2747,10 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/payments/remaining-salary') {
-    const list = db.payments || [];
+    const list = (db.payments || []).filter((p) => Number(p.organization || 10) === currentOrgId);
     const settled = list.filter((p) => p.status === 'PAID');
     return {
-      remaining_amount: 15400,
+      remaining_amount: currentOrgId === 10 ? 15400 : 0,
       settled_count: settled.length,
     };
   }
@@ -2100,12 +2790,13 @@ export async function handleMockRequest(endpoint, options = {}) {
   // PAYMENT CENTRAL / TRANSACTIONS
   // -------------------------------------------------------------
   if (pathname === '/transactions') {
-    if (method === 'GET') return db.transactions || [];
+    if (method === 'GET') return (db.transactions || []).filter((t) => Number(t.organization || 10) === currentOrgId);
     if (method === 'POST') {
       const tx = {
         id: nextId(db.transactions),
         ...body,
         amount: String(Number(body.amount || 0).toFixed(2)),
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.transactions.push(tx);
@@ -2140,7 +2831,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/transactions/summary') {
-    const list = db.transactions || [];
+    const list = (db.transactions || []).filter((t) => Number(t.organization || 10) === currentOrgId);
     const inflow = list.filter((t) => t.type === 'INFLOW').reduce((s, t) => s + Number(t.amount || 0), 0);
     const outflow = list.filter((t) => t.type === 'OUTFLOW').reduce((s, t) => s + Number(t.amount || 0), 0);
     return {
@@ -2154,7 +2845,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   // CREDITS & RUNNING COSTS
   // -------------------------------------------------------------
   if (pathname === '/credit-logs') {
-    if (method === 'GET') return db.credit_logs || [];
+    if (method === 'GET') return (db.credit_logs || []).filter((c) => Number(c.organization || 10) === currentOrgId);
     if (method === 'POST') {
       const log = {
         id: nextId(db.credit_logs),
@@ -2162,6 +2853,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         amount: String(Number(body.amount || 0).toFixed(2)),
         remaining_balance: String(Number(body.amount || 0).toFixed(2)),
         expenses: [],
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.credit_logs.push(log);
@@ -2234,7 +2926,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/credit-logs/summary') {
-    const logs = db.credit_logs || [];
+    const logs = (db.credit_logs || []).filter((c) => Number(c.organization || 10) === currentOrgId);
     const totalCredits = logs.reduce((s, c) => s + Number(c.amount || 0), 0);
     const remaining = logs.reduce((s, c) => s + Number(c.remaining_balance !== undefined ? c.remaining_balance : c.amount || 0), 0);
     const spent = totalCredits - remaining;
@@ -2246,12 +2938,13 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/running-costs') {
-    if (method === 'GET') return db.running_costs || [];
+    if (method === 'GET') return (db.running_costs || []).filter((r) => Number(r.organization || 10) === currentOrgId);
     if (method === 'POST') {
       const rc = {
         id: nextId(db.running_costs),
         ...body,
         amount: String(Number(body.amount || 0).toFixed(2)),
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.running_costs.push(rc);
@@ -2286,7 +2979,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/running-costs/summary') {
-    const costs = db.running_costs || [];
+    const costs = (db.running_costs || []).filter((r) => Number(r.organization || 10) === currentOrgId);
     const totalAmount = costs.reduce((s, c) => s + Number(c.amount || 0), 0);
     return {
       total_amount: totalAmount,
@@ -2300,11 +2993,20 @@ export async function handleMockRequest(endpoint, options = {}) {
   // DOUBLE-ENTRY LEDGER
   // -------------------------------------------------------------
   if (pathname === '/ledger/accounts') {
-    if (method === 'GET') return db.accounts || [];
+    if (method === 'GET') {
+      let accs = (db.accounts || []).filter((a) => Number(a.organization || 10) === currentOrgId);
+      if (accs.length === 0) {
+        createDefaultAccountsForOrg(db, currentOrgId);
+        saveDB(db);
+        accs = (db.accounts || []).filter((a) => Number(a.organization || 10) === currentOrgId);
+      }
+      return accs;
+    }
     if (method === 'POST') {
       const acc = {
         id: nextId(db.accounts),
         ...body,
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.accounts.push(acc);
@@ -2316,10 +3018,12 @@ export async function handleMockRequest(endpoint, options = {}) {
 
   if (pathname === '/ledger/entries') {
     if (method === 'GET') {
-      return (db.journal_entries || []).map((je) => ({
-        ...je,
-        lines: (db.journal_lines || []).filter((l) => l.entry === je.id),
-      }));
+      return (db.journal_entries || [])
+        .filter((je) => Number(je.organization || 10) === currentOrgId)
+        .map((je) => ({
+          ...je,
+          lines: (db.journal_lines || []).filter((l) => l.entry === je.id),
+        }));
     }
     if (method === 'POST') {
       const je = {
@@ -2328,6 +3032,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         date: body.date || new Date().toISOString().split('T')[0],
         narration: body.narration || '',
         reference_number: body.reference_number || '',
+        organization: currentOrgId,
         created_at: new Date().toISOString(),
       };
       db.journal_entries.push(je);
@@ -2351,7 +3056,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/ledger/trial-balance') {
-    const accounts = db.accounts || [];
+    const accounts = (db.accounts || []).filter((a) => Number(a.organization || 10) === currentOrgId);
     return {
       as_of_date: new Date().toISOString().split('T')[0],
       total_debit: 1550000,
@@ -2369,6 +3074,19 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/ledger/profit-loss') {
+    if (currentOrgId !== 10) {
+      const orgExps = (db.expenses || []).filter((e) => Number(e.organization || 10) === currentOrgId);
+      const totalExp = orgExps.reduce((s, e) => s + Number(e.amount || 0), 0);
+      return {
+        period_start: '2026-01-01',
+        period_end: new Date().toISOString().split('T')[0],
+        total_revenue: 0,
+        total_expenses: totalExp,
+        net_profit: -totalExp,
+        revenue_breakdown: [],
+        expense_breakdown: orgExps.slice(0, 5).map((e) => ({ category: e.category, amount: Number(e.amount || 0) })),
+      };
+    }
     return {
       period_start: '2026-01-01',
       period_end: new Date().toISOString().split('T')[0],
@@ -2385,6 +3103,18 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/ledger/balance-sheet') {
+    if (currentOrgId !== 10) {
+      return {
+        as_of_date: new Date().toISOString().split('T')[0],
+        total_assets: 0,
+        total_liabilities: 0,
+        total_equity: 0,
+        is_balanced: true,
+        assets: [],
+        liabilities: [],
+        equity: [],
+      };
+    }
     return {
       as_of_date: new Date().toISOString().split('T')[0],
       total_assets: 3500000,
@@ -2410,31 +3140,37 @@ export async function handleMockRequest(endpoint, options = {}) {
   // ORGANIZATION & INVITATIONS
   // -------------------------------------------------------------
   if (pathname === '/org/current') {
-    const org = db.organizations[0] || {
-      id: 10,
-      name: 'BuildSphere Construction Ltd',
-      currency: 'INR',
-      workday_hours: '8.00',
-      half_day_hours: '4.00',
-      overtime_after_hours: '8.00',
-      expense_approval_limit: '1000.00',
-    };
+    let org = (db.organizations || []).find((o) => Number(o.id) === currentOrgId);
+    if (!org) {
+      org = {
+        id: currentOrgId,
+        name: currentOrgId === 10 ? 'BuildSphere org.' : 'My Organization',
+        currency: 'INR',
+        workday_hours: '8.00',
+        half_day_hours: '4.00',
+        overtime_after_hours: '8.00',
+        expense_approval_limit: '1000.00',
+        is_active: true,
+      };
+      if (!db.organizations) db.organizations = [];
+      db.organizations.push(org);
+    }
     if (method === 'PATCH') {
       Object.assign(org, body);
-      db.organizations[0] = org;
       saveDB(db);
     }
     return org;
   }
 
   if (pathname === '/org/invitations') {
-    if (method === 'GET') return db.invitations || [];
+    if (method === 'GET') return (db.invitations || []).filter((i) => Number(i.organization || 10) === currentOrgId);
     if (method === 'POST') {
       const inv = {
         id: nextId(db.invitations),
         name: body.name || 'Team Member',
         email: body.email,
         role: body.role || 'SITE_ENGINEER',
+        organization: currentOrgId,
         status: 'PENDING',
         invited_at: new Date().toISOString(),
       };
@@ -2450,7 +3186,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         member_email: body.email,
         role: body.role || 'SITE_ENGINEER',
         password: '(Set via Invitation Link)',
-        subject: `BuildSphere Invitation: Join ${db.organizations[0]?.name || 'BuildSphere'} as ${body.role || 'Site Engineer'}`,
+        subject: `BuildSphere Invitation: Join ${currentOrg?.name || 'BuildSphere'} as ${body.role || 'Site Engineer'}`,
         status: 'DELIVERED',
         delivery_provider: localStorage.getItem('cmp_resend_api_key') ? 'Resend' : 'BuildSphere Outbox',
         login_url: typeof window !== 'undefined' ? `${window.location.origin}/login?invite=${inv.id}` : 'https://buildsphere.com',
@@ -2464,7 +3200,7 @@ export async function handleMockRequest(endpoint, options = {}) {
 
   if (pathname === '/org/dispatched-emails') {
     if (method === 'GET') {
-      return db.dispatched_emails || [];
+      return (db.dispatched_emails || []).filter((e) => Number(e.organization || 10) === currentOrgId);
     }
     if (method === 'DELETE') {
       db.dispatched_emails = [];
@@ -2529,7 +3265,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   // -------------------------------------------------------------
   if (pathname === '/audit/logs') {
     if (method === 'GET') {
-      let list = db.audit_logs || [];
+      let list = (db.audit_logs || []).filter((l) => Number(l.organization || 10) === currentOrgId);
       const roleFilter = params.role;
       const resourceFilter = params.resource_type;
       const actionFilter = params.action;
@@ -2574,7 +3310,7 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/audit/stats') {
-    const list = db.audit_logs || [];
+    const list = (db.audit_logs || []).filter((l) => Number(l.organization || 10) === currentOrgId);
     const roleCounts = {};
     const resourceCounts = {};
     const actionCounts = {};
@@ -2606,13 +3342,14 @@ export async function handleMockRequest(endpoint, options = {}) {
   // -------------------------------------------------------------
   if (pathname === '/cost-estimator/estimates') {
     if (method === 'GET') {
-      return db.cost_estimates || [];
+      return (db.cost_estimates || []).filter((e) => Number(e.organization || 10) === currentOrgId);
     }
     if (method === 'POST') {
       if (!db.cost_estimates) db.cost_estimates = [];
       const newEst = {
         id: nextId(db.cost_estimates),
         ...body,
+        organization: currentOrgId,
         created_at: body.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };

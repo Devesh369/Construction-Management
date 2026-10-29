@@ -184,6 +184,11 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
             if (id) siteIds.add(Number(id));
           });
         }
+        if (Array.isArray(emp.assigned_projects_details)) {
+          emp.assigned_projects_details.forEach((p) => {
+            if (p?.id) siteIds.add(Number(p.id));
+          });
+        }
         const defaultProjId =
           emp.primary_project && siteIds.has(Number(emp.primary_project))
             ? Number(emp.primary_project)
@@ -306,24 +311,20 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
         return (b.id || 0) - (a.id || 0);
       });
       setHistRecords(sortedList);
-      if (isEmployeeLabour) {
-        const totalPresent = sortedList.filter((r) => r.status === 'PRESENT').length;
-        const halfDays = sortedList.filter((r) => r.status === 'HALF_DAY').length;
-        const totalAbsent = sortedList.filter((r) => r.status === 'ABSENT').length;
-        const totalEarnings = sortedList.reduce(
-          (acc, r) => acc + (parseFloat(r.earning) || 0),
-          0
-        );
-        setHistSummary({
-          total_present: totalPresent,
-          full_days: totalPresent,
-          half_days: halfDays,
-          total_absent: totalAbsent,
-          total_earnings: totalEarnings,
-        });
-      } else if (sumRes) {
-        setHistSummary(sumRes);
-      }
+      const totalFullDays = sortedList.filter((r) => r.status === 'PRESENT').length;
+      const totalHalfDays = sortedList.filter((r) => r.status === 'HALF_DAY').length;
+      const totalAbsentDays = sortedList.filter((r) => r.status === 'ABSENT').length;
+      const totalEarnedCalc = sortedList.reduce(
+        (acc, r) => acc + (parseFloat(r.earning) || 0),
+        0
+      );
+      setHistSummary({
+        total_present: sumRes?.total_present ?? (totalFullDays + totalHalfDays),
+        full_days: sumRes?.full_days ?? totalFullDays,
+        half_days: sumRes?.half_days ?? totalHalfDays,
+        total_absent: sumRes?.total_absent ?? totalAbsentDays,
+        total_earnings: sumRes?.total_earnings ?? totalEarnedCalc,
+      });
     } catch (err) {
       console.error('Error fetching history:', err);
       toast.error('Failed to load attendance history.');
@@ -349,6 +350,42 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
 
       const res = await api.attendance.report(params);
       let rows = res.rows || [];
+      if (rows.length === 0 && res.records && res.records.length > 0) {
+        const empMap = {};
+        employees.forEach((e) => {
+          empMap[e.id] = {
+            employee_id: e.id,
+            id: e.id,
+            employee_name: e.full_name || 'Worker',
+            employee_code: e.employee_code || '',
+            daily_wage: Number(e.daily_rate || 800),
+            full_days: 0,
+            half_days: 0,
+            total_present: 0,
+            total_absent: 0,
+            total_earnings: 0,
+          };
+        });
+        res.records.forEach((r) => {
+          const item = empMap[r.employee];
+          if (item) {
+            if (r.status === 'PRESENT') {
+              item.full_days++;
+              item.total_present = (item.total_present || 0) + 1;
+              item.total_attendance = (item.total_attendance || 0) + 1;
+              item.total_earnings += item.daily_wage;
+            } else if (r.status === 'HALF_DAY') {
+              item.half_days++;
+              item.total_present = (item.total_present || 0) + 0.5;
+              item.total_attendance = (item.total_attendance || 0) + 0.5;
+              item.total_earnings += item.daily_wage / 2;
+            } else if (r.status === 'ABSENT') {
+              item.total_absent++;
+            }
+          }
+        });
+        rows = Object.values(empMap);
+      }
       if (isEmployeeLabour) {
         rows = rows.filter(
           (r) =>
@@ -432,8 +469,54 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
         if (id) siteIds.add(Number(id));
       });
     }
+    if (Array.isArray(emp.assigned_projects_details)) {
+      emp.assigned_projects_details.forEach((p) => {
+        if (p?.id) siteIds.add(Number(p.id));
+      });
+    }
     return projects.filter((p) => siteIds.has(Number(p.id)));
   };
+
+  // Dynamic project lists for each tab reflecting the selected/logged-in employee
+  const markAvailableProjects = useMemo(() => {
+    if (isEmployeeLabour && currentEmpId) {
+      const emp = employees.find((e) => e.id === currentEmpId);
+      return getWorkerAssignedProjects(emp);
+    }
+    return projects;
+  }, [isEmployeeLabour, currentEmpId, employees, projects]);
+
+  const paAvailableProjects = useMemo(() => {
+    if (isEmployeeLabour && currentEmpId) {
+      const emp = employees.find((e) => e.id === currentEmpId);
+      return getWorkerAssignedProjects(emp);
+    }
+    return projects;
+  }, [isEmployeeLabour, currentEmpId, employees, projects]);
+
+  const histAvailableProjects = useMemo(() => {
+    if (isEmployeeLabour && currentEmpId) {
+      const emp = employees.find((e) => e.id === currentEmpId);
+      return getWorkerAssignedProjects(emp);
+    }
+    if (histEmpFilter && histEmpFilter !== 'ALL') {
+      const emp = employees.find((e) => String(e.id) === String(histEmpFilter));
+      return getWorkerAssignedProjects(emp);
+    }
+    return projects;
+  }, [isEmployeeLabour, currentEmpId, histEmpFilter, employees, projects]);
+
+  const repAvailableProjects = useMemo(() => {
+    if (isEmployeeLabour && currentEmpId) {
+      const emp = employees.find((e) => e.id === currentEmpId);
+      return getWorkerAssignedProjects(emp);
+    }
+    if (repEmpFilter && repEmpFilter !== 'ALL') {
+      const emp = employees.find((e) => String(e.id) === String(repEmpFilter));
+      return getWorkerAssignedProjects(emp);
+    }
+    return projects;
+  }, [isEmployeeLabour, currentEmpId, repEmpFilter, employees, projects]);
 
   // Helper: Check if worker belongs to a project site
   const belongsToProject = (emp, projId) => {
@@ -853,8 +936,10 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
                     onChange={(e) => setMarkProjectFilter(e.target.value)}
                     className="border border-gray-200 rounded-lg px-3 py-2 pr-8 text-sm font-medium text-gray-800 focus:outline-none focus:border-blue-500 shadow-2xs bg-white min-w-48 appearance-none cursor-pointer"
                   >
-                    <option value="ALL">All Projects ({employees.length} Workers)</option>
-                    {projects.map((p) => {
+                    <option value="ALL">
+                      {isEmployeeLabour ? 'All My Assigned Projects' : `All Projects (${employees.length} Workers)`}
+                    </option>
+                    {markAvailableProjects.map((p) => {
                       const count = employees.filter((e) => belongsToProject(e, p.id)).length;
                       return (
                         <option key={p.id} value={p.id}>
@@ -1380,8 +1465,10 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
                   onChange={(e) => setPaProjectFilter(e.target.value)}
                   className="border border-gray-200 rounded-lg px-3 py-2 pr-8 text-sm font-medium text-gray-800 focus:outline-none focus:border-blue-500 shadow-2xs bg-white min-w-44 appearance-none"
                 >
-                  <option value="ALL">All Projects</option>
-                  {projects.map((p) => (
+                  <option value="ALL">
+                    {isEmployeeLabour ? 'All My Assigned Projects' : 'All Projects'}
+                  </option>
+                  {paAvailableProjects.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
@@ -1566,7 +1653,17 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
               </label>
               <select
                 value={histEmpFilter}
-                onChange={(e) => setHistEmpFilter(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setHistEmpFilter(val);
+                  if (val !== 'ALL') {
+                    const targetEmp = employees.find((emp) => String(emp.id) === String(val));
+                    const assigned = getWorkerAssignedProjects(targetEmp);
+                    if (!assigned.some((p) => String(p.id) === String(histProjectFilter))) {
+                      setHistProjectFilter('ALL');
+                    }
+                  }
+                }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white shadow-2xs"
               >
                 <option value="ALL">All Employees</option>
@@ -1588,8 +1685,10 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
                 onChange={(e) => setHistProjectFilter(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white shadow-2xs"
               >
-                <option value="ALL">All Projects</option>
-                {projects.map((p) => (
+                <option value="ALL">
+                  {histEmpFilter !== 'ALL' || isEmployeeLabour ? 'All Assigned Projects' : 'All Projects'}
+                </option>
+                {histAvailableProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -1805,7 +1904,17 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
               </label>
               <select
                 value={repEmpFilter}
-                onChange={(e) => setRepEmpFilter(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setRepEmpFilter(val);
+                  if (val !== 'ALL') {
+                    const targetEmp = employees.find((emp) => String(emp.id) === String(val));
+                    const assigned = getWorkerAssignedProjects(targetEmp);
+                    if (!assigned.some((p) => String(p.id) === String(repProjectFilter))) {
+                      setRepProjectFilter('ALL');
+                    }
+                  }
+                }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white shadow-2xs"
               >
                 <option value="ALL">All Employees</option>
@@ -1827,8 +1936,10 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
                 onChange={(e) => setRepProjectFilter(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white shadow-2xs"
               >
-                <option value="ALL">All Projects</option>
-                {projects.map((p) => (
+                <option value="ALL">
+                  {repEmpFilter !== 'ALL' || isEmployeeLabour ? 'All Assigned Projects' : 'All Projects'}
+                </option>
+                {repAvailableProjects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -1899,37 +2010,87 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {reportRows.map((row) => (
-                      <tr key={row.employee_id} className="hover:bg-gray-50 transition-colors">
-                        {/* Employee Name */}
-                        <td className="py-4 px-6">
-                          <div className="text-gray-900 font-bold text-sm">
-                            {row.employee_name}
-                          </div>
-                          <div className="text-[11px] text-gray-500 font-semibold uppercase mt-0.5">
-                            TOTAL ATTENDANCE: {row.full_days + row.half_days}
-                          </div>
-                        </td>
+                    {reportRows.map((row) => {
+                      const totalDays = Number(
+                        row.total_attendance !== undefined
+                          ? row.total_attendance
+                          : (Number(row.full_days || 0) + Number(row.half_days || 0) * 0.5)
+                      );
+                      const formattedDays = totalDays % 1 === 0 ? totalDays : totalDays.toFixed(1);
 
-                        {/* Daily Wage */}
-                        <td className="py-4 px-6 font-bold text-sm text-gray-900">
-                          ₹{Number(row.daily_wage || 0).toLocaleString('en-IN')}
-                        </td>
+                      return (
+                        <tr key={row.employee_id || row.id} className="hover:bg-gray-50 transition-colors">
+                          {/* Employee Name */}
+                          <td className="py-4 px-6">
+                            <div className="text-gray-900 font-bold text-sm">
+                              {row.employee_name}
+                            </div>
+                            {row.employee_code && (
+                              <div className="text-[11px] text-gray-500 font-medium mt-0.5">
+                                {row.employee_code}
+                              </div>
+                            )}
+                          </td>
 
-                        {/* Total Attendance */}
-                        <td className="py-4 px-6 font-bold text-sm text-gray-900">
-                          {row.total_attendance}
-                        </td>
+                          {/* Daily Wage */}
+                          <td className="py-4 px-6 font-bold text-sm text-gray-900">
+                            ₹{Number(row.daily_wage || 0).toLocaleString('en-IN')}
+                          </td>
 
-                        {/* Total Earnings */}
-                        <td className="py-4 px-6">
-                          <span className="inline-block bg-emerald-100 text-emerald-800 font-extrabold text-sm px-4 py-1.5 rounded-md">
-                            ₹{Number(row.total_earnings || 0).toLocaleString('en-IN')}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                          {/* Total Attendance */}
+                          <td className="py-4 px-6 font-bold text-sm text-gray-900">
+                            {formattedDays}
+                          </td>
+
+                          {/* Total Earnings */}
+                          <td className="py-4 px-6">
+                            <span className="inline-block bg-emerald-100 text-emerald-800 font-extrabold text-sm px-4 py-1.5 rounded-md">
+                              ₹{Number(row.total_earnings || 0).toLocaleString('en-IN')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
+                  {/* Total Earnings & Attendance at the end of table */}
+                  {reportRows.length > 0 && (() => {
+                    const totalAttendanceSum = reportRows.reduce(
+                      (sum, r) =>
+                        sum +
+                        Number(
+                          r.total_attendance !== undefined
+                            ? r.total_attendance
+                            : (Number(r.full_days || 0) + Number(r.half_days || 0) * 0.5)
+                        ),
+                      0
+                    );
+                    const formattedAttendanceSum =
+                      totalAttendanceSum % 1 === 0 ? totalAttendanceSum : totalAttendanceSum.toFixed(1);
+
+                    return (
+                      <tfoot className="border-t-2 border-gray-300 bg-gray-50/90">
+                        <tr className="text-gray-900 font-black">
+                          <td className="py-4 px-6 text-sm font-black uppercase tracking-wider text-gray-800">
+                            TOTAL
+                          </td>
+                          <td className="py-4 px-6 text-sm font-bold text-gray-400">
+                            —
+                          </td>
+                          <td className="py-4 px-6 text-sm font-black text-gray-900">
+                            {formattedAttendanceSum}
+                          </td>
+                          <td className="py-4 px-6">
+                            <span className="inline-block bg-emerald-600 text-white font-extrabold text-sm px-4 py-1.5 rounded-md shadow-xs">
+                              ₹
+                              {reportRows
+                                .reduce((sum, r) => sum + Number(r.total_earnings || 0), 0)
+                                .toLocaleString('en-IN')}
+                            </span>
+                          </td>
+                        </tr>
+                      </tfoot>
+                    );
+                  })()}
                 </table>
               </div>
             )}

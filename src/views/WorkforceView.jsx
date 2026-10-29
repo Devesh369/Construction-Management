@@ -186,6 +186,16 @@ export const WorkforceView = () => {
       is_active: emp.is_active ?? true,
     });
     setCurrentView('detail');
+
+    // Fetch fresh live details and financials
+    try {
+      const fresh = await api.workforce.getEmployee(emp.id);
+      if (fresh) {
+        setSelectedEmployee((prev) => (prev && prev.id === emp.id ? { ...prev, ...fresh } : prev));
+      }
+    } catch (e) {
+      // ignore
+    }
   };
 
   const handleAddEmployee = async (e) => {
@@ -280,6 +290,25 @@ export const WorkforceView = () => {
     }
   };
 
+  const assignedProjectsList = useMemo(() => {
+    if (!selectedEmployee) return [];
+    if (
+      Array.isArray(selectedEmployee.assigned_projects_details) &&
+      selectedEmployee.assigned_projects_details.length > 0
+    ) {
+      return selectedEmployee.assigned_projects_details;
+    }
+    const ids = new Set();
+    if (selectedEmployee.primary_project) ids.add(Number(selectedEmployee.primary_project));
+    if (Array.isArray(selectedEmployee.assigned_projects)) {
+      selectedEmployee.assigned_projects.forEach((p) => {
+        const id = typeof p === 'object' && p !== null ? p.id : p;
+        if (id) ids.add(Number(id));
+      });
+    }
+    return projects.filter((p) => ids.has(Number(p.id)));
+  }, [selectedEmployee, projects]);
+
   const handleAssignProject = async (e) => {
     e.preventDefault();
     if (!assignProjectId || !selectedEmployee) return;
@@ -287,7 +316,8 @@ export const WorkforceView = () => {
     try {
       const updated = await api.workforce.assignProject(selectedEmployee.id, assignProjectId);
       toast.success('Project assigned successfully!');
-      setSelectedEmployee(updated);
+      const fresh = await api.workforce.getEmployee(selectedEmployee.id).catch(() => null);
+      setSelectedEmployee(fresh || updated);
       setAssignProjectId('');
       await fetchEmployees();
     } catch (err) {
@@ -302,7 +332,8 @@ export const WorkforceView = () => {
     try {
       const updated = await api.workforce.unassignProject(selectedEmployee.id, projId);
       toast.success('Project unassigned.');
-      setSelectedEmployee(updated);
+      const fresh = await api.workforce.getEmployee(selectedEmployee.id).catch(() => null);
+      setSelectedEmployee(fresh || updated);
       await fetchEmployees();
     } catch (err) {
       toast.error(`Unassign failed: ${err.message}`);
@@ -621,10 +652,11 @@ export const WorkforceView = () => {
   // ==========================================
   if (currentView === 'detail' && selectedEmployee) {
     const fin = selectedEmployee.financials || {
-      total_pagar: '0',
-      total_upad: '0',
-      total_paid: '0',
-      balance: '0',
+      total_pagar: selectedEmployee.total_pagar || 0,
+      total_upad: selectedEmployee.total_upad || 0,
+      total_paid: selectedEmployee.total_paid || 0,
+      balance: selectedEmployee.balance || 0,
+      has_attendance: Boolean(selectedEmployee.total_pagar && Number(selectedEmployee.total_pagar) > 0),
     };
 
     return (
@@ -911,7 +943,7 @@ export const WorkforceView = () => {
               <span>ASSIGNED PROJECTS</span>
             </div>
             <span className="text-xs font-bold text-[var(--text-muted)]">
-              {selectedEmployee.assigned_projects_details?.length || 0}
+              {assignedProjectsList.length}
             </span>
           </div>
 
@@ -923,12 +955,15 @@ export const WorkforceView = () => {
                 onChange={(e) => setAssignProjectId(e.target.value)}
                 className="flex-1 rounded-xl border border-gray-300 dark:border-[var(--border-default)] bg-white dark:bg-[var(--bg-primary)] px-4 py-2 text-sm text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-blue-500/20"
               >
-                <option value="">Select Project</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.code})
-                  </option>
-                ))}
+                <option value="">Select Project to Assign</option>
+                {projects.map((p) => {
+                  const isAssigned = assignedProjectsList.some((ap) => Number(ap.id) === Number(p.id));
+                  return (
+                    <option key={p.id} value={p.id} disabled={isAssigned}>
+                      {p.name} ({p.code}){isAssigned ? ' — (Already Assigned)' : ''}
+                    </option>
+                  );
+                })}
               </select>
               <Button
                 type="submit"
@@ -944,9 +979,8 @@ export const WorkforceView = () => {
 
           {/* Assigned Projects List */}
           <div className="space-y-2">
-            {selectedEmployee.assigned_projects_details &&
-            selectedEmployee.assigned_projects_details.length > 0 ? (
-              selectedEmployee.assigned_projects_details.map((proj) => (
+            {assignedProjectsList.length > 0 ? (
+              assignedProjectsList.map((proj) => (
                 <div
                   key={proj.id}
                   className="p-3.5 rounded-2xl border border-[var(--border-default)] bg-white dark:bg-[var(--bg-primary)] flex items-center justify-between gap-3 shadow-sm hover:border-blue-400 transition-all"
