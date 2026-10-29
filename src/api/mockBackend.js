@@ -1008,13 +1008,43 @@ export async function handleMockRequest(endpoint, options = {}) {
     const workersAbsentToday = uniqueAbsentIds.size;
 
     const totalBudget = activeProjects.reduce((sum, p) => sum + Number(p.estimated_budget || 0), 0);
-    const actualSpend = activeProjects.reduce((sum, p) => sum + Number(p.actual_spend || 0), 0);
-    const budgetPct = totalBudget > 0 ? Math.round((actualSpend / totalBudget) * 100) : 0;
 
-    // Monthly burn: sum of expenses
-    const monthlyExpenses = (db.expenses || [])
-      .filter((e) => Number(e.organization || 10) === currentOrgId && (!projectId || e.project === projectId))
+    // Calculate total payments made to employees strictly as wages and UPAD advances
+    const employeePaymentsSum = (db.payments || [])
+      .filter((p) => {
+        if (projectId && p.project !== projectId) return false;
+        const status = (p.status || '').toUpperCase();
+        return status === 'PAID' || status === 'PROCESSED' || status === 'APPROVED';
+      })
+      .reduce((sum, p) => sum + Number(p.amount || p.base_salary || 0), 0);
+
+    const payrollVouchersSum = (db.payroll_vouchers || [])
+      .filter((v) => (v.status || '').toUpperCase() === 'PAID')
+      .reduce((sum, v) => sum + Number(v.net_pay || v.gross_pay || 0), 0);
+
+    const advancesSum = (db.advances || [])
+      .filter((a) => (!projectId || a.project === projectId))
+      .reduce((sum, a) => sum + Number(a.amount || 0), 0);
+
+    // Sum of all wages and UPAD advances paid to employees
+    const totalEmployeeAmount = employeePaymentsSum + payrollVouchersSum + advancesSum;
+
+    // Calculate total payments made across the entire platform (Employee Wages & UPAD + Approved Vendor Expenses + Running Costs)
+    const approvedExpensesSum = (db.expenses || [])
+      .filter((e) => {
+        if (projectId && e.project !== projectId) return false;
+        const status = (e.status || '').toUpperCase();
+        return status === 'APPROVED' || status === 'PAID' || status === 'APPROVED_BY_MANAGER';
+      })
       .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    const runningCostsSum = (db.running_costs || [])
+      .filter((rc) => (!projectId || rc.project === projectId))
+      .reduce((sum, rc) => sum + Number(rc.amount || 0), 0);
+
+    // Grand Total Payments Made
+    const totalPaymentsMade = totalEmployeeAmount + approvedExpensesSum + runningCostsSum;
+    const budgetPct = totalBudget > 0 ? Math.round((totalPaymentsMade / totalBudget) * 100) : 0;
 
     const pendingExpensesCount = (db.expenses || []).filter(
       (e) => Number(e.organization || 10) === currentOrgId && (!projectId || e.project === projectId) && e.status === 'PENDING'
@@ -1024,18 +1054,50 @@ export async function handleMockRequest(endpoint, options = {}) {
       (p) => Number(p.organization || 10) === currentOrgId && (!projectId || p.project === projectId) && p.status === 'PENDING'
     ).length;
 
-    // Attendance trend
-    const attendanceTrend = activeWorkers.length > 0 ? [
-      { date: '2026-10-22', present: Math.min(activeWorkers.length, 7), absent: Math.max(0, activeWorkers.length - 7), half_day: 0, total: activeWorkers.length },
-      { date: '2026-10-23', present: Math.min(activeWorkers.length, 8), absent: Math.max(0, activeWorkers.length - 8), half_day: 0, total: activeWorkers.length },
-      { date: '2026-10-24', present: Math.min(activeWorkers.length, 8), absent: Math.max(0, activeWorkers.length - 8), half_day: 0, total: activeWorkers.length },
-      { date: '2026-10-25', present: Math.min(activeWorkers.length, 7), absent: Math.max(0, activeWorkers.length - 7), half_day: 0, total: activeWorkers.length },
-      { date: '2026-10-26', present: Math.min(activeWorkers.length, 9), absent: Math.max(0, activeWorkers.length - 9), half_day: 0, total: activeWorkers.length },
-      { date: '2026-10-27', present: Math.min(activeWorkers.length, 8), absent: Math.max(0, activeWorkers.length - 8), half_day: 0, total: activeWorkers.length },
-      { date: todayStr, present: workersOnSiteToday, absent: workersAbsentToday, half_day: todayRecords.filter((a) => a.status === 'HALF_DAY').length, total: activeWorkers.length },
-    ] : [
-      { date: todayStr, present: 0, absent: 0, half_day: 0, total: 0 },
-    ];
+    // 7-day dynamic attendance trend ending today
+    const attendanceTrend = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dStr = d.toISOString().split('T')[0];
+
+      const dayAtt = (db.attendances || []).filter(
+        (a) => (!projectId || a.project === projectId) && a.date === dStr && !a.deleted_at
+      );
+
+      if (dayAtt.length > 0) {
+        const pCount = dayAtt.filter((a) => a.status === 'PRESENT' || a.status === 'HALF_DAY').length;
+        const aCount = dayAtt.filter((a) => a.status === 'ABSENT' || a.status === 'LEAVE').length;
+        const unlogged = Math.max(0, activeWorkers.length - dayAtt.length);
+        attendanceTrend.push({
+          date: dStr,
+          present: pCount,
+          absent: aCount + unlogged,
+          half_day: dayAtt.filter((a) => a.status === 'HALF_DAY').length,
+          total: activeWorkers.length,
+        });
+      } else if (i === 0) {
+        attendanceTrend.push({
+          date: dStr,
+          present: workersOnSiteToday,
+          absent: workersAbsentToday,
+          half_day: 0,
+          total: activeWorkers.length,
+        });
+      } else {
+        const baseP = Math.min(
+          activeWorkers.length,
+          Math.max(0, Math.round(activeWorkers.length * (0.6 + (i % 3) * 0.15)))
+        );
+        attendanceTrend.push({
+          date: dStr,
+          present: baseP,
+          absent: Math.max(0, activeWorkers.length - baseP),
+          half_day: 1,
+          total: activeWorkers.length,
+        });
+      }
+    }
 
     // Project cards enhanced for dashboard drill-down
     const enhancedProjects = filteredProjects.map((p) => {
@@ -1058,12 +1120,17 @@ export async function handleMockRequest(endpoint, options = {}) {
       active_workers: activeWorkers.length,
       workers_on_site_today: workersOnSiteToday,
       workers_absent_today: workersAbsentToday,
+      attendance_today_absent: workersAbsentToday,
       total_budget: totalBudget,
-      actual_spend: actualSpend,
+      actual_spend: totalPaymentsMade,
+      total_spend: totalPaymentsMade,
+      total_payments: totalPaymentsMade,
+      month_expenditure: totalEmployeeAmount,
+      employee_amount: totalEmployeeAmount,
       budget_utilization_pct: budgetPct,
       budget_utilization_percent: budgetPct,
-      monthly_burn: monthlyExpenses,
-      monthly_payroll: activeWorkers.length > 0 ? activeWorkers.length * 7800 : 0,
+      monthly_burn: approvedExpensesSum,
+      monthly_payroll: totalEmployeeAmount,
       pending_expenses: pendingExpensesCount,
       pending_advances: pendingAdvancesCount,
       attendance_trend: attendanceTrend,
@@ -1936,52 +2003,46 @@ export async function handleMockRequest(endpoint, options = {}) {
     const date = params.date || new Date().toISOString().split('T')[0];
 
     // Find all attendance records marked on this specific date that are PRESENT or HALF_DAY
-    const dateAttendances = (db.attendances || []).filter(
+    let dateAttendances = (db.attendances || []).filter(
       (a) =>
         !a.deleted_at &&
-        Number(a.organization || 10) === currentOrgId &&
-        a.date === date &&
+        (a.date === date || (a.created_at && a.created_at.startsWith(date))) &&
         (a.status === 'PRESENT' || a.status === 'HALF_DAY')
     );
 
-    // If project is specified, match attendances for this project,
-    // OR workers marked present today who are assigned to this project
-    let matchingAttendances = dateAttendances;
-    if (pId) {
-      const projectMatches = dateAttendances.filter((a) => Number(a.project) === pId);
-      if (projectMatches.length > 0) {
-        matchingAttendances = projectMatches;
-      } else {
-        // Fallback: If attendance was marked on another site ID but worker belongs to this project
-        matchingAttendances = dateAttendances.filter((a) => {
-          const emp = (db.employees || []).find((e) => e.id === Number(a.employee));
-          if (!emp) return false;
-          return (
-            Number(emp.primary_project) === pId ||
-            (Array.isArray(emp.assigned_projects) && emp.assigned_projects.some((pr) => Number(pr) === pId))
-          );
-        });
+    if (pId && dateAttendances.length > 0) {
+      const projSpecificAtt = dateAttendances.filter((a) => {
+        if (Number(a.project) === pId) return true;
+        const emp = (db.employees || []).find((e) => e.id === Number(a.employee));
+        if (Number(emp?.primary_project) === pId) return true;
+        if (Array.isArray(emp?.assigned_projects) && emp.assigned_projects.some((pr) => Number(pr) === pId)) return true;
+        return false;
+      });
+      if (projSpecificAtt.length > 0) {
+        dateAttendances = projSpecificAtt;
       }
     }
 
-    const presentEmpIds = new Set(matchingAttendances.map((a) => Number(a.employee)));
-
+    const presentEmpIds = new Set(dateAttendances.map((a) => Number(a.employee)));
     const emps = (db.employees || [])
-      .filter((e) => !e.deleted_at && Number(e.organization || 10) === currentOrgId && presentEmpIds.has(Number(e.id)))
+      .filter((e) => !e.deleted_at && presentEmpIds.has(Number(e.id)))
       .map((e) => {
-        const att = matchingAttendances.find((a) => Number(a.employee) === Number(e.id));
+        const att = dateAttendances.find((a) => Number(a.employee) === Number(e.id));
+        const proj = (db.projects || []).find((p) => p.id === (att?.project || e.primary_project));
         return {
           ...formatEmployeeRecord(e, currentOrgId, db),
           attendance_status: att?.status || 'PRESENT',
           hours_worked: att?.hours_worked || 8,
           overtime_hours: att?.overtime_hours || 0,
+          project_id: proj?.id || null,
+          project_name: proj?.name || '',
         };
       });
 
     // Group employees by role
     const byRole = {};
     emps.forEach((emp) => {
-      const roleName = emp.role || emp.trade || 'Worker';
+      const roleName = emp.role || emp.trade || 'Labour';
       if (!byRole[roleName]) byRole[roleName] = [];
       byRole[roleName].push(emp);
     });
@@ -1990,6 +2051,7 @@ export async function handleMockRequest(endpoint, options = {}) {
       employees: emps,
       by_role: byRole,
       count: emps.length,
+      total_present: emps.length,
       date: date,
       project: pId,
     };
@@ -2003,74 +2065,102 @@ export async function handleMockRequest(endpoint, options = {}) {
           (Number(w.organization || 10) === currentOrgId || orgProjectIds.has(Number(w.project)))
       );
       if (params.project && params.project !== 'all') {
-        list = list.filter((w) => Number(w.project) === Number(params.project));
+        list = list.filter((w) => String(w.project) === String(params.project));
       }
-      if (params.date) {
-        list = list.filter((w) => w.date === params.date);
+      if (params.date) list = list.filter((w) => w.date === params.date);
+      if (params.from_date) list = list.filter((w) => w.date >= params.from_date);
+      if (params.to_date) list = list.filter((w) => w.date <= params.to_date);
+
+      if (params.employee) {
+        const eId = Number(params.employee);
+        list = list.filter((w) =>
+          (Array.isArray(w.employees) && w.employees.map(Number).includes(eId)) ||
+          Number(w.employee) === eId
+        );
       }
-      if (params.from_date) {
-        list = list.filter((w) => w.date >= params.from_date);
+
+      if (params.role) {
+        const rLower = params.role.toLowerCase();
+        list = list.filter((w) => {
+          const empIds = Array.isArray(w.employees) ? w.employees : (w.employee ? [w.employee] : []);
+          const empObjs = (db.employees || []).filter((e) => empIds.includes(e.id));
+          return (
+            empObjs.some((e) => (e.role || e.trade || '').toLowerCase().includes(rLower)) ||
+            (w.department && w.department.toLowerCase().includes(rLower))
+          );
+        });
       }
-      if (params.to_date) {
-        list = list.filter((w) => w.date <= params.to_date);
-      }
+
+      // Hydrate project_name, employee_details, and role_counts
       return list.map((w) => {
+        const empIds = Array.isArray(w.employees) ? w.employees : (w.employee ? [w.employee] : []);
+        const empObjs = (db.employees || []).filter((e) => empIds.includes(e.id));
+        const roleCounts = {};
+        empObjs.forEach((e) => {
+          const r = e.role || e.trade || 'Labour';
+          roleCounts[r] = (roleCounts[r] || 0) + 1;
+        });
         const proj = (db.projects || []).find((p) => p.id === Number(w.project));
-        const roleCounts = w.role_counts || {};
-        if (Object.keys(roleCounts).length === 0 && Array.isArray(w.employees)) {
-          w.employees.forEach((id) => {
-            const emp = (db.employees || []).find((e) => e.id === Number(id));
-            if (emp) {
-              const r = emp.role || emp.trade || 'Worker';
-              roleCounts[r] = (roleCounts[r] || 0) + 1;
-            }
-          });
-        }
         return {
           ...w,
-          project_name: proj?.name || `Project #${w.project}`,
-          role_counts: roleCounts,
+          project_name: w.project_name || (proj ? proj.name : `Project #${w.project}`),
+          employee_details: empObjs,
+          role_counts: w.role_counts && Object.keys(w.role_counts).length > 0 ? w.role_counts : roleCounts,
         };
       });
     }
+
     if (method === 'POST') {
       const projId = Number(body.project_id || body.project);
       const proj = (db.projects || []).find((p) => p.id === projId);
       const empIds = Array.isArray(body.employees)
-        ? body.employees
+        ? body.employees.map(Number)
         : body.employee
         ? [Number(body.employee)]
         : [];
 
+      const empObjs = (db.employees || []).filter((e) => empIds.includes(e.id));
       const roleCounts = {};
-      empIds.forEach((id) => {
-        const emp = (db.employees || []).find((e) => e.id === Number(id));
-        if (emp) {
-          const r = emp.role || emp.trade || 'Worker';
-          roleCounts[r] = (roleCounts[r] || 0) + 1;
-        }
+      empObjs.forEach((e) => {
+        const r = e.role || e.trade || 'Labour';
+        roleCounts[r] = (roleCounts[r] || 0) + 1;
       });
 
       const entry = {
         id: nextId(db.work_entries),
         organization: currentOrgId,
         project: projId,
-        project_name: proj?.name || `Project #${projId}`,
+        project_name: proj ? proj.name : `Project #${projId}`,
         date: body.date || new Date().toISOString().split('T')[0],
         description: body.description || body.task_description || '',
+        task_description: body.description || body.task_description || '',
         department: body.department || '',
+        quantity_completed: body.quantity_completed || '1.0',
+        unit: body.unit || 'sqft',
+        hours_spent: String(Number(body.hours_spent || 8).toFixed(2)),
         employees: empIds,
+        employee: empIds[0] || null,
+        employee_details: empObjs,
         role_counts: roleCounts,
+        created_by: getActorFromSession().email,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deleted_at: null,
       };
+
       db.work_entries.push(entry);
       recordAuditLog(db, {
         action: 'WORK_ENTRY_CREATED',
         resource_type: 'WorkEntry',
         resource_id: entry.id,
-        changes: { project: entry.project, description: entry.description, date: entry.date, employees: entry.employees },
+        changes: {
+          project: entry.project,
+          date: entry.date,
+          description: entry.description,
+          assigned_count: empIds.length,
+          roles: Object.keys(roleCounts),
+          employees: entry.employees,
+        },
       });
       saveDB(db);
       return entry;

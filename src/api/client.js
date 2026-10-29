@@ -35,16 +35,156 @@ export const setStoredUser = (user) => {
 import { handleMockRequest } from './mockBackend';
 
 /**
- * Universal request wrapper delegating to in-browser mock backend engine
- * with full localStorage persistence and preloaded Django data.
+ * Universal request wrapper connecting directly to Django REST Framework backend,
+ * with fallback to mock backend if an endpoint is local-only or offline.
  */
 export async function apiRequest(endpoint, options = {}) {
+  const url = `${API_BASE}${endpoint}`;
+  const token = getToken();
+
+  const headers = {
+    ...(options.headers || {}),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Handle JSON vs FormData
+  const isFormData = options.body instanceof FormData;
+  if (!isFormData && options.body && typeof options.body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(options.body);
+  }
+
+  let response;
   try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: 'include',
+    });
+  } catch (netErr) {
+    // If backend is unreachable or network failed, fallback to mock
+    console.warn(`Backend fetch failed for ${endpoint}, falling back to mock:`, netErr);
     return await handleMockRequest(endpoint, options);
-  } catch (err) {
-    console.error(`Mock API Error on ${endpoint}:`, err);
+  }
+
+  // If Vite proxy returns 502/503/504 Bad Gateway or service unavailable, seamlessly fallback to mock
+  if (response.status === 502 || response.status === 503 || response.status === 504) {
+    console.warn(`Backend proxy returned ${response.status} for ${endpoint}, falling back to mock.`);
+    return await handleMockRequest(endpoint, options);
+  }
+
+  // If endpoint is not found in backend (404) and handled by mock backend (e.g. dispatched emails)
+  if (
+    response.status === 404 &&
+    (endpoint.includes('/dispatched-emails') || endpoint.includes('/cost-estimator/estimates'))
+  ) {
+    return await handleMockRequest(endpoint, options);
+  }
+
+  // Automatic silent token refresh if access token expired
+  if (
+    response.status === 401 &&
+    !options._retry &&
+    !endpoint.includes('/auth/login') &&
+    !endpoint.includes('/auth/refresh')
+  ) {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      try {
+        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh: refreshToken }),
+          credentials: 'include',
+        });
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          if (refreshData?.access) {
+            setToken(refreshData.access);
+            if (refreshData?.refresh) setRefreshToken(refreshData.refresh);
+            headers['Authorization'] = `Bearer ${refreshData.access}`;
+            response = await fetch(url, {
+              ...options,
+              headers,
+              credentials: 'include',
+            });
+          }
+        }
+      } catch (refreshErr) {
+        console.warn('Auto refresh failed:', refreshErr);
+      }
+    }
+  }
+
+  // Handle binary blob responses (PDF / Excel downloads)
+  const contentType = response.headers.get('content-type') || '';
+  if (
+    contentType.includes('application/pdf') ||
+    contentType.includes('spreadsheetml.sheet') ||
+    contentType.includes('application/octet-stream')
+  ) {
+    if (!response.ok) {
+      throw new Error(`Export download failed with status ${response.status}`);
+    }
+    const blob = await response.blob();
+    return blob;
+  }
+
+  // Handle 204 No Content
+  if (response.status === 204) {
+    return null;
+  }
+
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    let errorMsg = '';
+    // Extract specific field validation errors if provided by backend
+    if (data?.error?.details) {
+      if (typeof data.error.details === 'object' && !Array.isArray(data.error.details)) {
+        const detailsArr = Object.entries(data.error.details)
+          .map(([key, val]) => {
+            let strVal = val;
+            if (Array.isArray(val)) {
+              strVal = val.join(', ');
+            } else if (typeof val === 'object' && val !== null) {
+              strVal = JSON.stringify(val);
+            }
+            return `${key}: ${strVal}`;
+          })
+          .filter(Boolean);
+        if (detailsArr.length > 0) {
+          errorMsg = detailsArr.join(' | ');
+        }
+      } else if (typeof data.error.details === 'string') {
+        errorMsg = data.error.details;
+      }
+    }
+
+    if (!errorMsg) {
+      errorMsg =
+        data?.error?.message ||
+        data?.detail ||
+        (typeof data === 'object' ? JSON.stringify(data) : 'API request failed');
+    } else if (data?.error?.message && data.error.message !== 'Validation failed.') {
+      errorMsg = `${data.error.message} (${errorMsg})`;
+    }
+
+    const err = new Error(errorMsg);
+    err.status = response.status;
+    err.data = data;
     throw err;
   }
+
+  return data;
 }
 
 // Domain API endpoints

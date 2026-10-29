@@ -29,12 +29,45 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [assignedTasks, setAssignedTasks] = useState([]);
+
   const fetchOverview = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await api.dashboard.getOverview(selectedProjectId, true);
+      const [res, workRes] = await Promise.all([
+        api.dashboard.getOverview(selectedProjectId, true),
+        api.workEntries.list().catch(() => []),
+      ]);
       setData(res);
+
+      if (user) {
+        const myWork = (Array.isArray(workRes) ? workRes : []).filter((e) => {
+          if (user.employee_id) {
+            const empIds = Array.isArray(e.employees) ? e.employees : e.employee ? [e.employee] : [];
+            if (empIds.map(Number).includes(Number(user.employee_id))) return true;
+          }
+          const uRole = (user.role || '').toLowerCase();
+          if (e.department && e.department.toLowerCase().includes(uRole)) return true;
+          if (e.role_counts) {
+            const rKeys = Object.keys(e.role_counts).map((k) => k.toLowerCase());
+            if (
+              rKeys.some(
+                (k) =>
+                  uRole.includes(k) ||
+                  k.includes(uRole) ||
+                  (uRole.includes('labour') && (k.includes('karigar') || k.includes('labour') || k.includes('helper'))) ||
+                  (uRole.includes('engineer') && k.includes('eng')) ||
+                  (uRole.includes('supervisor') && k.includes('sup'))
+              )
+            ) {
+              return true;
+            }
+          }
+          return false;
+        });
+        setAssignedTasks(myWork);
+      }
     } catch (err) {
       setError(err.message || 'Failed to load executive dashboard telemetry.');
     } finally {
@@ -44,7 +77,7 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
 
   useEffect(() => {
     fetchOverview();
-  }, [selectedProjectId]);
+  }, [selectedProjectId, user]);
 
   const formatCurrency = (val) => {
     const num = Number(val || 0);
@@ -97,12 +130,12 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
     {
       id: 'amount',
       title: 'Employee Amount',
-      value: formatCurrency(data?.month_expenditure),
-      subtext: 'Current month approved spend',
+      value: formatCurrency(data?.month_expenditure ?? data?.employee_amount),
+      subtext: 'Worker wages, UPAD advances & payouts',
       gradient: 'from-teal-500 to-cyan-600',
       shadow: 'hover:shadow-teal-500/20',
       sparklineColor: '#a5f3fc',
-      sparklineData: [45, 60, 55, 80, 95, 88, 110],
+      sparklineData: [4500, 6000, 8500, 12000, 15000, 18500, data?.month_expenditure || 21000],
       icon: CreditCard,
       actionText: 'Wages & Payroll',
       tab: 'payroll',
@@ -139,12 +172,12 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
     {
       id: 'payments',
       title: 'Total Payments',
-      value: formatCurrency(data?.total_spend),
-      subtext: `${data?.budget_utilization_percent || 0}% of allocated budget`,
+      value: formatCurrency(data?.total_spend ?? data?.total_payments),
+      subtext: `${data?.budget_utilization_percent || 0}% allocated budget utilized`,
       gradient: 'from-violet-500 to-purple-700',
       shadow: 'hover:shadow-violet-500/20',
       sparklineColor: '#c4b5fd',
-      sparklineData: [120, 160, 210, 280, 340, 410, 480],
+      sparklineData: [12000, 16000, 21000, 28000, 34000, 41000, data?.total_spend || 48000],
       icon: Wallet,
       actionText: 'Ledger Audit',
       tab: 'ledger',
@@ -155,7 +188,7 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* 1. Header Section per PDF Design Specification */}
-      <div className="pb-2 border-b border-[var(--border-default)]">
+      <div className="pb-2 border-b border-[var(--border-default)] flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
             Welcome back,{' '}
@@ -167,6 +200,27 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
             Multi-project financial burn rate, site operations, and compliance telemetry.
           </p>
         </div>
+
+        {assignedTasks.length > 0 && (
+          <div
+            onClick={() => onNavigate && onNavigate('progress')}
+            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center gap-3 cursor-pointer shadow-lg shadow-blue-500/20 hover:scale-105 transition-all"
+            title="View tasks assigned to your role"
+          >
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center font-black text-sm">
+              {assignedTasks.length}
+            </div>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-wider text-blue-100">
+                Assigned Work ({user?.role || 'Your Role'})
+              </div>
+              <div className="text-xs font-bold truncate max-w-[200px]">
+                {assignedTasks[0]?.description || 'Work allocated'}
+              </div>
+            </div>
+            <ArrowRight size={16} />
+          </div>
+        )}
       </div>
 
       {/* 2. Stat Cards Grid (6 Cards with Distinct Photorealistic Backgrounds) */}

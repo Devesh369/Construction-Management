@@ -41,12 +41,8 @@ import {
 
 const ROLE_OPTIONS = [
   { value: 'ORG_ADMIN', label: 'Org Admin (Super Admin - Full Access)', color: 'border-purple-500/30 text-purple-400 bg-purple-500/10' },
-  { value: 'PROJECT_MANAGER', label: 'Project Manager (Budgets, Projects & Vendors)', color: 'border-blue-500/30 text-blue-400 bg-blue-500/10' },
-  { value: 'SITE_MANAGER', label: 'Site Manager (Site Operations, Workforce & Progress)', color: 'border-indigo-500/30 text-indigo-400 bg-indigo-500/10' },
-  { value: 'SITE_ENGINEER', label: 'Site Engineer (DPR, Work Progress & Quantities)', color: 'border-cyan-500/30 text-cyan-400 bg-cyan-500/10' },
-  { value: 'SUPERVISOR', label: 'Site Supervisor (Daily Attendance & Workers)', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
-  { value: 'ACCOUNTANT', label: 'Accountant (Ledger, Upad, Payment & Payroll)', color: 'border-amber-500/30 text-amber-400 bg-amber-500/10' },
-  { value: 'employee/labour', label: 'Employee / Labour (Attendance, Payroll & Upad)', color: 'border-orange-500/30 text-orange-400 bg-orange-500/10' },
+  { value: 'SITE_MANAGER', label: 'Site Manager (Site Operations, Workforce & Progress)', color: 'border-blue-500/30 text-blue-400 bg-blue-500/10' },
+  { value: 'employee/labour', label: 'Employee / Labour (Attendance, Payroll & Upad)', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
 ];
 
 export const SettingsView = () => {
@@ -532,7 +528,14 @@ export const SettingsView = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {users.map((u) => {
                     const isSelf = u.id === currentUser?.id;
-                    const roleInfo = ROLE_OPTIONS.find((r) => r.value === u.role);
+                    const roleInfo =
+                      ROLE_OPTIONS.find((r) => r.value === u.role) ||
+                      (['PROJECT_MANAGER', 'SUPERVISOR', 'SITE_ENGINEER', 'ACCOUNTANT'].includes(u.role)
+                        ? ROLE_OPTIONS[1]
+                        : ROLE_OPTIONS[2]);
+                    const currentVal = ['PROJECT_MANAGER', 'SUPERVISOR', 'SITE_ENGINEER', 'ACCOUNTANT'].includes(u.role)
+                      ? 'SITE_MANAGER'
+                      : (ROLE_OPTIONS.some((r) => r.value === u.role) ? u.role : 'employee/labour');
                     return (
                       <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="py-4 px-5">
@@ -556,7 +559,7 @@ export const SettingsView = () => {
                         <td className="py-4 px-5">
                           <select
                             disabled={isSelf}
-                            value={u.role}
+                            value={currentVal}
                             onChange={(e) => handleUpdateRole(u.id, e.target.value)}
                             className={cn(
                               'px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer',
@@ -566,7 +569,7 @@ export const SettingsView = () => {
                           >
                             {ROLE_OPTIONS.map((opt) => (
                               <option key={opt.value} value={opt.value} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium">
-                                {opt.value}
+                                {opt.label.split(' (')[0]}
                               </option>
                             ))}
                           </select>

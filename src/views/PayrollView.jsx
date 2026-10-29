@@ -3,6 +3,7 @@ import {
   Wallet,
   Plus,
   CheckCircle,
+  CheckCircle2,
   FileText,
   IndianRupee,
   Calendar,
@@ -12,6 +13,8 @@ import {
   Download,
   ShieldAlert,
   Trash2,
+  Banknote,
+  User,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { Badge } from '../components/Badge';
@@ -21,19 +24,26 @@ import { useAuth } from '../context/AuthContext';
 export const PayrollView = ({ selectedProjectId }) => {
   const { user, role } = useAuth();
   const isEmployeeLabour = role === 'employee/labour' || role === 'EMPLOYEE' || role === 'LABOUR';
+  const isOrgAdmin = role === 'ORG_ADMIN' || user?.is_superuser;
   const currentEmpId = user?.employee_id || 100;
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const [activeTab, setActiveTab] = useState('runs'); // 'runs' | 'advances'
+  const [activeTab, setActiveTab] = useState('salaries'); // 'salaries' | 'runs' | 'advances'
   const [runs, setRuns] = useState([]);
   const [advances, setAdvances] = useState([]);
+  const [salaryDisbursements, setSalaryDisbursements] = useState([]);
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedRunId, setExpandedRunId] = useState(null);
 
+  // Search & Filter in Salaries Tab
+  const [salarySearch, setSalarySearch] = useState('');
+  const [salaryProjectFilter, setSalaryProjectFilter] = useState('all');
+
   // Modals
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
+  const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Forms
@@ -52,23 +62,43 @@ export const PayrollView = ({ selectedProjectId }) => {
     payment_mode: 'CASH',
   });
 
+  const [salaryForm, setSalaryForm] = useState({
+    employee_id: '',
+    project_id: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    payment_mode: 'CASH',
+    notes: '',
+    status: isOrgAdmin ? 'paid' : 'pending',
+  });
+
   const fetchData = async () => {
     setLoading(true);
     try {
       const params = selectedProjectId ? { project: selectedProjectId } : {};
-      const [runRes, advRes, projRes, empRes] = await Promise.all([
+      const [runRes, advRes, projRes, empRes, payRes] = await Promise.all([
         api.payroll.listRuns(params),
         api.payroll.listAdvances(params),
         api.projects.list({ page_size: 1000 }),
         api.workforce.listEmployees({ page_size: 1000 }),
+        api.payments.list(params).catch(() => []),
       ]);
       let runList = Array.isArray(runRes) ? runRes : runRes.results || [];
       let advList = Array.isArray(advRes) ? advRes : advRes.results || [];
       let empList = Array.isArray(empRes) ? empRes : empRes.results || [];
+      let payList = Array.isArray(payRes) ? payRes : payRes?.results || [];
+
+      let salList = payList.filter((p) => (p.type || '').toLowerCase() === 'salary');
 
       if (isEmployeeLabour) {
         advList = advList.filter(
           (a) => a.employee === currentEmpId || String(a.employee) === String(currentEmpId)
+        );
+        salList = salList.filter(
+          (p) =>
+            p.employee === currentEmpId ||
+            p.employee_id === currentEmpId ||
+            String(p.employee) === String(currentEmpId)
         );
         runList = runList
           .map((run) => {
@@ -92,6 +122,7 @@ export const PayrollView = ({ selectedProjectId }) => {
 
       setRuns(runList);
       setAdvances(advList);
+      setSalaryDisbursements(salList);
       setProjects(Array.isArray(projRes) ? projRes : projRes.results || []);
       setEmployees(empList);
     } catch (err) {
@@ -222,6 +253,96 @@ export const PayrollView = ({ selectedProjectId }) => {
     }
   };
 
+  const openSalaryModal = (worker = null) => {
+    const targetWorker = worker || employees[0];
+    const fin = targetWorker?.financials || {};
+    const dailyWage = Number(targetWorker?.daily_rate || targetWorker?.wage_rate || 0);
+    const balance = fin.balance !== undefined && fin.balance !== null
+      ? Number(fin.balance)
+      : dailyWage;
+    const amountVal = balance > 0 ? String(balance) : (dailyWage > 0 ? String(dailyWage) : '');
+
+    setSalaryForm({
+      employee_id: targetWorker ? String(targetWorker.id) : '',
+      project_id: targetWorker?.primary_project || selectedProjectId || (projects[0]?.id ? String(projects[0].id) : ''),
+      amount: amountVal,
+      date: new Date().toISOString().split('T')[0],
+      payment_mode: 'CASH',
+      notes: targetWorker ? `Full salary payout for ${targetWorker.full_name}` : 'Full salary payout',
+      status: isOrgAdmin ? 'paid' : 'pending',
+    });
+    setIsSalaryModalOpen(true);
+  };
+
+  const handleDisburseSalary = async (e) => {
+    e.preventDefault();
+    if (!salaryForm.employee_id) {
+      alert('Please select a worker');
+      return;
+    }
+    const worker = employees.find((emp) => String(emp.id) === String(salaryForm.employee_id));
+    const fin = worker?.financials || {};
+    const hasAttendance = Boolean(
+      fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
+    );
+    if (!hasAttendance) {
+      alert('Cannot pay wages to an employee without marked attendance. Attendance must be recorded first.');
+      return;
+    }
+    if (!salaryForm.amount || Number(salaryForm.amount) <= 0) {
+      alert('Please enter a valid salary amount');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await api.payments.create({
+        employee: Number(salaryForm.employee_id),
+        project: salaryForm.project_id ? Number(salaryForm.project_id) : null,
+        amount: Number(salaryForm.amount),
+        method: salaryForm.payment_mode.toLowerCase(),
+        type: 'salary',
+        status: isOrgAdmin ? (salaryForm.status || 'paid') : 'pending',
+        date_from: salaryForm.date,
+        date_to: salaryForm.date,
+        description: salaryForm.notes.trim() || `Full salary payment for ${worker?.full_name || 'worker'}`,
+      });
+
+      setIsSalaryModalOpen(false);
+      alert(
+        isOrgAdmin
+          ? 'Salary payout recorded successfully! Reflected in ledger, payroll vouchers, attendance settlement, and worker balance.'
+          : 'Salary payout submitted as pending! Org Admin approval required before release.'
+      );
+      await fetchData();
+    } catch (err) {
+      alert(`Error disbursing salary: ${err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const selectedSalaryWorker = useMemo(() => {
+    return employees.find((emp) => String(emp.id) === String(salaryForm.employee_id));
+  }, [employees, salaryForm.employee_id]);
+
+  const filteredEmployees = useMemo(() => {
+    return employees.filter((emp) => {
+      if (salaryProjectFilter !== 'all') {
+        const pId = emp.primary_project || '';
+        if (String(pId) !== String(salaryProjectFilter)) return false;
+      }
+      if (salarySearch) {
+        const q = salarySearch.toLowerCase();
+        const name = (emp.full_name || '').toLowerCase();
+        const code = (emp.employee_code || '').toLowerCase();
+        const trade = (emp.trade || '').toLowerCase();
+        if (!name.includes(q) && !code.includes(q) && !trade.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [employees, salaryProjectFilter, salarySearch]);
+
   const formatCurrency = (val) => {
     const num = Number(val || 0);
     return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -258,13 +379,32 @@ export const PayrollView = ({ selectedProjectId }) => {
 
         <div style={{ display: 'flex', gap: '10px' }}>
           {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT', 'SUPERVISOR'].includes(role) && !isEmployeeLabour && (
+            <button
+              onClick={() => openSalaryModal()}
+              className="btn btn-primary"
+              style={{
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                borderColor: '#059669',
+                color: '#ffffff',
+                fontWeight: 700,
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <Wallet size={16} />
+              <span>Pay Full Salary</span>
+            </button>
+          )}
+          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT', 'SUPERVISOR'].includes(role) && !isEmployeeLabour && (
             <button onClick={() => setIsAdvanceModalOpen(true)} className="btn btn-secondary">
               <IndianRupee size={16} />
               <span>Record Advance</span>
             </button>
           )}
           {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'].includes(role) && !isEmployeeLabour && (
-            <button onClick={() => setIsRunModalOpen(true)} className="btn btn-primary">
+            <button onClick={() => setIsRunModalOpen(true)} className="btn btn-secondary">
               <Plus size={16} />
               <span>Calculate Weekly Payroll</span>
             </button>
@@ -274,6 +414,12 @@ export const PayrollView = ({ selectedProjectId }) => {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '12px' }}>
+        <button
+          onClick={() => setActiveTab('salaries')}
+          className={`btn btn-sm ${activeTab === 'salaries' ? 'btn-primary' : 'btn-secondary'}`}
+        >
+          Worker Salaries & Full Payments ({employees.length})
+        </button>
         <button
           onClick={() => setActiveTab('runs')}
           className={`btn btn-sm ${activeTab === 'runs' ? 'btn-primary' : 'btn-secondary'}`}
@@ -288,7 +434,292 @@ export const PayrollView = ({ selectedProjectId }) => {
         </button>
       </div>
 
-      {activeTab === 'runs' ? (
+      {/* 1. Salaries Tab */}
+      {activeTab === 'salaries' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Summary Stat Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-subtle)' }}>
+                Active Workers
+              </div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--text-main)', marginTop: '4px' }}>
+                {filteredEmployees.length}
+              </div>
+              <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginTop: '2px' }}>
+                Across project sites
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-subtle)' }}>
+                Total Accrued Pagar
+              </div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#3b82f6', marginTop: '4px' }}>
+                {formatCurrency(filteredEmployees.reduce((acc, e) => acc + Number(e.financials?.total_pagar || e.daily_rate || 0), 0))}
+              </div>
+              <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginTop: '2px' }}>
+                From attendance & vouchers
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-subtle)' }}>
+                Advances Deducted
+              </div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f87171', marginTop: '4px' }}>
+                {formatCurrency(filteredEmployees.reduce((acc, e) => acc + Number(e.financials?.total_upad || 0), 0))}
+              </div>
+              <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginTop: '2px' }}>
+                Upad cash given
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '16px', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#10b981' }}>
+                Net Outstanding Salary
+              </div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#10b981', marginTop: '4px' }}>
+                {formatCurrency(filteredEmployees.reduce((acc, e) => acc + Number(e.financials?.balance || 0), 0))}
+              </div>
+              <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginTop: '2px' }}>
+                Payable directly to workers
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Project Filter Bar */}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: '10px', flex: 1, minWidth: '280px' }}>
+              <input
+                type="text"
+                placeholder="Search worker by name, trade, code..."
+                className="form-control"
+                value={salarySearch}
+                onChange={(e) => setSalarySearch(e.target.value)}
+                style={{ maxWidth: '360px' }}
+              />
+              <select
+                className="form-control"
+                value={salaryProjectFilter}
+                onChange={(e) => setSalaryProjectFilter(e.target.value)}
+                style={{ maxWidth: '240px' }}
+              >
+                <option value="all">All Projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Worker Salaries & Full Payout Table */}
+          <div className="card card-table">
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Worker</th>
+                    <th>Site Project</th>
+                    <th style={{ textAlign: 'center' }}>Attendance Units</th>
+                    <th style={{ textAlign: 'right' }}>Daily Rate</th>
+                    <th style={{ textAlign: 'right' }}>Total Earned (Pagar)</th>
+                    <th style={{ textAlign: 'right' }}>Advance Taken</th>
+                    <th style={{ textAlign: 'right' }}>Total Paid</th>
+                    <th style={{ textAlign: 'right', width: '150px' }}>Net Salary Due</th>
+                    <th style={{ textAlign: 'center', width: '160px' }}>Salary Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                        No employees found matching filter criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredEmployees.map((emp) => {
+                      const fin = emp.financials || {};
+                      const dailyWage = Number(emp.daily_rate || emp.wage_rate || 0);
+                      const hasAttendance = Boolean(
+                        fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
+                      );
+                      const pagar = Number(fin.total_pagar || (hasAttendance ? dailyWage : 0));
+                      const upad = Number(fin.total_upad || 0);
+                      const paid = Number(fin.total_paid || 0);
+                      const balance = fin.balance !== undefined && fin.balance !== null
+                        ? Number(fin.balance)
+                        : Math.max(0, pagar - upad - paid);
+
+                      return (
+                        <tr key={emp.id}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem' }}>
+                                {(emp.full_name || 'W').charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{emp.full_name}</div>
+                                <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>
+                                  {emp.role || emp.trade || 'Worker'} • {emp.employee_code || `EMP-${emp.id}`}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 500, fontSize: '0.84rem' }}>
+                              {emp.primary_project_name || (projects.find((p) => p.id === emp.primary_project)?.name) || 'All Sites'}
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {hasAttendance ? (
+                              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                                {fin.attendance_days ? `${fin.attendance_days} Days` : 'Marked Present'}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No attendance</span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-heading)' }}>
+                            ₹{dailyWage.toFixed(2)}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: '#3b82f6', fontFamily: 'var(--font-heading)' }}>
+                            {formatCurrency(pagar)}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {upad > 0 ? (
+                              <span style={{ fontWeight: 700, color: '#ef4444', fontFamily: 'var(--font-heading)' }}>
+                                -{formatCurrency(upad)}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                                ₹0 (No Advance)
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--text-subtle)', fontFamily: 'var(--font-heading)' }}>
+                            {formatCurrency(paid)}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {balance > 0 ? (
+                              <span style={{ fontWeight: 800, color: '#10b981', fontSize: '1.05rem', fontFamily: 'var(--font-heading)' }}>
+                                {formatCurrency(balance)}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.88rem' }}>₹0.00</span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {!isEmployeeLabour ? (
+                              balance > 0 ? (
+                                <button
+                                  onClick={() => openSalaryModal(emp)}
+                                  className="btn btn-sm btn-primary"
+                                  style={{
+                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                    borderColor: '#059669',
+                                    color: '#fff',
+                                    fontWeight: 700,
+                                    fontSize: '0.75rem',
+                                    padding: '5px 12px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                                  }}
+                                >
+                                  <Wallet size={13} />
+                                  <span>Pay Full Salary</span>
+                                </button>
+                              ) : (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#10b981', fontSize: '0.78rem', fontWeight: 700 }}>
+                                  <CheckCircle2 size={14} />
+                                  <span>Fully Settled</span>
+                                </span>
+                              )
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+                                {balance > 0 ? 'Salary Due' : 'Paid'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Itemized Salary Disbursements List */}
+          {salaryDisbursements.length > 0 && (
+            <div style={{ marginTop: '8px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
+                Recent Direct Salary Disbursements ({salaryDisbursements.length})
+              </h3>
+              <div className="card card-table">
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '120px' }}>Date</th>
+                        <th>Worker</th>
+                        <th>Site Project</th>
+                        <th style={{ textAlign: 'right', width: '130px' }}>Amount Disbursed</th>
+                        <th style={{ textAlign: 'center', width: '120px' }}>Method</th>
+                        <th style={{ textAlign: 'center', width: '120px' }}>Status</th>
+                        <th>Reference / Notes</th>
+                        <th style={{ textAlign: 'center', width: '100px' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {salaryDisbursements.map((sal) => (
+                        <tr key={sal.id}>
+                          <td>
+                            <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                              {sal.date_from || (sal.created_at ? sal.created_at.split('T')[0] : '—')}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{sal.employee_name || `Worker #${sal.employee}`}</div>
+                            {sal.employee_trade && (
+                              <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{sal.employee_trade}</div>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '0.84rem' }}>{sal.project_name || 'All Sites'}</div>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'var(--font-heading)', color: '#10b981', fontSize: '0.95rem' }}>
+                            {formatCurrency(sal.amount)}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <Badge status={sal.method}>{sal.method?.toUpperCase() || 'CASH'}</Badge>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <Badge status={sal.status}>{sal.status?.toUpperCase() || 'PAID'}</Badge>
+                          </td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-subtle)', maxWidth: '200px' }}>
+                            {sal.description || 'Full salary payment'}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>
+                              ✓ Disbursed
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. Payroll Runs Tab */}
+      {activeTab === 'runs' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {loading ? (
             <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -505,8 +936,10 @@ export const PayrollView = ({ selectedProjectId }) => {
             })
           )}
         </div>
-      ) : (
-        /* Advances Tab */
+      )}
+
+      {/* 3. Advances Tab */}
+      {activeTab === 'advances' && (
         <div className="card card-table">
           <div className="table-container">
             <table className="data-table">
@@ -762,6 +1195,241 @@ export const PayrollView = ({ selectedProjectId }) => {
             </button>
             <button type="submit" disabled={submitting} className="btn btn-primary">
               {submitting ? 'Recording...' : 'Disburse Advance'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* 3. Pay Full Salary Modal */}
+      <Modal
+        isOpen={isSalaryModalOpen}
+        onClose={() => setIsSalaryModalOpen(false)}
+        title="Disburse Full Salary / Wages"
+        subtitle="Disburse employee salary and immediately reflect in ledgers, attendance, and worker balance"
+      >
+        <form onSubmit={handleDisburseSalary}>
+          <div className="form-group">
+            <label className="form-label">Worker *</label>
+            <select
+              required
+              className="form-control"
+              value={salaryForm.employee_id}
+              onChange={(e) => {
+                const empId = e.target.value;
+                const worker = employees.find((w) => String(w.id) === String(empId));
+                const fin = worker?.financials || {};
+                const dailyWage = Number(worker?.daily_rate || worker?.wage_rate || 0);
+                const curBal = Number(fin.balance ?? (dailyWage || 0));
+                setSalaryForm({
+                  ...salaryForm,
+                  employee_id: empId,
+                  project_id: worker?.primary_project ? String(worker.primary_project) : salaryForm.project_id,
+                  amount: curBal > 0 ? String(curBal) : (dailyWage > 0 ? String(dailyWage) : ''),
+                  notes: worker ? `Full salary payout for ${worker.full_name}` : '',
+                });
+              }}
+            >
+              <option value="">Select Worker</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.full_name} ({e.trade || e.role || 'Worker'}) • {e.employee_code || `EMP-${e.id}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Live Salary Breakdown & Upad Status Card */}
+          {selectedSalaryWorker && (() => {
+            const fin = selectedSalaryWorker.financials || {};
+            const dailyWage = Number(selectedSalaryWorker.daily_rate || selectedSalaryWorker.wage_rate || 0);
+            const pagar = Number(fin.total_pagar || (dailyWage || 0));
+            const upad = Number(fin.total_upad || 0);
+            const paid = Number(fin.total_paid || 0);
+            const balance = fin.balance !== undefined && fin.balance !== null
+              ? Number(fin.balance)
+              : Math.max(0, pagar - upad - paid);
+            const hasAttendance = Boolean(
+              fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
+            );
+
+            return (
+              <div style={{ padding: '14px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#64748B' }}>
+                    Salary & Wage Computation
+                  </div>
+                  <span style={{ color: '#2563EB', fontWeight: 800, fontSize: '0.85rem' }}>
+                    {selectedSalaryWorker.full_name}
+                  </span>
+                </div>
+
+                {!hasAttendance && (
+                  <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#ef4444', fontSize: '11px', fontWeight: 600, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertCircle size={14} />
+                    <span>Worker has no marked attendance yet. Please record site attendance first before disbursing salary.</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', textAlign: 'center', marginBottom: '10px' }}>
+                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '9px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>DAILY RATE</div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>₹{dailyWage}</div>
+                  </div>
+                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '9px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>TOTAL PAGAR</div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#3B82F6', marginTop: '2px' }}>₹{pagar}</div>
+                  </div>
+                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '9px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>ADVANCE DEDUCTED</div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: upad > 0 ? '#EF4444' : '#10B981', marginTop: '2px' }}>
+                      {upad > 0 ? `-₹${upad}` : '₹0'}
+                    </div>
+                  </div>
+                  <div style={{ padding: '8px', background: '#ECFDF5', borderRadius: '8px', border: '1px solid #A7F3D0' }}>
+                    <div style={{ fontSize: '9px', color: '#047857', fontWeight: 800, textTransform: 'uppercase' }}>FULL SALARY DUE</div>
+                    <div style={{ fontSize: '13px', fontWeight: 900, color: '#059669', marginTop: '2px' }}>₹{balance}</div>
+                  </div>
+                </div>
+
+                {upad === 0 ? (
+                  <div style={{ padding: '6px 10px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.25)', color: '#059669', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle2 size={13} />
+                      Worker did not take money in advance. 100% full salary payable: ₹{balance > 0 ? balance : dailyWage}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSalaryForm((prev) => ({ ...prev, amount: String(balance > 0 ? balance : dailyWage) }))}
+                      className="btn btn-sm"
+                      style={{ fontSize: '10px', padding: '2px 8px', background: '#059669', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 800 }}
+                    >
+                      Fill Full
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ padding: '6px 10px', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.25)', color: '#b45309', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <AlertCircle size={13} />
+                      ₹{upad} advance already taken. Remaining net salary: ₹{balance}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSalaryForm((prev) => ({ ...prev, amount: String(balance > 0 ? balance : dailyWage) }))}
+                      className="btn btn-sm"
+                      style={{ fontSize: '10px', padding: '2px 8px', background: '#b45309', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 800 }}
+                    >
+                      Fill Remaining
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div className="form-group">
+              <label className="form-label">Site Project *</label>
+              <select
+                required
+                className="form-control"
+                value={salaryForm.project_id}
+                onChange={(e) => setSalaryForm({ ...salaryForm, project_id: e.target.value })}
+              >
+                <option value="">Select Project</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Disbursement Amount (₹) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                className="form-control"
+                placeholder="e.g. 950.00"
+                value={salaryForm.amount}
+                onChange={(e) => setSalaryForm({ ...salaryForm, amount: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div className="form-group">
+              <label className="form-label">Payment Date *</label>
+              <input
+                type="date"
+                required
+                max={todayStr}
+                className="form-control"
+                value={salaryForm.date}
+                onChange={(e) => setSalaryForm({ ...salaryForm, date: e.target.value })}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Payment Mode *</label>
+              <select
+                className="form-control"
+                value={salaryForm.payment_mode}
+                onChange={(e) => setSalaryForm({ ...salaryForm, payment_mode: e.target.value })}
+              >
+                <option value="CASH">Cash</option>
+                <option value="UPI">UPI / Online</option>
+                <option value="BANK_TRANSFER">Bank Transfer (NEFT/RTGS)</option>
+                <option value="CHEQUE">Cheque</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Payment Reference / Remarks</label>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="e.g. Full salary payment for October"
+              value={salaryForm.notes}
+              onChange={(e) => setSalaryForm({ ...salaryForm, notes: e.target.value })}
+            />
+          </div>
+
+          {isOrgAdmin ? (
+            <div className="form-group">
+              <label className="form-label">Payment Status *</label>
+              <select
+                className="form-control"
+                value={salaryForm.status}
+                onChange={(e) => setSalaryForm({ ...salaryForm, status: e.target.value })}
+              >
+                <option value="paid">Confirmed & Paid (Immediate Disbursement)</option>
+                <option value="pending">Pending Approval</option>
+              </select>
+            </div>
+          ) : (
+            <div style={{ padding: '8px 12px', background: '#F1F5F9', borderRadius: '8px', fontSize: '11px', color: '#64748B', fontWeight: 600, marginBottom: '14px' }}>
+              Status: <strong>Pending Approval</strong> (Payments created by Site Managers require Org Admin approval).
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+            <button type="button" onClick={() => setIsSalaryModalOpen(false)} className="btn btn-secondary">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn btn-primary"
+              style={{
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                borderColor: '#059669',
+                color: '#fff',
+                fontWeight: 700,
+              }}
+            >
+              {submitting ? 'Disbursing...' : `Disburse Salary (₹${salaryForm.amount || '0'})`}
             </button>
           </div>
         </form>

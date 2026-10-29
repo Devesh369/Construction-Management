@@ -16,7 +16,6 @@ import { ExpensesView } from './views/ExpensesView';
 import { UpadView } from './views/UpadView';
 import { PaymentCentralView } from './views/PaymentCentralView';
 import { PayrollView } from './views/PayrollView';
-import { LedgerView } from './views/LedgerView';
 import { ReportsView } from './views/ReportsView';
 import { AICostEstimatorView } from './views/AICostEstimatorView';
 import { SettingsView } from './views/SettingsView';
@@ -25,18 +24,17 @@ import buildsphereLogo from './assets/buildsphere_logo.png';
 
 export const ROLE_PERMISSIONS = {
   dashboard: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
-  projects: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'SITE_ENGINEER', 'ACCOUNTANT'],
-  workforce: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'SUPERVISOR'],
-  attendance: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'SUPERVISOR', 'SITE_ENGINEER', 'employee/labour'],
-  progress: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR'],
-  expenses: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'],
-  upad: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT', 'employee/labour'],
-  payment_central: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'],
-  credits: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'],
-  payroll: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT', 'employee/labour'],
-  ledger: ['ORG_ADMIN', 'ACCOUNTANT'],
-  reports: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR', 'ACCOUNTANT'],
-  cost_estimator: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'],
+  projects: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+  workforce: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+  attendance: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'employee/labour', 'EMPLOYEE', 'LABOUR'],
+  progress: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+  expenses: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+  upad: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'employee/labour', 'EMPLOYEE', 'LABOUR'],
+  payment_central: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+  credits: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+  payroll: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'employee/labour', 'EMPLOYEE', 'LABOUR'],
+  reports: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+  cost_estimator: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
   settings: ['ORG_ADMIN'],
 };
 
@@ -44,10 +42,9 @@ export const DEFAULT_TAB_BY_ROLE = {
   ORG_ADMIN: 'dashboard',
   PROJECT_MANAGER: 'dashboard',
   SITE_MANAGER: 'dashboard',
-  SITE_ENGINEER: 'progress',
-  SUPERVISOR: 'attendance',
-  ACCOUNTANT: 'ledger',
   'employee/labour': 'attendance',
+  EMPLOYEE: 'attendance',
+  LABOUR: 'attendance',
 };
 
 const AppContent = () => {
@@ -226,7 +223,6 @@ const AppContent = () => {
               {activeTab === 'payroll' && (
                 <PayrollView selectedProjectId={selectedProjectId} />
               )}
-              {activeTab === 'ledger' && <LedgerView />}
               {activeTab === 'reports' && (
                 <ReportsView selectedProjectId={selectedProjectId} />
               )}

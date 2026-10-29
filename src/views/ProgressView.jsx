@@ -51,6 +51,67 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
   const [filterFromDate, setFilterFromDate] = useState('2026-08-01');
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterProject, setFilterProject] = useState('all');
+  const [assignedOnlyFilter, setAssignedOnlyFilter] = useState(
+    role === 'employee/labour' || role === 'LABOUR' || role === 'EMPLOYEE'
+  );
+
+  // Helper to check if a work entry is assigned to the current logged in user or their role
+  const isAssignedToCurrentUser = (entry) => {
+    if (!user) return false;
+
+    // 1. Direct Employee ID match
+    if (user.employee_id) {
+      const empIds = Array.isArray(entry.employees)
+        ? entry.employees
+        : entry.employee
+        ? [entry.employee]
+        : [];
+      if (empIds.map(Number).includes(Number(user.employee_id))) {
+        return true;
+      }
+    }
+
+    // 2. Email or name match in employee details
+    if (Array.isArray(entry.employee_details)) {
+      if (
+        entry.employee_details.some(
+          (e) =>
+            (user.email && e.email && e.email.toLowerCase() === user.email.toLowerCase()) ||
+            (user.name && e.full_name && e.full_name.toLowerCase().includes(user.name.toLowerCase()))
+        )
+      ) {
+        return true;
+      }
+    }
+
+    // 3. Role or department match
+    const currentRole = (user.role || '').toLowerCase();
+    if (entry.department && entry.department.toLowerCase().includes(currentRole)) {
+      return true;
+    }
+
+    if (entry.role_counts) {
+      const roleKeys = Object.keys(entry.role_counts).map((r) => r.toLowerCase());
+      if (
+        roleKeys.some(
+          (r) =>
+            currentRole.includes(r) ||
+            r.includes(currentRole) ||
+            (currentRole.includes('labour') && (r.includes('karigar') || r.includes('labour') || r.includes('helper'))) ||
+            (currentRole.includes('engineer') && r.includes('eng')) ||
+            (currentRole.includes('supervisor') && r.includes('sup'))
+        )
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const assignedEntries = workEntries.filter(isAssignedToCurrentUser);
+  const assignedEntriesCount = assignedEntries.length;
+  const displayedWorkEntries = assignedOnlyFilter ? assignedEntries : workEntries;
 
   // Edit Entry Modal state (matches Screenshot 4)
   const [editingEntry, setEditingEntry] = useState(null);
@@ -122,10 +183,11 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
           date: entryDate,
           project: entryProject || '',
         });
-        const emps = Array.isArray(res) ? res : (res.employees || res.results || []);
+        const emps = Array.isArray(res) ? res : (res?.employees || res?.results || []);
         setPresentEmployees(emps);
 
-        let byRole = res.by_role;
+        // Ensure by_role is always grouped even if backend returned a flat list
+        let byRole = res?.by_role;
         if (!byRole || Object.keys(byRole).length === 0) {
           byRole = {};
           emps.forEach((emp) => {
@@ -150,6 +212,43 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
 
     fetchPresentEmployees();
   }, [entryDate, entryProject]);
+
+  // Fallback to load all active workers if attendance has not been registered yet
+  const handleLoadAllActiveEmployees = async () => {
+    setLoadingPresent(true);
+    try {
+      const res = await api.workforce.listEmployees({ is_active: true, page_size: 200 });
+      const rawList = Array.isArray(res) ? res : res?.results || [];
+      const emps = rawList.map((emp) => {
+        const roleName = emp.role || emp.trade || 'Worker';
+        return {
+          id: emp.id,
+          full_name: emp.full_name,
+          employee_code: emp.employee_code,
+          role: roleName,
+          trade: emp.trade,
+          attendance_status: 'AVAILABLE',
+          project_id: emp.primary_project || null,
+          project_name: emp.primary_project_name || '',
+        };
+      });
+      setPresentEmployees(emps);
+      const byRole = {};
+      emps.forEach((emp) => {
+        const rName = emp.role;
+        if (!byRole[rName]) byRole[rName] = [];
+        byRole[rName].push(emp);
+      });
+      setPresentByRole(byRole);
+      setSelectedEmployeeIds(emps.map((e) => e.id));
+      toast.success(`Loaded ${emps.length} active workers.`);
+    } catch (err) {
+      console.warn('Failed loading active employees', err);
+      toast.error('Failed to load active workers.');
+    } finally {
+      setLoadingPresent(false);
+    }
+  };
 
   // Load work entries list
   const fetchWorkEntries = async (overrideParams = null) => {
@@ -263,7 +362,7 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
         date: entry.date,
         project: entry.project,
       });
-      const presentList = Array.isArray(res) ? res : (res.employees || res.results || []);
+      const presentList = Array.isArray(res) ? res : (res?.employees || res?.results || []);
 
       // Combine with entry.employee_details in case some were assigned
       const combined = [...presentList];
@@ -547,18 +646,29 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
                       No employees marked present for this project on {entryDate}
                     </p>
                     <p className="text-[11px] text-[var(--text-muted)] opacity-75 max-w-md mx-auto">
-                      Mark worker attendance in the Attendance module for {entryDate} to allocate them to this task.
+                      Mark worker attendance in the Attendance module for {entryDate} to allocate them to this task, or click below to select from all active workers.
                     </p>
-                    {onNavigateToAttendance && (
-                      <button
-                        type="button"
-                        onClick={onNavigateToAttendance}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
-                      >
-                        <Calendar size={14} />
-                        <span>Go to Attendance Module</span>
-                      </button>
-                    )}
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      {onNavigateToAttendance && (
+                        <button
+                          type="button"
+                          onClick={onNavigateToAttendance}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                        >
+                          <Calendar size={14} />
+                          <span>Go to Attendance Module</span>
+                        </button>
+                      )}
+                      {handleLoadAllActiveEmployees && (
+                        <button
+                          type="button"
+                          onClick={handleLoadAllActiveEmployees}
+                          className="px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all cursor-pointer border border-blue-200 dark:border-blue-800 shadow-2xs"
+                        >
+                          Show All Active Workers
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3.5 p-4 rounded-xl bg-[var(--bg-secondary)]/60 border border-[var(--border-default)]">
@@ -579,8 +689,8 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
                                 className={cn(
                                   'flex items-center gap-2.5 p-2.5 rounded-xl border text-left text-xs font-semibold transition-all cursor-pointer select-none',
                                   isSelected
-                                    ? 'bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-blue-300 shadow-sm'
-                                    : 'bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-muted)] hover:border-slate-400'
+                                    ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-500 text-blue-900 dark:text-blue-200 shadow-xs ring-1 ring-blue-500'
+                                    : 'bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-secondary)] hover:border-slate-400'
                                 )}
                               >
                                 <div
@@ -588,17 +698,18 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
                                     'w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-all',
                                     isSelected
                                       ? 'bg-blue-600 border-blue-600 text-white'
-                                      : 'border-slate-400'
+                                      : 'border-slate-400 bg-white dark:bg-slate-800'
                                   )}
                                 >
                                   {isSelected && <Check size={11} strokeWidth={3} />}
                                 </div>
-                                <div className="truncate">
-                                  <div className="truncate text-xs font-bold leading-tight">
+                                <div className="truncate min-w-0">
+                                  <div className="truncate text-xs font-black leading-tight text-slate-900 dark:text-white">
                                     {emp.full_name}
                                   </div>
-                                  <div className="text-[10px] text-[var(--text-muted)] truncate">
-                                    {emp.role}
+                                  <div className="text-[10px] text-[var(--text-muted)] truncate flex items-center gap-1 mt-0.5">
+                                    <span>{emp.role || emp.trade || 'Worker'}</span>
+                                    {emp.project_name && <span className="opacity-75">• {emp.project_name}</span>}
                                   </div>
                                 </div>
                               </button>
@@ -772,6 +883,45 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
                 </button>
               </div>
             </div>
+
+            {/* Quick Assigned Work Toggle Bar */}
+            <div className="mt-4 pt-3 border-t border-[var(--border-default)] flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignedOnlyFilter(false)}
+                  className={cn(
+                    'px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer',
+                    !assignedOnlyFilter
+                      ? 'bg-slate-800 text-white shadow-sm'
+                      : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  )}
+                >
+                  All Site Work ({workEntries.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAssignedOnlyFilter(true)}
+                  className={cn(
+                    'px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                    assignedOnlyFilter
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                      : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  )}
+                >
+                  <CheckCircle2 size={13} />
+                  <span>Assigned to My Role / Me ({assignedEntriesCount})</span>
+                </button>
+              </div>
+
+              {assignedEntriesCount > 0 && (
+                <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                  <Sparkles size={12} />
+                  <span>{assignedEntriesCount} task(s) explicitly assigned to your role ({user?.role || 'Member'})</span>
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Work Entries Table Card */}
@@ -786,7 +936,7 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
                     Work Entries
                   </h2>
                   <p className="text-[11px] text-[var(--text-muted)]">
-                    {workEntries.length} entries found
+                    {displayedWorkEntries.length} entries showing {assignedOnlyFilter ? '(Filtered for Your Role)' : ''}
                   </p>
                 </div>
               </div>
@@ -803,9 +953,11 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
               <div className="p-12 text-center text-xs text-[var(--text-muted)]">
                 Loading work entries...
               </div>
-            ) : workEntries.length === 0 ? (
+            ) : displayedWorkEntries.length === 0 ? (
               <div className="p-12 text-center text-xs text-[var(--text-muted)]">
-                No work entries found for the selected dates and project.
+                {assignedOnlyFilter
+                  ? `No work entries found assigned to your role (${user?.role || 'User'}). Click "All Site Work" above to view all tasks.`
+                  : 'No work entries found for the selected dates and project.'}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -824,7 +976,7 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border-default)]">
-                    {workEntries.map((entry, idx) => (
+                    {displayedWorkEntries.map((entry, idx) => (
                       <tr
                         key={entry.id}
                         className="hover:bg-[var(--bg-secondary)]/40 transition-colors"
@@ -836,11 +988,21 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState, onN
                           {entry.date}
                         </td>
                         <td className="py-3.5 px-6">
-                          <div className="font-bold text-[var(--text-primary)] leading-snug">
-                            {entry.description}
+                          <div className="font-bold text-[var(--text-primary)] leading-snug flex items-center gap-2 flex-wrap">
+                            <span>{entry.description}</span>
+                            {isAssignedToCurrentUser(entry) && (
+                              <span className="px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] font-black uppercase flex items-center gap-1 shadow-sm">
+                                <CheckCircle2 size={11} /> Assigned to You ({user?.role || 'Your Role'})
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                            {entry.project_name || `Project #${entry.project}`}
+                          <div className="text-[11px] text-[var(--text-muted)] mt-0.5 flex items-center gap-2 flex-wrap">
+                            <span>{entry.project_name || `Project #${entry.project}`}</span>
+                            {entry.department && (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-bold">
+                                Dept: {entry.department}
+                              </span>
+                            )}
                           </div>
                         </td>
                         {roleColumns.map((roleName) => {
