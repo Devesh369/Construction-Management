@@ -27,9 +27,7 @@ class EmployeeViewSet(TenantViewSet):
     permission_classes = [
         IsAuthenticated,
         IsTenantUser,
-        roles_required(
-            Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.ACCOUNTANT
-        ),
+        roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.ACCOUNTANT),
     ]
     filterset_fields = ["trade", "primary_project", "group", "employment_type", "is_active"]
     search_fields = ["full_name", "employee_code", "phone"]

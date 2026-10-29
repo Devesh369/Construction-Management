@@ -26,11 +26,15 @@ class TestLanguageLevelRoleSecurity:
         self.admin, _ = accept_invitation(tok_admin, "AdminPass123#", "Admin Apex")
 
         # Project Manager
-        _, tok_pm = create_user_invitation(self.org, "pm@apex.test", Role.PROJECT_MANAGER, self.admin)
+        _, tok_pm = create_user_invitation(
+            self.org, "pm@apex.test", Role.PROJECT_MANAGER, self.admin
+        )
         self.pm, _ = accept_invitation(tok_pm, "PmPass123#", "PM Apex")
 
         # Site Engineer
-        _, tok_eng = create_user_invitation(self.org, "eng@apex.test", Role.SITE_ENGINEER, self.admin)
+        _, tok_eng = create_user_invitation(
+            self.org, "eng@apex.test", Role.SITE_ENGINEER, self.admin
+        )
         self.eng, _ = accept_invitation(tok_eng, "EngPass123#", "Eng Apex")
 
         # Supervisor

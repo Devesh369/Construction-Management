@@ -169,9 +169,7 @@ class VendorViewSet(TenantViewSet):
     permission_classes = [
         IsAuthenticated,
         IsTenantUser,
-        roles_required(
-            Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT, Role.SITE_ENGINEER
-        ),
+        roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT, Role.SITE_ENGINEER),
     ]
     filterset_fields = ["is_active"]
     search_fields = ["name", "contact_person", "tax_id"]
