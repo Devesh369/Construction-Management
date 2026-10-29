@@ -817,51 +817,62 @@ export const LoginView = ({ isAlreadyAuthenticated = false }) => {
                 </button>
               </div>
 
-              {/* Ultra-compact Demo Credentials Switcher */}
-              <div className="mt-2 pt-2 border-t border-slate-800/60">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500 text-center mb-1">
-                  Quick Demo Access:
-                </p>
-                <div className="grid grid-cols-3 gap-1">
+              {/* Organization Role Quick Access */}
+              <div className="mt-3 pt-3 border-t border-slate-800/80">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Quick Role Access
+                  </p>
+                  <span className="text-[9px] text-slate-500 font-medium">
+                    Click to sign in by role
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
                   <button
                     type="button"
-                    onClick={() => handleQuickDemo('admin@alpha.test', 'ChangeMe#12345')}
-                    className="px-1.5 py-1 text-[9px] font-semibold bg-slate-800/80 hover:bg-blue-600/30 hover:border-blue-500 border border-slate-700/60 rounded text-slate-300 hover:text-white transition-colors text-center truncate cursor-pointer"
+                    onClick={() => handleQuickDemo('deveshpatel@gmail.com', 'password123')}
+                    title="Org Admin (Devesh Patel)"
+                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
                   >
-                    Alpha Admin
+                    Org Admin
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleQuickDemo('pm@alpha.test', 'ChangeMe#12345')}
-                    className="px-1.5 py-1 text-[9px] font-semibold bg-slate-800/80 hover:bg-blue-600/30 hover:border-blue-500 border border-slate-700/60 rounded text-slate-300 hover:text-white transition-colors text-center truncate cursor-pointer"
+                    onClick={() => handleQuickDemo('viren@gmail.com', 'password123')}
+                    title="Project Manager (Viren Prajapati)"
+                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
                   >
                     Project Mgr
                   </button>
                   <button
                     type="button"
                     onClick={() => handleQuickDemo('sitemanager@buildsphere.com', 'password123')}
-                    className="px-1.5 py-1 text-[9px] font-semibold bg-slate-800/80 hover:bg-blue-600/30 hover:border-blue-500 border border-slate-700/60 rounded text-slate-300 hover:text-white transition-colors text-center truncate cursor-pointer"
+                    title="Site Manager (Site Operations & DPR)"
+                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
                   >
                     Site Manager
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleQuickDemo('eng@alpha.test', 'ChangeMe#12345')}
-                    className="px-1.5 py-1 text-[9px] font-semibold bg-slate-800/80 hover:bg-blue-600/30 hover:border-blue-500 border border-slate-700/60 rounded text-slate-300 hover:text-white transition-colors text-center truncate cursor-pointer"
+                    onClick={() => handleQuickDemo('viren@buildsphere.com', 'password123')}
+                    title="Site Engineer (Field Engineering)"
+                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
                   >
                     Site Eng
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleQuickDemo('acc@alpha.test', 'ChangeMe#12345')}
-                    className="px-1.5 py-1 text-[9px] font-semibold bg-slate-800/80 hover:bg-blue-600/30 hover:border-blue-500 border border-slate-700/60 rounded text-slate-300 hover:text-white transition-colors text-center truncate cursor-pointer"
+                    onClick={() => handleQuickDemo('san@gmail.com', 'password123')}
+                    title="Accountant (Sankalp - Finance & Ledger)"
+                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
                   >
                     Accountant
                   </button>
                   <button
                     type="button"
                     onClick={() => handleQuickDemo('labour@buildsphere.com', 'password123')}
-                    className="px-1.5 py-1 text-[9px] font-semibold bg-slate-800/80 hover:bg-blue-600/30 hover:border-blue-500 border border-slate-700/60 rounded text-slate-300 hover:text-white transition-colors text-center truncate cursor-pointer"
+                    title="Labour / Employee (Darshil - Karigar)"
+                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
                   >
                     Labour / Emp
                   </button>

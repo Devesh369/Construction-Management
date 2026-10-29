@@ -182,18 +182,15 @@ function loadDB() {
   }
 
   const demoEmails = new Set([
+    'deveshpatel@gmail.com',
     'devesh@buildsphere.com',
+    'viren@gmail.com',
     'darshil@buildsphere.com',
     'viren@buildsphere.com',
     'san@gmail.com',
-    'admin@alpha.test',
-    'pm@alpha.test',
     'sitemanager@buildsphere.com',
-    'eng@alpha.test',
-    'sup1@alpha.test',
-    'acc@alpha.test',
-    'admin@beta.test',
     'labour@buildsphere.com',
+    'arav@gmail.com',
   ]);
 
   if (Array.isArray(target.users)) {
@@ -655,8 +652,63 @@ export async function handleMockRequest(endpoint, options = {}) {
     const email = (body.email || '').toLowerCase().trim();
     let user = db.users.find((u) => u.email.toLowerCase() === email);
     if (!user) {
-      // Check if user is typing a known role
-      if (email.includes('admin')) {
+      if (email === 'deveshpatel@gmail.com' || email === 'devesh@buildsphere.com' || email === 'arav@gmail.com') {
+        user = db.users.find((u) => u.role === 'ORG_ADMIN') || {
+          id: 1,
+          name: 'Devesh Patel',
+          email: email,
+          role: 'ORG_ADMIN',
+          organization: 10,
+          is_active: true,
+        };
+      } else if (email === 'viren@gmail.com' || email === 'darshil@buildsphere.com') {
+        user = db.users.find((u) => u.role === 'PROJECT_MANAGER') || {
+          id: 2,
+          name: 'Viren Prajapati',
+          email: email,
+          role: 'PROJECT_MANAGER',
+          organization: 10,
+          is_active: true,
+        };
+      } else if (email === 'viren@buildsphere.com') {
+        user = db.users.find((u) => u.role === 'SITE_ENGINEER') || {
+          id: 3,
+          name: 'Viren Prajapati',
+          email: email,
+          role: 'SITE_ENGINEER',
+          organization: 10,
+          is_active: true,
+        };
+      } else if (email === 'san@gmail.com') {
+        user = db.users.find((u) => u.role === 'ACCOUNTANT') || {
+          id: 4,
+          name: 'Sankalp',
+          email: email,
+          role: 'ACCOUNTANT',
+          organization: 10,
+          is_active: true,
+        };
+      } else if (email === 'sitemanager@buildsphere.com') {
+        user = db.users.find((u) => u.role === 'SITE_MANAGER') || {
+          id: 6,
+          name: 'Site Manager',
+          email: email,
+          role: 'SITE_MANAGER',
+          organization: 10,
+          is_active: true,
+        };
+      } else if (email === 'labour@buildsphere.com') {
+        user = {
+          id: 5,
+          name: 'Darshil (Karigar)',
+          email: 'labour@buildsphere.com',
+          role: 'employee/labour',
+          phone: '7858968985',
+          employee_id: 100,
+          is_active: true,
+          organization: 10,
+        };
+      } else if (email.includes('admin')) {
         user = db.users.find((u) => u.role === 'ORG_ADMIN') || db.users[0];
       } else if (email.includes('site_manager') || email.includes('sitemanager') || email.includes('manager')) {
         user = db.users.find((u) => u.role === 'SITE_MANAGER') || db.users.find((u) => u.role === 'PROJECT_MANAGER') || db.users[1];
@@ -664,16 +716,6 @@ export async function handleMockRequest(endpoint, options = {}) {
         user = db.users.find((u) => u.role === 'PROJECT_MANAGER') || db.users.find((u) => u.role === 'SITE_MANAGER') || db.users[1];
       } else if (email.includes('eng') || email.includes('engineer')) {
         user = db.users.find((u) => u.role === 'SITE_ENGINEER') || db.users[2];
-      } else if (email.includes('sup') || email.includes('supervisor')) {
-        user = db.users.find((u) => u.role === 'SUPERVISOR') || {
-          id: 7,
-          name: 'Sup Sanjay',
-          email: 'sup1@alpha.test',
-          role: 'SUPERVISOR',
-          phone: '+91 98765 33333',
-          is_active: true,
-          organization: 10,
-        };
       } else if (email.includes('acc') || email.includes('accountant')) {
         user = db.users.find((u) => u.role === 'ACCOUNTANT') || db.users[3];
       } else if (email.includes('labour') || email.includes('employee') || email.includes('worker')) {
@@ -688,7 +730,6 @@ export async function handleMockRequest(endpoint, options = {}) {
           organization: 10,
         };
       } else {
-        // Fallback: if single user or any user exists, match first
         user = db.users[0];
       }
     }

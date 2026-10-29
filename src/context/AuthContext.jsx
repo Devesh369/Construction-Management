@@ -4,14 +4,12 @@ import { api, getToken, setToken, getRefreshToken, setRefreshToken, getStoredUse
 const AuthContext = createContext(null);
 
 export const DEMO_USERS = [
-  { key: 'alpha_admin', label: 'Admin (Alpha)', role: 'ORG_ADMIN', email: 'admin@alpha.test', password: 'ChangeMe#12345' },
-  { key: 'alpha_pm', label: 'PM Priya', role: 'PROJECT_MANAGER', email: 'pm@alpha.test', password: 'ChangeMe#12345' },
+  { key: 'org_admin', label: 'Org Admin (Devesh Patel)', role: 'ORG_ADMIN', email: 'deveshpatel@gmail.com', password: 'password123' },
+  { key: 'project_manager', label: 'Project Manager (Viren Prajapati)', role: 'PROJECT_MANAGER', email: 'viren@gmail.com', password: 'password123' },
   { key: 'site_manager', label: 'Site Manager', role: 'SITE_MANAGER', email: 'sitemanager@buildsphere.com', password: 'password123' },
-  { key: 'alpha_eng', label: 'Eng Rohan', role: 'SITE_ENGINEER', email: 'eng@alpha.test', password: 'ChangeMe#12345' },
-  { key: 'alpha_sup', label: 'Sup Sanjay', role: 'SUPERVISOR', email: 'sup1@alpha.test', password: 'ChangeMe#12345' },
-  { key: 'alpha_acc', label: 'Acc Ananya', role: 'ACCOUNTANT', email: 'acc@alpha.test', password: 'ChangeMe#12345' },
-  { key: 'beta_admin', label: 'Beta Admin', role: 'ORG_ADMIN', email: 'admin@beta.test', password: 'ChangeMe#12345' },
-  { key: 'employee_labour', label: 'Employee / Labour', role: 'employee/labour', email: 'labour@buildsphere.com', password: 'password123', employee_id: 100 },
+  { key: 'site_engineer', label: 'Site Engineer (Viren Prajapati)', role: 'SITE_ENGINEER', email: 'viren@buildsphere.com', password: 'password123' },
+  { key: 'accountant', label: 'Accountant (Sankalp)', role: 'ACCOUNTANT', email: 'san@gmail.com', password: 'password123' },
+  { key: 'employee_labour', label: 'Employee / Labour (Darshil)', role: 'employee/labour', email: 'labour@buildsphere.com', password: 'password123', employee_id: 100 },
 ];
 
 export const AuthProvider = ({ children }) => {
