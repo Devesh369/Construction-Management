@@ -1,26 +1,40 @@
+"""
+AuditLog model: append-only immutable security and compliance audit trail.
+"""
+
+from core.models import ImmutableTenantModel
 from django.db import models
 
-class AuditLog(models.Model):
-    organization = models.IntegerField(default=10)
-    created_at = models.DateTimeField(auto_now_add=True)
-    actor = models.JSONField(default=list)
-    action = models.CharField(max_length=120)
-    resource_type = models.CharField(max_length=120)
-    resource_id = models.CharField(max_length=120, blank=True, default='')
+
+class AuditLog(ImmutableTenantModel):
+    """
+    Append-only record of sensitive system events and state mutations.
+    """
+
+    actor = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_logs",
+    )
+    action = models.CharField(max_length=50)
+    resource_type = models.CharField(max_length=50)
+    resource_id = models.CharField(max_length=40)
     changes = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
-    ip_address = models.GenericIPAddressField(default='127.0.0.1')
-    user_agent = models.TextField(blank=True, default='')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
 
     class Meta:
-        ordering = ['-created_at']
-        db_table = 'audit_auditlog'
+        verbose_name = "Audit Log"
+        verbose_name_plural = "Audit Logs"
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['action']),
-            models.Index(fields=['resource_type']),
-            models.Index(fields=['created_at']),
+            models.Index(fields=["organization", "created_at"]),
+            models.Index(fields=["organization", "action"]),
+            models.Index(fields=["organization", "actor"]),
         ]
 
     def __str__(self):
-        actor_str = self.actor[0] if self.actor else 'User'
-        return f"[{self.created_at.strftime('%Y-%m-%d %H:%M')}] {actor_str} -> {self.action} ({self.resource_type} #{self.resource_id})"
+        return f"{self.created_at} - {self.action} on {self.resource_type}:{self.resource_id}"

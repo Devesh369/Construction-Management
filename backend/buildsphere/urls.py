@@ -1,7 +1,6 @@
-from django.contrib import admin
-from django.urls import path, include
+"""
+BuildSphere URL Configuration.
+Inherits all routes from config.urls.
+"""
 
-urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('cost-estimator/', include('cost_estimator.urls')),
-]
+from config.urls import urlpatterns  # noqa: F401

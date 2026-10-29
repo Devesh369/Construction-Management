@@ -25,9 +25,10 @@ import { Modal } from '../components/ui/Modal';
 export const UpadView = ({ selectedProjectId }) => {
   const { user, role } = useAuth();
   const isEmployeeLabour = role === 'employee/labour' || role === 'EMPLOYEE' || role === 'LABOUR';
+  const isOrgAdmin = role === 'ORG_ADMIN' || user?.is_superuser;
   const currentEmpId = user?.employee_id || 100;
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const canChangeStatus = !isEmployeeLabour && (role === 'ORG_ADMIN' || role === 'PROJECT_MANAGER' || role === 'SITE_MANAGER' || user?.is_staff || role === 'ACCOUNTANT');
+  const canChangeStatus = isOrgAdmin; // All payments are approved by Org Admin only
 
   // Active top tab: 'logs' | 'report' (matches Screenshot 1 & 2)
   const [activeTab, setActiveTab] = useState('logs');
@@ -239,7 +240,7 @@ export const UpadView = ({ selectedProjectId }) => {
         amount: Number(processForm.amount),
         method: processForm.method,
         type: processForm.type || 'advance',
-        status: processForm.status || 'paid',
+        status: isOrgAdmin ? (processForm.status || 'paid') : 'pending',
         date_from: processForm.date,
         date_to: processForm.date,
         description: processForm.description.trim() || 'Upad advance payment',
@@ -562,8 +563,20 @@ export const UpadView = ({ selectedProjectId }) => {
                           className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
                         >
                           <td className="py-3.5 px-5">
-                            <div className="font-bold text-slate-900 dark:text-white">
-                              {p.employee_name || 'Worker'}
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 dark:text-white">
+                                {p.employee_name || 'Worker'}
+                              </span>
+                              <span
+                                className={cn(
+                                  'px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider',
+                                  (p.type || '').toLowerCase() === 'salary'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                                    : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                                )}
+                              >
+                                {(p.type || '').toLowerCase() === 'salary' ? 'Full Salary' : 'Upad'}
+                              </span>
                             </div>
                             {(() => {
                               const empObj = employees.find((e) => String(e.id) === String(p.employee));
@@ -876,11 +889,57 @@ export const UpadView = ({ selectedProjectId }) => {
       <Modal
         isOpen={isProcessModalOpen}
         onClose={() => setIsProcessModalOpen(false)}
-        title="Process Upad Advance"
-        subtitle="Disburse worker advance and update financial ledgers"
+        title={processForm.type === 'salary' ? 'Disburse Worker Salary' : 'Process Upad Advance'}
+        subtitle={
+          processForm.type === 'salary'
+            ? 'Disburse earned wage payment and update financial ledgers'
+            : 'Disburse worker advance and update financial ledgers'
+        }
         size="lg"
       >
         <form onSubmit={handleProcessUpad} className="space-y-4">
+          {/* Row 0: Payment Type Toggle (Advance vs Full Salary) */}
+          <div className="p-1 rounded-xl bg-slate-100 dark:bg-slate-800 flex gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setProcessForm((prev) => ({
+                  ...prev,
+                  type: 'advance',
+                  description: prev.description.replace(/^Full salary payment/, 'Upad advance'),
+                }));
+              }}
+              className={cn(
+                'flex-1 py-2 rounded-lg text-xs font-bold transition-all',
+                processForm.type === 'advance'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              )}
+            >
+              Worker Advance (Upad)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const fillAmt = empCurrentBalance > 0 ? empCurrentBalance : empDailyWage;
+                setProcessForm((prev) => ({
+                  ...prev,
+                  type: 'salary',
+                  amount: fillAmt > 0 ? String(fillAmt) : '',
+                  description: selectedEmp ? `Full salary payment for ${selectedEmp.full_name}` : 'Full salary payment',
+                }));
+              }}
+              className={cn(
+                'flex-1 py-2 rounded-lg text-xs font-bold transition-all',
+                processForm.type === 'salary'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              )}
+            >
+              Full Salary / Wage Payment
+            </button>
+          </div>
+
           {/* Row 1: Employee & Project Selection */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -1083,10 +1142,21 @@ export const UpadView = ({ selectedProjectId }) => {
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/20 disabled:opacity-50"
+              className={cn(
+                'px-6 py-2.5 rounded-xl text-white text-xs font-black flex items-center gap-2 transition-all cursor-pointer shadow-md disabled:opacity-50',
+                processForm.type === 'salary'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+              )}
             >
               <Plus size={14} strokeWidth={3} />
-              <span>{submitting ? 'Processing...' : 'Disburse Upad'}</span>
+              <span>
+                {submitting
+                  ? 'Processing...'
+                  : processForm.type === 'salary'
+                  ? 'Disburse Full Salary'
+                  : 'Disburse Upad'}
+              </span>
             </button>
           </div>
         </form>

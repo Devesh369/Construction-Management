@@ -183,9 +183,21 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
           date: entryDate,
           project: entryProject || '',
         });
-        const emps = res.employees || [];
+        const emps = Array.isArray(res) ? res : res?.employees || [];
         setPresentEmployees(emps);
-        setPresentByRole(res.by_role || {});
+
+        // Ensure by_role is always grouped even if backend returned a flat list
+        let byRole = res?.by_role;
+        if (!byRole || Object.keys(byRole).length === 0) {
+          byRole = {};
+          emps.forEach((emp) => {
+            const rName = emp.role || emp.trade || 'Worker';
+            if (!byRole[rName]) byRole[rName] = [];
+            byRole[rName].push(emp);
+          });
+        }
+        setPresentByRole(byRole);
+
         // By default, select all present employees
         setSelectedEmployeeIds(emps.map((e) => e.id));
       } catch (err) {
@@ -200,6 +212,43 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
 
     fetchPresentEmployees();
   }, [entryDate, entryProject]);
+
+  // Fallback to load all active workers if attendance has not been registered yet
+  const handleLoadAllActiveEmployees = async () => {
+    setLoadingPresent(true);
+    try {
+      const res = await api.workforce.listEmployees({ is_active: true, page_size: 200 });
+      const rawList = Array.isArray(res) ? res : res?.results || [];
+      const emps = rawList.map((emp) => {
+        const roleName = emp.role || emp.trade || 'Worker';
+        return {
+          id: emp.id,
+          full_name: emp.full_name,
+          employee_code: emp.employee_code,
+          role: roleName,
+          trade: emp.trade,
+          attendance_status: 'AVAILABLE',
+          project_id: emp.primary_project || null,
+          project_name: emp.primary_project_name || '',
+        };
+      });
+      setPresentEmployees(emps);
+      const byRole = {};
+      emps.forEach((emp) => {
+        const rName = emp.role;
+        if (!byRole[rName]) byRole[rName] = [];
+        byRole[rName].push(emp);
+      });
+      setPresentByRole(byRole);
+      setSelectedEmployeeIds(emps.map((e) => e.id));
+      toast.success(`Loaded ${emps.length} active workers.`);
+    } catch (err) {
+      console.warn('Failed loading active employees', err);
+      toast.error('Failed to load active workers.');
+    } finally {
+      setLoadingPresent(false);
+    }
+  };
 
   // Load work entries list
   const fetchWorkEntries = async (overrideParams = null) => {
@@ -298,7 +347,7 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
         date: entry.date,
         project: entry.project,
       });
-      const presentList = res.employees || [];
+      const presentList = Array.isArray(res) ? res : res?.employees || [];
 
       // Combine with entry.employee_details in case some were assigned
       const combined = [...presentList];
@@ -577,13 +626,22 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
                     Fetching attendance records for {entryDate}...
                   </div>
                 ) : presentEmployees.length === 0 ? (
-                  <div className="p-8 rounded-xl bg-[var(--bg-secondary)]/50 border border-[var(--border-default)] text-center">
+                  <div className="p-8 rounded-xl bg-[var(--bg-secondary)]/50 border border-[var(--border-default)] text-center space-y-2">
                     <p className="text-xs font-semibold text-[var(--text-muted)]">
-                      No employees present on this date
+                      No employees marked present on {entryDate}
                     </p>
-                    <p className="text-[11px] text-[var(--text-muted)] opacity-75 mt-1">
-                      Mark worker attendance in the Attendance module to allocate them to this task.
+                    <p className="text-[11px] text-[var(--text-muted)] opacity-75">
+                      Mark worker attendance in the Attendance module, or click below to select from all active workers.
                     </p>
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleLoadAllActiveEmployees}
+                        className="px-4 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all cursor-pointer border border-blue-200 dark:border-blue-800 shadow-2xs"
+                      >
+                        Show All Active Workers
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3.5 p-4 rounded-xl bg-[var(--bg-secondary)]/60 border border-[var(--border-default)]">
@@ -604,8 +662,8 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
                                 className={cn(
                                   'flex items-center gap-2.5 p-2.5 rounded-xl border text-left text-xs font-semibold transition-all cursor-pointer select-none',
                                   isSelected
-                                    ? 'bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-blue-300 shadow-sm'
-                                    : 'bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-muted)] hover:border-slate-400'
+                                    ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-500 text-blue-900 dark:text-blue-200 shadow-xs ring-1 ring-blue-500'
+                                    : 'bg-[var(--bg-primary)] border-[var(--border-default)] text-[var(--text-secondary)] hover:border-slate-400'
                                 )}
                               >
                                 <div
@@ -613,17 +671,18 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
                                     'w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-all',
                                     isSelected
                                       ? 'bg-blue-600 border-blue-600 text-white'
-                                      : 'border-slate-400'
+                                      : 'border-slate-400 bg-white dark:bg-slate-800'
                                   )}
                                 >
                                   {isSelected && <Check size={11} strokeWidth={3} />}
                                 </div>
-                                <div className="truncate">
-                                  <div className="truncate text-xs font-bold leading-tight">
+                                <div className="truncate min-w-0">
+                                  <div className="truncate text-xs font-black leading-tight text-slate-900 dark:text-white">
                                     {emp.full_name}
                                   </div>
-                                  <div className="text-[10px] text-[var(--text-muted)] truncate">
-                                    {emp.role}
+                                  <div className="text-[10px] text-[var(--text-muted)] truncate flex items-center gap-1 mt-0.5">
+                                    <span>{emp.role || emp.trade || 'Worker'}</span>
+                                    {emp.project_name && <span className="opacity-75">• {emp.project_name}</span>}
                                   </div>
                                 </div>
                               </button>

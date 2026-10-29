@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Menu,
-  Search,
   Sun,
   Moon,
   RefreshCw,
@@ -33,11 +32,15 @@ export const Topbar = ({
   const formatRole = (r) => {
     if (!r) return 'User';
     const map = {
-      ORG_ADMIN: 'Admin',
-      PROJECT_MANAGER: 'Project Manager',
-      SITE_ENGINEER: 'Site Engineer',
-      SUPERVISOR: 'Supervisor',
-      ACCOUNTANT: 'Accountant',
+      ORG_ADMIN: 'Org Admin',
+      SITE_MANAGER: 'Site Manager',
+      PROJECT_MANAGER: 'Site Manager',
+      SITE_ENGINEER: 'Site Manager',
+      SUPERVISOR: 'Site Manager',
+      ACCOUNTANT: 'Org Admin',
+      'employee/labour': 'Employee / Labour',
+      EMPLOYEE: 'Employee / Labour',
+      LABOUR: 'Employee / Labour',
     };
     return map[r] || r.replace('_', ' ');
   };
@@ -64,23 +67,6 @@ export const Topbar = ({
           <span className="text-sm font-black tracking-tight text-[var(--text-primary)]">
             BuildSphere
           </span>
-        </div>
-      </div>
-
-      {/* Center section: Global Search Bar */}
-      <div className="hidden sm:flex items-center justify-center flex-1 max-w-lg mx-auto">
-        <div className="relative w-full">
-          <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search projects, workers, DPR..."
-            className="w-full bg-slate-100 dark:bg-[var(--bg-secondary)] border border-transparent focus:border-blue-500/50 dark:focus:border-blue-400/50 rounded-xl pl-10 pr-12 py-2 text-xs text-[var(--text-primary)] placeholder-[var(--text-muted)] transition-all outline-none focus:shadow-sm"
-          />
-          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 pointer-events-none">
-            <span className="text-[10px] font-semibold bg-white dark:bg-[var(--bg-tertiary)] border border-[var(--border-default)] rounded px-1.5 py-0.5 text-[var(--text-muted)] shadow-xs">
-              ⌘K
-            </span>
-          </div>
         </div>
       </div>
 

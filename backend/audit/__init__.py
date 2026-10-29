@@ -1,1 +1,1 @@
-# Audit app init
+# Audit app package

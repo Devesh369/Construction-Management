@@ -1,5 +1,6 @@
-import os
 import logging
+import os
+
 from django.conf import settings
 from django.core.mail import send_mail
 
@@ -11,12 +12,12 @@ def send_credentials_email(recipient_email, name, role, raw_password, login_url=
     Sends an onboarding email with system credentials to a newly created team member.
     Tries Resend API if RESEND_API_KEY is configured, else falls back to Django's configured EMAIL_BACKEND.
     """
-    resend_api_key = os.environ.get('RESEND_API_KEY', '') or getattr(settings, 'RESEND_API_KEY', '')
-    from_email = os.environ.get('RESEND_FROM_EMAIL', 'BuildSphere <onboarding@resend.dev>')
-    portal_url = login_url or os.environ.get('FRONTEND_URL', 'https://buildsphere.com')
+    resend_api_key = os.environ.get("RESEND_API_KEY", "") or getattr(settings, "RESEND_API_KEY", "")
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "BuildSphere <onboarding@resend.dev>")
+    portal_url = login_url or os.environ.get("FRONTEND_URL", "https://buildsphere.com")
 
     subject = f"Welcome to BuildSphere — Your Login Credentials ({name or recipient_email})"
-    
+
     plain_text = f"""
 Hello {name or 'Team Member'},
 
@@ -52,29 +53,31 @@ BuildSphere Team
     # If Resend API key is present, try direct Resend API call
     if resend_api_key:
         try:
-            import urllib.request
             import json
+            import urllib.request
 
             req = urllib.request.Request(
-                'https://api.resend.com/emails',
-                data=json.dumps({
-                    'from': from_email,
-                    'to': [recipient_email],
-                    'subject': subject,
-                    'html': html_content,
-                    'text': plain_text,
-                }).encode('utf-8'),
+                "https://api.resend.com/emails",
+                data=json.dumps(
+                    {
+                        "from": from_email,
+                        "to": [recipient_email],
+                        "subject": subject,
+                        "html": html_content,
+                        "text": plain_text,
+                    }
+                ).encode("utf-8"),
                 headers={
-                    'Authorization': f'Bearer {resend_api_key}',
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'BuildSphere/1.0',
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "BuildSphere/1.0",
                 },
-                method='POST'
+                method="POST",
             )
             with urllib.request.urlopen(req, timeout=10) as response:
-                result = json.loads(response.read().decode('utf-8'))
+                result = json.loads(response.read().decode("utf-8"))
                 logger.info(f"Credentials email dispatched via Resend: {result.get('id')}")
-                return {'success': True, 'provider': 'resend', 'id': result.get('id')}
+                return {"success": True, "provider": "resend", "id": result.get("id")}
         except Exception as e:
             logger.warning(f"Resend API dispatch failed ({e}), falling back to Django send_mail.")
 
@@ -89,7 +92,7 @@ BuildSphere Team
             fail_silently=False,
         )
         logger.info(f"Credentials email dispatched via Django send_mail to {recipient_email}")
-        return {'success': True, 'provider': 'django_mail', 'count': sent_count}
+        return {"success": True, "provider": "django_mail", "count": sent_count}
     except Exception as e:
         logger.error(f"Failed to dispatch credentials email: {e}")
-        return {'success': False, 'error': str(e)}
+        return {"success": False, "error": str(e)}

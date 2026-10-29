@@ -1529,18 +1529,58 @@ export async function handleMockRequest(endpoint, options = {}) {
   // WORK ENTRIES
   // -------------------------------------------------------------
   if (pathname === '/work-entries/present-employees') {
-    const pId = params.project ? Number(params.project) : null;
+    const pId = params.project && params.project !== 'all' ? Number(params.project) : null;
     const date = params.date || new Date().toISOString().split('T')[0];
-    const presentEmpIds = new Set(
-      (db.attendances || [])
-        .filter((a) => (!pId || a.project === pId) && (a.status === 'PRESENT' || a.status === 'HALF_DAY'))
-        .map((a) => a.employee)
+
+    // Find attendances on this date that are marked PRESENT or HALF_DAY
+    let attRecords = (db.attendances || []).filter(
+      (a) => a.date === date && (a.status === 'PRESENT' || a.status === 'HALF_DAY')
     );
-    let emps = (db.employees || []).filter((e) => !e.deleted_at);
-    if (presentEmpIds.size > 0) {
-      emps = emps.filter((e) => presentEmpIds.has(e.id));
+
+    // If pId is provided, check if any attendances match this project or employee assigned projects
+    if (pId && attRecords.length > 0) {
+      const projSpecificAtt = attRecords.filter((a) => {
+        if (a.project === pId) return true;
+        const emp = (db.employees || []).find((e) => e.id === a.employee);
+        if (emp?.primary_project === pId) return true;
+        if (Array.isArray(emp?.assigned_projects) && emp.assigned_projects.includes(pId)) return true;
+        return false;
+      });
+      if (projSpecificAtt.length > 0) {
+        attRecords = projSpecificAtt;
+      }
     }
-    return emps;
+
+    const presentEmpIds = new Set(attRecords.map((a) => a.employee));
+    let emps = (db.employees || []).filter((e) => !e.deleted_at && presentEmpIds.has(e.id));
+
+    const byRole = {};
+    const formatted = emps.map((emp) => {
+      const roleName = emp.role || emp.trade || 'Labour';
+      const att = attRecords.find((a) => a.employee === emp.id);
+      const proj = (db.projects || []).find((p) => p.id === (att?.project || emp.primary_project));
+      const empData = {
+        id: emp.id,
+        full_name: emp.full_name,
+        employee_code: emp.employee_code,
+        role: roleName,
+        trade: emp.trade,
+        attendance_status: att?.status || 'PRESENT',
+        project_id: proj?.id || null,
+        project_name: proj?.name || '',
+      };
+      if (!byRole[roleName]) byRole[roleName] = [];
+      byRole[roleName].push(empData);
+      return empData;
+    });
+
+    return {
+      date,
+      project: pId,
+      total_present: formatted.length,
+      employees: formatted,
+      by_role: byRole,
+    };
   }
 
   if (pathname === '/work-entries') {
