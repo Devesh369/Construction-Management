@@ -43,12 +43,6 @@ export const Sidebar = ({ activeTab, setActiveTab }) => {
       roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
     },
     {
-      id: 'cost_estimator',
-      label: 'Cost Estimator (BOQ)',
-      icon: Calculator,
-      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
-    },
-    {
       id: 'projects',
       label: 'Projects',
       icon: FolderKanban,
@@ -100,6 +94,12 @@ export const Sidebar = ({ activeTab, setActiveTab }) => {
       id: 'reports',
       label: 'Reports & Exports',
       icon: BarChart3,
+      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+    },
+    {
+      id: 'cost_estimator',
+      label: 'Cost Estimator',
+      icon: Calculator,
       roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
     },
     {

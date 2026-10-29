@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Building,
   ShieldAlert,
+  FolderKanban,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -103,20 +104,39 @@ export const formatINR = (val) => {
   return '₹ ' + num.toLocaleString('en-IN');
 };
 
-export const AICostEstimatorView = () => {
+export const AICostEstimatorView = ({ projects = [], selectedProjectId: initialProjectId, onProjectsUpdated }) => {
   const { user } = useAuth();
 
-  // Clean form state — ZERO dummy data
+  // Clean form state — ZERO dummy / mock pre-filled data
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId || '');
   const [squareFoot, setSquareFoot] = useState('');
-  const [selectedCity, setSelectedCity] = useState(CITIES[0].city);
+  const [selectedCity, setSelectedCity] = useState('');
   const [selectedExtras, setSelectedExtras] = useState([]);
-  const [timePeriodMonths, setTimePeriodMonths] = useState(12);
-  const [marginPercent, setMarginPercent] = useState('13.0');
+  const [timePeriodMonths, setTimePeriodMonths] = useState('');
+  const [marginPercent, setMarginPercent] = useState('');
   const [customMargin, setCustomMargin] = useState('');
 
   // Results State
   const [estimateResult, setEstimateResult] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
+
+  // Link city when project is selected
+  const handleProjectSelect = (projId) => {
+    setSelectedProjectId(projId);
+    if (projId) {
+      const proj = projects.find((p) => String(p.id) === String(projId));
+      if (proj && proj.location) {
+        const matched = CITIES.find(
+          (c) =>
+            proj.location.toLowerCase().includes(c.city.toLowerCase()) ||
+            c.city.toLowerCase().includes(proj.location.toLowerCase())
+        );
+        if (matched) {
+          setSelectedCity(matched.city);
+        }
+      }
+    }
+  };
 
   // Toggle Scope Item
   const toggleExtra = (id) => {
@@ -143,13 +163,23 @@ export const AICostEstimatorView = () => {
       return;
     }
 
+    if (!selectedCity) {
+      toast.error('Please select a project city / location.');
+      return;
+    }
+
     const duration = parseInt(timePeriodMonths, 10);
     if (!duration || isNaN(duration) || duration <= 0) {
       toast.error('Please enter a valid project duration in months.');
       return;
     }
 
-    let effectiveMargin = 13.0;
+    if (!marginPercent) {
+      toast.error('Please select or specify a contractor profit margin percentage.');
+      return;
+    }
+
+    let effectiveMargin = 0;
     if (marginPercent === 'custom') {
       const parsedCustom = parseFloat(customMargin);
       if (isNaN(parsedCustom) || parsedCustom < 0 || parsedCustom > 100) {
@@ -253,8 +283,12 @@ export const AICostEstimatorView = () => {
       const grandTotal = subtotal + contingency + marginAmount + gstAmount;
       const costPerSqFt = Math.round(grandTotal / area);
 
+      const linkedProject = projects.find((p) => String(p.id) === String(selectedProjectId));
       const result = {
         id: 'EST-' + Math.floor(100000 + Math.random() * 900000),
+        projectId: selectedProjectId || null,
+        projectName: linkedProject ? linkedProject.name : '',
+        projectCode: linkedProject ? linkedProject.code : '',
         timestamp: new Date().toLocaleDateString('en-IN', {
           day: '2-digit',
           month: 'short',
@@ -448,6 +482,13 @@ export const AICostEstimatorView = () => {
         </table>
 
         <div class="specs-card">
+          ${res.projectName ? `
+            <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed #cbd5e1;">
+              <span class="spec-label">Project:</span>
+              <span style="font-size: 11pt; font-weight: 800; color: #0284c7; margin-left: 6px;">${res.projectName}</span>
+              ${res.projectCode ? `<span style="font-size: 9pt; color: #64748b; margin-left: 4px;">(${res.projectCode})</span>` : ''}
+            </div>
+          ` : ''}
           <div class="specs-grid">
             <div>
               <div class="spec-label">Built-up Area</div>
@@ -561,13 +602,15 @@ export const AICostEstimatorView = () => {
 
   // Reset form
   const handleReset = () => {
+    setSelectedProjectId('');
     setSquareFoot('');
+    setSelectedCity('');
     setSelectedExtras([]);
-    setTimePeriodMonths(12);
-    setMarginPercent('13.0');
+    setTimePeriodMonths('');
+    setMarginPercent('');
     setCustomMargin('');
     setEstimateResult(null);
-    toast.success('Form reset.');
+    toast.success('Cost Estimator form reset cleanly.');
   };
 
   return (
@@ -608,12 +651,37 @@ export const AICostEstimatorView = () => {
         onSubmit={handleCalculate}
         className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8 space-y-8"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* 1. SQUAREFOOT (BUILT-UP AREA) */}
-          <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* 1. ASSOCIATED PROJECT (OPTIONAL) */}
+          <div className="space-y-2.5">
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <FolderKanban className="w-4 h-4 text-blue-600" />
+              1. Associated Project <span className="text-xs text-slate-400 font-normal">(Optional)</span>
+            </label>
+            <div className="relative">
+              <select
+                value={selectedProjectId}
+                onChange={(e) => handleProjectSelect(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all cursor-pointer truncate"
+              >
+                <option value="">-- Standalone / Custom Estimate --</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.code ? `(${p.code})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Link this estimate to an active construction site for tracking and official quotations.
+            </p>
+          </div>
+
+          {/* 2. SQUAREFOOT (BUILT-UP AREA) */}
+          <div className="space-y-2.5">
             <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
               <Building className="w-4 h-4 text-blue-600" />
-              1. Built-up Area (Square Feet) <span className="text-rose-500">*</span>
+              2. Built-up Area (Sq Ft) <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
               <input
@@ -622,8 +690,8 @@ export const AICostEstimatorView = () => {
                 step="10"
                 value={squareFoot}
                 onChange={(e) => setSquareFoot(e.target.value)}
-                placeholder="e.g. 2500"
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-lg font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all placeholder:text-slate-400 font-mono"
+                placeholder="Enter built-up area (sq ft)"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-base font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all placeholder:text-slate-400 font-mono"
                 required
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -631,36 +699,38 @@ export const AICostEstimatorView = () => {
               </span>
             </div>
             {/* Quick Area Shortcuts */}
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
               {[1000, 1500, 2000, 2500, 3500, 5000].map((size) => (
                 <button
                   type="button"
                   key={size}
                   onClick={() => setSquareFoot(size.toString())}
-                  className={`px-3 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 text-[11px] rounded-lg transition-all cursor-pointer ${
                     squareFoot === size.toString()
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20 font-bold'
+                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20 font-bold'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium'
                   }`}
                 >
-                  {size.toLocaleString()} sq ft
+                  {size.toLocaleString()}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* 2. LOCATION (CITY & STATE) */}
-          <div className="space-y-3">
+          {/* 3. LOCATION (CITY & STATE) */}
+          <div className="space-y-2.5">
             <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-blue-600" />
-              2. Project Location <span className="text-rose-500">*</span>
+              3. Project Location <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
               <select
                 value={selectedCity}
                 onChange={(e) => setSelectedCity(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-base font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all cursor-pointer"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all cursor-pointer"
+                required
               >
+                <option value="">-- Select Project City / Location --</option>
                 {CITIES.map((c) => (
                   <option key={c.city} value={c.city}>
                     {c.city}, {c.state} — {c.tier} (₹{c.baseRate}/sq ft)
@@ -669,7 +739,7 @@ export const AICostEstimatorView = () => {
               </select>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              City rates automatically adjust regional material indices and skilled labour wages.
+              City rates calibrate regional material indices and skilled labour wages.
             </p>
           </div>
         </div>
@@ -742,7 +812,7 @@ export const AICostEstimatorView = () => {
                 max="60"
                 value={timePeriodMonths}
                 onChange={(e) => setTimePeriodMonths(e.target.value)}
-                placeholder="e.g. 12"
+                placeholder="Enter duration in months (e.g. 12)"
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-base font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all placeholder:text-slate-400 font-mono"
                 required
               />
@@ -755,9 +825,9 @@ export const AICostEstimatorView = () => {
                 <button
                   type="button"
                   key={m}
-                  onClick={() => setTimePeriodMonths(m)}
+                  onClick={() => setTimePeriodMonths(m.toString())}
                   className={`px-3.5 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
-                    Number(timePeriodMonths) === m
+                    timePeriodMonths && Number(timePeriodMonths) === m
                       ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20 font-bold'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium'
                   }`}
@@ -886,6 +956,11 @@ export const AICostEstimatorView = () => {
             <div>
               <div className="text-sm font-bold text-slate-900 dark:text-white">
                 Official Bill of Quantities (BOQ) is ready
+                {estimateResult.projectName && (
+                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                    Project: {estimateResult.projectName} {estimateResult.projectCode ? `(${estimateResult.projectCode})` : ''}
+                  </span>
+                )}
               </div>
               <div className="text-xs text-slate-500 dark:text-slate-400">
                 Reference ID: <span className="font-mono font-semibold">{estimateResult.id}</span>

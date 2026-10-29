@@ -229,6 +229,7 @@ const AppContent = () => {
               {activeTab === 'cost_estimator' && (
                 <AICostEstimatorView
                   projects={projects}
+                  selectedProjectId={selectedProjectId}
                   onProjectsUpdated={fetchProjects}
                 />
               )}
