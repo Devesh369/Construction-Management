@@ -1,0 +1,8 @@
+{
+  "name": "BuildSphere — Construction Management Platform",
+  "description": "Enterprise Construction Project Management, Workforce Tracking, Attendance, Payroll, Expenses, and Financial Control Platform",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ],
+  "permissions": []
+}

@@ -1,86 +1,63 @@
-# Construction Management Portal
+# BuildSphere — Construction Management Platform
 
-A multi-tenant SaaS backend for construction companies built with **Django 5.2 LTS + Django REST Framework** on **PostgreSQL 15+**.
+An enterprise Construction Project Management, Workforce Tracking, Attendance, Payroll, Expenses, and Financial Control Platform rewritten as a modern React application.
 
 ---
 
-## 1. Quick Start
+## 1. Overview
 
-### Prerequisites
-- Python 3.12+
-- Node.js 18+ & npm
-- PostgreSQL 15+ (or SQLite fallback via `USE_SQLITE=True`)
+BuildSphere is a full-featured construction management platform with multi-role access control, project financial tracking, workforce management, and double-entry accounting.
 
-### Step 1: Backend Setup
+### Key Capabilities
+- **Executive Dashboard**: Real-time project telemetry, active labor headcounts, budget burn rates, KPI sparklines, and attendance trends.
+- **Project Portfolio**: Multi-site tracking, budget categories, actual spend tracking, milestone timelines, and member assignment.
+- **Workforce Management**: Employee profiles, trade/skill classification (Karigar, Helper, Mason, Carpenter, Electrician, etc.), daily wage / monthly salary models, bank/UPI details, and labor gangs.
+- **Daily Attendance & Shifts**: Mobile-optimized batch check-in, half-day/overtime tracking, night shift management, holiday calendars, and supervisor approval workflow.
+- **Daily Progress Reports (DPR)**: Daily activity logs, material consumption records, site photos, supervisor submission, and engineer verification/rejection.
+- **Expenses & Vendors**: Material, equipment, and fuel expense logging, receipt attachments, vendor management, and vendor ledger reconciliations.
+- **UPAD & Worker Advances**: Field advance payments, remaining salary calculations, batch payouts, and automatic payroll deductions.
+- **Payment Central**: Unified transaction ledger tracking cash and bank inflows and outflows.
+- **Automated Payroll**: Cycle-based payroll generation (weekly/bi-weekly/monthly), wage calculations with overtime & UPAD advance deductions, voucher generation, and payment settlement.
+- **Double-Entry Ledger**: Chart of accounts (Assets, Liabilities, Equity, Revenue, Expenses), journal entries, Trial Balance, Profit & Loss statement, and Balance Sheet.
+- **Reports & Exporting**: PDF and Excel exports for payroll summaries, attendance logs, DPRs, expenses, and financial statements.
+
+---
+
+## 2. Role-Based Access Control (RBAC)
+
+The platform supports pre-configured enterprise roles:
+
+| Role | Default Tab | Allowed Modules |
+|---|---|---|
+| **Organization Admin** (`devesh@buildsphere.com`) | Dashboard | All modules (Dashboard, Projects, Workforce, Attendance, DPR, Expenses, UPAD, Payment Central, Payroll, Ledger, Reports, Settings) |
+| **Project Manager** (`darshil@buildsphere.com`) | Dashboard | Dashboard, Projects, Expenses, Reports |
+| **Site Engineer** (`viren@buildsphere.com`) | Progress | Progress (DPR), Projects |
+| **Accountant** (`san@gmail.com`) | Ledger | Ledger, Expenses, UPAD, Payment Central, Payroll, Reports |
+| **Supervisor** | Attendance | Attendance, Workforce |
+
+One-click quick demo login buttons are available directly on the sign-in screen.
+
+---
+
+## 3. Technology Stack
+
+- **Framework**: React 19 + Vite
+- **Styling**: Tailwind CSS v4 (with light & dark theme support)
+- **State & Storage**: Reactive in-browser state with `localStorage` persistence, preloaded with comprehensive real-world construction site data.
+- **Icons**: Lucide React
+- **Notifications**: React Hot Toast
+
+---
+
+## 4. Development
+
 ```bash
-# Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
 # Install dependencies
-pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
-# Optional: Set USE_SQLITE=True in .env to run locally without PostgreSQL!
-
-# Run database migrations
-cd backend
-python manage.py migrate
-
-# Optional: Seed demo data (admin, users, sample construction projects)
-python manage.py seed_all
-
-# Start backend server (port 8000)
-python manage.py runserver
-```
-
-### Step 2: Frontend Setup
-In a new terminal:
-```bash
-cd frontend
 npm install
+
+# Start Vite dev server on port 3000
 npm run dev
+
+# Build for production
+npm run build
 ```
-Open **[http://localhost:3000](http://localhost:3000)** in your browser.
-
-- Interactive Swagger API UI: [http://localhost:8000/api/docs/](http://localhost:8000/api/docs/)
-- OpenAPI 3.0 Schema: [http://localhost:8000/api/schema/](http://localhost:8000/api/schema/)
-- Redoc Documentation: [http://localhost:8000/api/redoc/](http://localhost:8000/api/redoc/)
-- Complete Setup Guide PDF: `Documents/Local_Setup_and_Migration_Guide.pdf`
-
----
-
-## 2. Architecture & Modules
-
-The platform is organized into 12 Django apps (1 shared foundation package + 11 domain modules):
-
-| Layer | Module | Responsibility | Owner |
-|---|---|---|---|
-| **L0** | `core` | Multi-tenant base models, soft-delete, errors, sequences, money helper | Member A |
-| **L1** | `accounts` | Users, Organization, JWT cookie rotation, lockout, invitations | Member A |
-| **L2** | `audit` | Append-only security audit log (`log_action`) | Member A |
-| **L3** | `projects` | Sites, GPS circle geofence, team roster, budget categories, spend | Member B |
-| **L4** | `ledger` | Immutable double-entry financial journal, chart of accounts, statements | Member A |
-| **L4** | `workforce` | Workers directory, daily/monthly pay rates, labor gangs, bank privacy | Member B |
-| **L4** | `progress` | Daily Progress Reports (DPR), task completion %, photos, PM verification | Member B |
-| **L5** | `attendance` | GPS check-in (Haversine), gang batch, holidays, night shifts, close-day | Member B |
-| **L5** | `expenses` | Site expenses, receipts, credit purchases, utility baselines, approvals | Member C |
-| **L6** | `payroll` | Worker advances, attendance-driven wage calculations, vouchers, PDF slips | Member C |
-| **L7** | `dashboard` | Executive KPIs, alerts, burn rate, spend-by-category, 60s cache | Member A |
-| **L7** | `reports` | PDF & Excel exports for payroll, DPR, expenses, trial balance | Member C |
-
----
-
-## 3. Project Build Phases
-
-- **Phase P0 (Current):** Skeleton — settings, Docker, CI, 12 registered apps, contract stubs, Swagger.
-- **Phase P1:** Foundation — `core` & `accounts` (auth, JWT, lockout, invitations, org settings).
-- **Phase P2:** Master Data — `projects` & `workforce`.
-- **Phase P3:** Accounting Core — `ledger` double-entry & full `audit`.
-- **Phase P4:** Site Operations — `attendance` & `progress` (DPR).
-- **Phase P5:** Spend Control — `expenses` & vendors.
-- **Phase P6:** Payroll — advances, vouchers & wage engine.
-- **Phase P7:** Insight — `dashboard` KPIs & `reports` exports.
-- **Phase P8:** Integration — `seed_all` demo data & end-to-end workflow tests.
-- **Phase P9:** Frontend Wiring — React.js client integration.
