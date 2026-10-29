@@ -376,6 +376,9 @@ export const api = {
     listInvitations: () => apiRequest('/org/invitations'),
     createInvitation: (data) => apiRequest('/org/invitations', { method: 'POST', body: data }),
     resendInvitation: (id) => apiRequest(`/org/invitations/${id}/resend`, { method: 'POST' }),
+    listDispatchedEmails: () => apiRequest('/org/dispatched-emails'),
+    clearDispatchedEmails: () => apiRequest('/org/dispatched-emails', { method: 'DELETE' }),
+    resendCredentials: (data) => apiRequest('/org/resend-credentials', { method: 'POST', body: data }),
   },
 
   // Users (Team Member Management)
@@ -472,5 +475,23 @@ export const api = {
       const q = new URLSearchParams(params).toString();
       return apiRequest(`/running-costs/summary${q ? `?${q}` : ''}`);
     },
+  },
+
+  // Audit Trail & Activity Logs
+  audit: {
+    list: (params = {}) => {
+      const q = new URLSearchParams(params).toString();
+      return apiRequest(`/audit/logs${q ? `?${q}` : ''}`);
+    },
+    getStats: () => apiRequest('/audit/stats'),
+    clear: () => apiRequest('/audit/logs', { method: 'DELETE' }),
+  },
+
+  // AI Cost Estimator Persistent Storage
+  costEstimator: {
+    list: () => apiRequest('/cost-estimator/estimates'),
+    save: (data) => apiRequest('/cost-estimator/estimates', { method: 'POST', body: data }),
+    update: (id, data) => apiRequest(`/cost-estimator/estimates/${id}`, { method: 'PATCH', body: data }),
+    delete: (id) => apiRequest(`/cost-estimator/estimates/${id}`, { method: 'DELETE' }),
   },
 };

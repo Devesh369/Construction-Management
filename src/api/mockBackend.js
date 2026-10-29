@@ -34,6 +34,9 @@ function loadDB() {
   if (!target.credit_logs) target.credit_logs = [];
   if (!target.running_costs) target.running_costs = [];
   if (!target.invitations) target.invitations = [];
+  if (!target.audit_logs) target.audit_logs = clone(INITIAL_DB.audit_logs || []);
+  if (!target.cost_estimates) target.cost_estimates = [];
+  if (!target.dispatched_emails) target.dispatched_emails = [];
 
   // Auto-sync: Ensure any user in target.users with role 'employee/labour' has a valid employee record in target.employees
   let dbChanged = false;
@@ -144,6 +147,9 @@ export function resetDB() {
   if (!db.credit_logs) db.credit_logs = [];
   if (!db.running_costs) db.running_costs = [];
   if (!db.invitations) db.invitations = [];
+  if (!db.audit_logs) db.audit_logs = clone(INITIAL_DB.audit_logs || []);
+  if (!db.cost_estimates) db.cost_estimates = [];
+  if (!db.dispatched_emails) db.dispatched_emails = [];
   saveDB(db);
   return db;
 }
@@ -153,6 +159,80 @@ function nextId(collection) {
   if (!collection || collection.length === 0) return 1;
   const max = collection.reduce((m, item) => Math.max(m, Number(item.id || item.pk || 0)), 0);
   return max + 1;
+}
+
+// Helper to identify active user session for audit trail
+function getActorFromSession(overrideUser = null) {
+  if (overrideUser && (overrideUser.email || overrideUser.role)) {
+    return {
+      id: overrideUser.id || 1,
+      email: overrideUser.email || 'user@buildsphere.com',
+      name: overrideUser.name || overrideUser.email || 'User',
+      role: overrideUser.role || 'UNKNOWN',
+      organization: overrideUser.organization?.id || overrideUser.organization || 10,
+    };
+  }
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const raw = localStorage.getItem('cmp_user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u && (u.email || u.role)) {
+          return {
+            id: u.id || 1,
+            email: u.email || 'user@buildsphere.com',
+            name: u.name || u.email || 'User',
+            role: u.role || 'UNKNOWN',
+            organization: u.organization?.id || u.organization || 10,
+          };
+        }
+      }
+    } catch {}
+  }
+  return {
+    id: 1,
+    email: 'admin@buildsphere.com',
+    name: 'Admin User',
+    role: 'ORG_ADMIN',
+    organization: 10,
+  };
+}
+
+// Universal Audit Log Recorder to guarantee persistence for each and every action performed by any role
+export function recordAuditLog(targetDb, { action, resource_type, resource_id, changes = {}, metadata = {}, actor = null }) {
+  if (!targetDb) return null;
+  const currentActor = getActorFromSession(actor);
+  if (!targetDb.audit_logs) targetDb.audit_logs = [];
+
+  const logEntry = {
+    id: nextId(targetDb.audit_logs),
+    organization: currentActor.organization || 10,
+    created_at: new Date().toISOString(),
+    actor: [currentActor.email || 'user@buildsphere.com'],
+    action: action || 'ACTION_PERFORMED',
+    resource_type: resource_type || 'System',
+    resource_id: String(resource_id != null ? resource_id : ''),
+    changes: changes || {},
+    metadata: {
+      actor_name: currentActor.name || currentActor.email || 'User',
+      actor_role: currentActor.role || 'UNKNOWN',
+      timestamp: new Date().toISOString(),
+      ...metadata,
+    },
+    ip_address: '127.0.0.1',
+    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'BuildSphere-Client',
+  };
+
+  // Prepend so latest appears first
+  targetDb.audit_logs.unshift(logEntry);
+
+  // Keep reasonably bounded
+  if (targetDb.audit_logs.length > 600) {
+    targetDb.audit_logs = targetDb.audit_logs.slice(0, 600);
+  }
+
+  saveDB(targetDb);
+  return logEntry;
 }
 
 // Helper to create mock blob for PDF/Excel download
@@ -226,6 +306,13 @@ export async function handleMockRequest(endpoint, options = {}) {
       created_at: new Date().toISOString(),
     };
     db.users.push(newUser);
+    recordAuditLog(db, {
+      action: 'ADMIN_SETUP',
+      resource_type: 'User',
+      resource_id: newUser.id,
+      actor: newUser,
+      changes: { email: newUser.email, name: newUser.name, role: newUser.role },
+    });
     saveDB(db);
 
     return {
@@ -282,6 +369,13 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (user.role === 'employee/labour' && !user.employee_id) {
       user.employee_id = 100;
     }
+    recordAuditLog(db, {
+      action: 'LOGIN_SUCCESS',
+      resource_type: 'User',
+      resource_id: user.id,
+      actor: user,
+      metadata: { role: user.role, email: user.email },
+    });
     return {
       access: 'mock-jwt-token-access',
       refresh: 'mock-jwt-token-refresh',
@@ -294,6 +388,12 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   if (pathname === '/auth/logout' && method === 'POST') {
+    recordAuditLog(db, {
+      action: 'LOGOUT',
+      resource_type: 'User',
+      resource_id: '',
+      metadata: { action: 'Session terminated' },
+    });
     return { detail: 'Successfully logged out.' };
   }
 
@@ -347,6 +447,13 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (invite) {
       invite.status = 'ACCEPTED';
     }
+    recordAuditLog(db, {
+      action: 'INVITE_ACCEPTED',
+      resource_type: 'User',
+      resource_id: newUser.id,
+      actor: newUser,
+      changes: { email: newUser.email, role: newUser.role },
+    });
     saveDB(db);
 
     return {
@@ -363,6 +470,12 @@ export async function handleMockRequest(endpoint, options = {}) {
       const idx = db.users.findIndex((u) => u.id === user.id);
       if (idx !== -1) {
         db.users[idx] = { ...db.users[idx], ...body };
+        recordAuditLog(db, {
+          action: 'PROFILE_UPDATED',
+          resource_type: 'User',
+          resource_id: user.id,
+          changes: body,
+        });
         saveDB(db);
         return db.users[idx];
       }
@@ -418,16 +531,44 @@ export async function handleMockRequest(endpoint, options = {}) {
         }
       }
 
+      const tempPassword = body.password || 'BuildSphere@2026';
+      const targetNotificationEmail = (body.notification_email || body.email || '').trim();
+
       const newUser = {
         id: nextId(db.users),
         ...body,
+        password: tempPassword,
         employee_id: empId,
         is_active: true,
         created_at: new Date().toISOString(),
       };
       db.users.push(newUser);
+
+      // Automated credentials email delivery dispatch
+      db.dispatched_emails = db.dispatched_emails || [];
+      const emailRecord = {
+        id: `email_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        created_at: new Date().toISOString(),
+        recipient: targetNotificationEmail,
+        member_name: body.name || 'Team Member',
+        member_email: body.email,
+        role: body.role || 'SITE_ENGINEER',
+        password: tempPassword,
+        subject: `Welcome to BuildSphere — Your Login Credentials (${body.name || body.email})`,
+        status: 'DELIVERED',
+        delivery_provider: localStorage.getItem('cmp_resend_api_key') ? 'Resend' : 'BuildSphere Outbox',
+        login_url: typeof window !== 'undefined' ? window.location.origin : 'https://buildsphere.com',
+      };
+      db.dispatched_emails.unshift(emailRecord);
+
+      recordAuditLog(db, {
+        action: 'USER_CREATED',
+        resource_type: 'User',
+        resource_id: newUser.id,
+        changes: { name: newUser.name, email: newUser.email, role: newUser.role },
+      });
       saveDB(db);
-      return newUser;
+      return { ...newUser, dispatched_email: emailRecord };
     }
   }
 
@@ -467,11 +608,24 @@ export async function handleMockRequest(endpoint, options = {}) {
         db.employees.push(newEmp);
         db.users[idx].employee_id = newEmp.id;
       }
+      recordAuditLog(db, {
+        action: 'USER_UPDATED',
+        resource_type: 'User',
+        resource_id: uId,
+        changes: body,
+      });
       saveDB(db);
       return db.users[idx];
     }
     if (method === 'DELETE' && idx !== -1) {
+      const removedUser = db.users[idx];
       db.users.splice(idx, 1);
+      recordAuditLog(db, {
+        action: 'USER_DELETED',
+        resource_type: 'User',
+        resource_id: uId,
+        changes: { name: removedUser?.name, email: removedUser?.email, role: removedUser?.role },
+      });
       saveDB(db);
       return { success: true };
     }
@@ -583,6 +737,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         updated_at: new Date().toISOString(),
       };
       db.projects.push(newProj);
+      recordAuditLog(db, {
+        action: 'PROJECT_CREATED',
+        resource_type: 'Project',
+        resource_id: newProj.id,
+        changes: { name: newProj.name, budget: newProj.estimated_budget, location: newProj.location },
+      });
       saveDB(db);
       return newProj;
     }
@@ -603,7 +763,13 @@ export async function handleMockRequest(endpoint, options = {}) {
       if (method === 'DELETE' && mId) {
         const mIdx = (db.project_memberships || []).findIndex((m) => m.id === mId || m.user === mId);
         if (mIdx !== -1) {
-          db.project_memberships.splice(mIdx, 1);
+          const removedM = db.project_memberships.splice(mIdx, 1)[0];
+          recordAuditLog(db, {
+            action: 'PROJECT_MEMBER_REMOVED',
+            resource_type: 'ProjectMembership',
+            resource_id: mId,
+            changes: { project: pId, user: removedM?.user, role: removedM?.role },
+          });
           saveDB(db);
         }
         return { success: true };
@@ -624,6 +790,12 @@ export async function handleMockRequest(endpoint, options = {}) {
           created_at: new Date().toISOString(),
         };
         db.project_memberships.push(newM);
+        recordAuditLog(db, {
+          action: 'PROJECT_MEMBER_ASSIGNED',
+          resource_type: 'ProjectMembership',
+          resource_id: newM.id,
+          changes: { project: pId, user: newM.user, role: newM.role },
+        });
         saveDB(db);
         return newM;
       }
@@ -632,11 +804,23 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (method === 'GET') return proj;
     if (method === 'PATCH') {
       db.projects[projIdx] = { ...proj, ...body, updated_at: new Date().toISOString() };
+      recordAuditLog(db, {
+        action: 'PROJECT_UPDATED',
+        resource_type: 'Project',
+        resource_id: pId,
+        changes: body,
+      });
       saveDB(db);
       return db.projects[projIdx];
     }
     if (method === 'DELETE') {
       db.projects[projIdx].deleted_at = new Date().toISOString();
+      recordAuditLog(db, {
+        action: 'PROJECT_DELETED',
+        resource_type: 'Project',
+        resource_id: pId,
+        changes: { name: proj.name },
+      });
       saveDB(db);
       return { success: true };
     }
@@ -723,6 +907,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         }
       }
 
+      recordAuditLog(db, {
+        action: 'EMPLOYEE_CREATED',
+        resource_type: 'Employee',
+        resource_id: newEmp.id,
+        changes: { name: newEmp.full_name, trade: newEmp.trade, daily_rate: newEmp.daily_rate, project: newEmp.primary_project },
+      });
       saveDB(db);
       return newEmp;
     }
@@ -741,6 +931,12 @@ export async function handleMockRequest(endpoint, options = {}) {
       const pId = Number(body.project_id);
       if (!emp.assigned_projects) emp.assigned_projects = [];
       if (!emp.assigned_projects.includes(pId)) emp.assigned_projects.push(pId);
+      recordAuditLog(db, {
+        action: 'EMPLOYEE_PROJECT_ASSIGNED',
+        resource_type: 'Employee',
+        resource_id: eId,
+        changes: { project_id: pId, employee_name: emp.full_name },
+      });
       saveDB(db);
       return emp;
     }
@@ -748,6 +944,12 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (subRoute === '/unassign-project' && method === 'POST') {
       const pId = Number(body.project_id);
       emp.assigned_projects = (emp.assigned_projects || []).filter((id) => id !== pId);
+      recordAuditLog(db, {
+        action: 'EMPLOYEE_PROJECT_UNASSIGNED',
+        resource_type: 'Employee',
+        resource_id: eId,
+        changes: { project_id: pId, employee_name: emp.full_name },
+      });
       saveDB(db);
       return emp;
     }
@@ -766,6 +968,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.payments.push(payment);
+      recordAuditLog(db, {
+        action: 'EMPLOYEE_PAYMENT_DISBURSED',
+        resource_type: 'Payment',
+        resource_id: payment.id,
+        changes: { employee_id: eId, amount: payment.amount, mode: payment.payment_mode },
+      });
       saveDB(db);
       return payment;
     }
@@ -784,6 +992,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.payments.push(payment);
+      recordAuditLog(db, {
+        action: 'EMPLOYEE_UPAD_REQUESTED',
+        resource_type: 'Payment',
+        resource_id: payment.id,
+        changes: { employee_id: eId, amount: payment.amount, notes: payment.notes },
+      });
       saveDB(db);
       return payment;
     }
@@ -815,11 +1029,23 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (method === 'GET') return emp;
     if (method === 'PATCH') {
       db.employees[empIdx] = { ...emp, ...body, updated_at: new Date().toISOString() };
+      recordAuditLog(db, {
+        action: 'EMPLOYEE_UPDATED',
+        resource_type: 'Employee',
+        resource_id: eId,
+        changes: body,
+      });
       saveDB(db);
       return db.employees[empIdx];
     }
     if (method === 'DELETE') {
       db.employees[empIdx].deleted_at = new Date().toISOString();
+      recordAuditLog(db, {
+        action: 'EMPLOYEE_DELETED',
+        resource_type: 'Employee',
+        resource_id: eId,
+        changes: { name: emp.full_name },
+      });
       saveDB(db);
       return { success: true };
     }
@@ -885,6 +1111,12 @@ export async function handleMockRequest(endpoint, options = {}) {
       created_at: new Date().toISOString(),
     };
     db.attendances.push(newAtt);
+    recordAuditLog(db, {
+      action: 'ATTENDANCE_CHECKIN',
+      resource_type: 'Attendance',
+      resource_id: newAtt.id,
+      changes: { employee: newAtt.employee, status: newAtt.status, hours: newAtt.hours_worked, project: newAtt.project },
+    });
     saveDB(db);
     return newAtt;
   }
@@ -917,6 +1149,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         db.attendances.push(newAtt);
       }
     }
+    recordAuditLog(db, {
+      action: 'ATTENDANCE_BATCH_MARKED',
+      resource_type: 'Attendance',
+      resource_id: `${projectId}_${date}`,
+      changes: { count: records.length, project: projectId, date },
+    });
     saveDB(db);
     return { success: true, count: records.length };
   }
@@ -945,11 +1183,22 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (idx !== -1) {
       if (method === 'PATCH') {
         db.attendances[idx] = { ...db.attendances[idx], ...body, updated_at: new Date().toISOString() };
+        recordAuditLog(db, {
+          action: 'ATTENDANCE_UPDATED',
+          resource_type: 'Attendance',
+          resource_id: id,
+          changes: body,
+        });
         saveDB(db);
         return db.attendances[idx];
       }
       if (method === 'DELETE') {
         db.attendances.splice(idx, 1);
+        recordAuditLog(db, {
+          action: 'ATTENDANCE_DELETED',
+          resource_type: 'Attendance',
+          resource_id: id,
+        });
         saveDB(db);
         return { success: true };
       }
@@ -990,6 +1239,12 @@ export async function handleMockRequest(endpoint, options = {}) {
       if ((!project_id || a.project === Number(project_id)) && a.date === date) {
         a.is_approved = true;
       }
+    });
+    recordAuditLog(db, {
+      action: 'ATTENDANCE_APPROVED',
+      resource_type: 'Attendance',
+      resource_id: `${project_id || 'all'}_${date}`,
+      changes: { project_id, date },
     });
     saveDB(db);
     return { success: true, message: 'Attendance approved for date' };
@@ -1095,6 +1350,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.dprs.push(newDpr);
+      recordAuditLog(db, {
+        action: 'DPR_SUBMITTED',
+        resource_type: 'DPR',
+        resource_id: newDpr.id,
+        changes: { project: newDpr.project, date: newDpr.report_date, summary: newDpr.work_summary, weather: newDpr.weather },
+      });
       saveDB(db);
       return newDpr;
     }
@@ -1110,22 +1371,45 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (dpr) {
       if (subRoute === '/verify' && method === 'POST') {
         dpr.status = 'VERIFIED';
+        recordAuditLog(db, {
+          action: 'DPR_VERIFIED',
+          resource_type: 'DPR',
+          resource_id: dId,
+          changes: { status: 'VERIFIED' },
+        });
         saveDB(db);
         return dpr;
       }
       if (subRoute === '/reject' && method === 'POST') {
         dpr.status = 'REJECTED';
         dpr.rejection_reason = body.reason || '';
+        recordAuditLog(db, {
+          action: 'DPR_REJECTED',
+          resource_type: 'DPR',
+          resource_id: dId,
+          changes: { status: 'REJECTED', reason: body.reason },
+        });
         saveDB(db);
         return dpr;
       }
       if (method === 'PATCH') {
         db.dprs[dIdx] = { ...dpr, ...body, updated_at: new Date().toISOString() };
+        recordAuditLog(db, {
+          action: 'DPR_UPDATED',
+          resource_type: 'DPR',
+          resource_id: dId,
+          changes: body,
+        });
         saveDB(db);
         return db.dprs[dIdx];
       }
       if (method === 'DELETE') {
         db.dprs.splice(dIdx, 1);
+        recordAuditLog(db, {
+          action: 'DPR_DELETED',
+          resource_type: 'DPR',
+          resource_id: dId,
+        });
         saveDB(db);
         return { success: true };
       }
@@ -1172,6 +1456,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.work_entries.push(entry);
+      recordAuditLog(db, {
+        action: 'WORK_ENTRY_CREATED',
+        resource_type: 'WorkEntry',
+        resource_id: entry.id,
+        changes: { employee: entry.employee, project: entry.project, task: entry.task_description, quantity: entry.quantity_completed },
+      });
       saveDB(db);
       return entry;
     }
@@ -1184,11 +1474,22 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (weIdx !== -1) {
       if (method === 'PATCH') {
         db.work_entries[weIdx] = { ...db.work_entries[weIdx], ...body, updated_at: new Date().toISOString() };
+        recordAuditLog(db, {
+          action: 'WORK_ENTRY_UPDATED',
+          resource_type: 'WorkEntry',
+          resource_id: weId,
+          changes: body,
+        });
         saveDB(db);
         return db.work_entries[weIdx];
       }
       if (method === 'DELETE') {
         db.work_entries.splice(weIdx, 1);
+        recordAuditLog(db, {
+          action: 'WORK_ENTRY_DELETED',
+          resource_type: 'WorkEntry',
+          resource_id: weId,
+        });
         saveDB(db);
         return { success: true };
       }
@@ -1225,6 +1526,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.expenses.push(newExp);
+      recordAuditLog(db, {
+        action: 'EXPENSE_SUBMITTED',
+        resource_type: 'Expense',
+        resource_id: newExp.id,
+        changes: { amount: newExp.amount, category: newExp.category, project: newExp.project, description: newExp.description },
+      });
       saveDB(db);
       return newExp;
     }
@@ -1247,6 +1554,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         const curSpend = Number(db.projects[pIdx].actual_spend || 0);
         db.projects[pIdx].actual_spend = String((curSpend + Number(exp.amount)).toFixed(2));
       }
+      recordAuditLog(db, {
+        action: 'EXPENSE_APPROVED',
+        resource_type: 'Expense',
+        resource_id: expId,
+        changes: { amount: exp.amount, project: exp.project, status: 'APPROVED' },
+      });
       saveDB(db);
       return exp;
     }
@@ -1254,18 +1567,35 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (subRoute === '/reject' && method === 'POST') {
       exp.status = 'REJECTED';
       exp.rejection_reason = body.reason || '';
+      recordAuditLog(db, {
+        action: 'EXPENSE_REJECTED',
+        resource_type: 'Expense',
+        resource_id: expId,
+        changes: { reason: body.reason, status: 'REJECTED' },
+      });
       saveDB(db);
       return exp;
     }
 
     if (method === 'PATCH') {
       db.expenses[expIdx] = { ...exp, ...body, updated_at: new Date().toISOString() };
+      recordAuditLog(db, {
+        action: 'EXPENSE_UPDATED',
+        resource_type: 'Expense',
+        resource_id: expId,
+        changes: body,
+      });
       saveDB(db);
       return db.expenses[expIdx];
     }
 
     if (method === 'DELETE') {
       db.expenses.splice(expIdx, 1);
+      recordAuditLog(db, {
+        action: 'EXPENSE_DELETED',
+        resource_type: 'Expense',
+        resource_id: expId,
+      });
       saveDB(db);
       return { success: true };
     }
@@ -1289,6 +1619,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.vendors.push(newV);
+      recordAuditLog(db, {
+        action: 'VENDOR_CREATED',
+        resource_type: 'Vendor',
+        resource_id: newV.id,
+        changes: { name: newV.name, phone: newV.phone },
+      });
       saveDB(db);
       return newV;
     }
@@ -1345,6 +1681,13 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       });
 
+      recordAuditLog(db, {
+        action: 'VENDOR_PAYMENT_RECORDED',
+        resource_type: 'Payment',
+        resource_id: pmt.id,
+        changes: { vendor_id: vId, amount: pmt.amount, mode: pmt.payment_mode },
+      });
+
       saveDB(db);
       return pmt;
     }
@@ -1352,11 +1695,22 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (vIdx !== -1) {
       if (method === 'PATCH') {
         db.vendors[vIdx] = { ...db.vendors[vIdx], ...body, updated_at: new Date().toISOString() };
+        recordAuditLog(db, {
+          action: 'VENDOR_UPDATED',
+          resource_type: 'Vendor',
+          resource_id: vId,
+          changes: body,
+        });
         saveDB(db);
         return db.vendors[vIdx];
       }
       if (method === 'DELETE') {
         db.vendors.splice(vIdx, 1);
+        recordAuditLog(db, {
+          action: 'VENDOR_DELETED',
+          resource_type: 'Vendor',
+          resource_id: vId,
+        });
         saveDB(db);
         return { success: true };
       }
@@ -1412,6 +1766,12 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.payroll_runs.push(newRun);
+      recordAuditLog(db, {
+        action: 'PAYROLL_RUN_GENERATED',
+        resource_type: 'PayrollRun',
+        resource_id: newRun.id,
+        changes: { total_gross: grossTotal, total_net: netTotal, vouchers_count: vouchers.length },
+      });
       saveDB(db);
       return newRun;
     }
@@ -1431,21 +1791,42 @@ export async function handleMockRequest(endpoint, options = {}) {
         run.gross_total = String(grossTotal.toFixed(2));
         run.deductions_total = String(deductionsTotal.toFixed(2));
         run.net_total = String((grossTotal - deductionsTotal).toFixed(2));
+        recordAuditLog(db, {
+          action: 'PAYROLL_RUN_RECALCULATED',
+          resource_type: 'PayrollRun',
+          resource_id: rId,
+        });
         saveDB(db);
         return run;
       }
       if (subRoute === '/approve' && method === 'POST') {
         run.status = 'APPROVED';
+        recordAuditLog(db, {
+          action: 'PAYROLL_RUN_APPROVED',
+          resource_type: 'PayrollRun',
+          resource_id: rId,
+        });
         saveDB(db);
         return run;
       }
       if (method === 'PATCH') {
         db.payroll_runs[rIdx] = { ...run, ...body, updated_at: new Date().toISOString() };
+        recordAuditLog(db, {
+          action: 'PAYROLL_RUN_UPDATED',
+          resource_type: 'PayrollRun',
+          resource_id: rId,
+          changes: body,
+        });
         saveDB(db);
         return db.payroll_runs[rIdx];
       }
       if (method === 'DELETE') {
         db.payroll_runs.splice(rIdx, 1);
+        recordAuditLog(db, {
+          action: 'PAYROLL_RUN_DELETED',
+          resource_type: 'PayrollRun',
+          resource_id: rId,
+        });
         saveDB(db);
         return { success: true };
       }
@@ -1499,6 +1880,13 @@ export async function handleMockRequest(endpoint, options = {}) {
         });
       }
 
+      recordAuditLog(db, {
+        action: 'PAYROLL_VOUCHER_PAID',
+        resource_type: 'PayrollVoucher',
+        resource_id: vId,
+        changes: { amount: updatedVoucher?.net_payable, employee: updatedVoucher?.employee },
+      });
+
       saveDB(db);
       return updatedVoucher || { id: vId, status: 'PAID' };
     }
@@ -1535,6 +1923,13 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       });
 
+      recordAuditLog(db, {
+        action: 'UPAD_ADVANCE_REQUESTED',
+        resource_type: 'Advance',
+        resource_id: adv.id,
+        changes: { employee: adv.employee, amount: adv.amount, notes: adv.notes },
+      });
+
       saveDB(db);
       return adv;
     }
@@ -1547,11 +1942,22 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (idx !== -1) {
       if (method === 'DELETE') {
         db.advances.splice(idx, 1);
+        recordAuditLog(db, {
+          action: 'UPAD_ADVANCE_DELETED',
+          resource_type: 'Advance',
+          resource_id: aId,
+        });
         saveDB(db);
         return { success: true };
       }
       if (method === 'PATCH') {
         db.advances[idx] = { ...db.advances[idx], ...body };
+        recordAuditLog(db, {
+          action: 'UPAD_ADVANCE_UPDATED',
+          resource_type: 'Advance',
+          resource_id: aId,
+          changes: body,
+        });
         saveDB(db);
         return db.advances[idx];
       }
@@ -1667,15 +2073,20 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (idx !== -1) {
       if (subRoute === '/approve') {
         db.payments[idx].status = 'APPROVED';
+        recordAuditLog(db, { action: 'PAYMENT_APPROVED', resource_type: 'Payment', resource_id: pId });
       } else if (subRoute === '/reject') {
         db.payments[idx].status = 'REJECTED';
         db.payments[idx].rejection_reason = body.reason || '';
+        recordAuditLog(db, { action: 'PAYMENT_REJECTED', resource_type: 'Payment', resource_id: pId, changes: { reason: body.reason } });
       } else if (subRoute === '/process') {
         db.payments[idx].status = 'PAID';
+        recordAuditLog(db, { action: 'PAYMENT_PROCESSED', resource_type: 'Payment', resource_id: pId });
       } else if (method === 'PATCH') {
         db.payments[idx] = { ...db.payments[idx], ...body, updated_at: new Date().toISOString() };
+        recordAuditLog(db, { action: 'PAYMENT_UPDATED', resource_type: 'Payment', resource_id: pId, changes: body });
       } else if (method === 'DELETE') {
         db.payments.splice(idx, 1);
+        recordAuditLog(db, { action: 'PAYMENT_DELETED', resource_type: 'Payment', resource_id: pId });
         saveDB(db);
         return { success: true };
       }
@@ -1698,6 +2109,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.transactions.push(tx);
+      recordAuditLog(db, { action: 'TRANSACTION_RECORDED', resource_type: 'Transaction', resource_id: tx.id, changes: { amount: tx.amount, type: tx.type, category: tx.category } });
       saveDB(db);
       return tx;
     }
@@ -1710,11 +2122,13 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (idx !== -1) {
       if (method === 'PATCH') {
         db.transactions[idx] = { ...db.transactions[idx], ...body, updated_at: new Date().toISOString() };
+        recordAuditLog(db, { action: 'TRANSACTION_UPDATED', resource_type: 'Transaction', resource_id: tId, changes: body });
         saveDB(db);
         return db.transactions[idx];
       }
       if (method === 'DELETE') {
         db.transactions.splice(idx, 1);
+        recordAuditLog(db, { action: 'TRANSACTION_DELETED', resource_type: 'Transaction', resource_id: tId });
         saveDB(db);
         return { success: true };
       }
@@ -1751,6 +2165,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.credit_logs.push(log);
+      recordAuditLog(db, { action: 'CREDIT_LOG_RECORDED', resource_type: 'CreditLog', resource_id: log.id, changes: { vendor: log.vendor, amount: log.amount } });
       saveDB(db);
       return log;
     }
@@ -1781,6 +2196,7 @@ export async function handleMockRequest(endpoint, options = {}) {
           log.expenses.push(expEntry);
           const curBal = Number(log.remaining_balance !== undefined ? log.remaining_balance : log.amount);
           log.remaining_balance = String(Math.max(0, curBal - deductionAmt).toFixed(2));
+          recordAuditLog(db, { action: 'CREDIT_DEDUCTION_RECORDED', resource_type: 'CreditLog', resource_id: clId, changes: { amount: deductionAmt } });
           saveDB(db);
           return expEntry;
         }
@@ -1791,6 +2207,7 @@ export async function handleMockRequest(endpoint, options = {}) {
             log.expenses.splice(eIdx, 1);
             const curBal = Number(log.remaining_balance !== undefined ? log.remaining_balance : 0);
             log.remaining_balance = String((curBal + restoredAmt).toFixed(2));
+            recordAuditLog(db, { action: 'CREDIT_DEDUCTION_CANCELLED', resource_type: 'CreditLog', resource_id: clId, changes: { restored_amount: restoredAmt } });
             saveDB(db);
           }
           return { success: true };
@@ -1799,11 +2216,13 @@ export async function handleMockRequest(endpoint, options = {}) {
 
       if (method === 'PATCH') {
         db.credit_logs[idx] = { ...log, ...body, updated_at: new Date().toISOString() };
+        recordAuditLog(db, { action: 'CREDIT_LOG_UPDATED', resource_type: 'CreditLog', resource_id: clId, changes: body });
         saveDB(db);
         return db.credit_logs[idx];
       }
       if (method === 'DELETE') {
         db.credit_logs.splice(idx, 1);
+        recordAuditLog(db, { action: 'CREDIT_LOG_DELETED', resource_type: 'CreditLog', resource_id: clId });
         saveDB(db);
         return { success: true };
       }
@@ -1836,6 +2255,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.running_costs.push(rc);
+      recordAuditLog(db, { action: 'RUNNING_COST_RECORDED', resource_type: 'RunningCost', resource_id: rc.id, changes: { amount: rc.amount, category: rc.category } });
       saveDB(db);
       return rc;
     }
@@ -1848,11 +2268,13 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (idx !== -1) {
       if (method === 'PATCH') {
         db.running_costs[idx] = { ...db.running_costs[idx], ...body, updated_at: new Date().toISOString() };
+        recordAuditLog(db, { action: 'RUNNING_COST_UPDATED', resource_type: 'RunningCost', resource_id: rcId, changes: body });
         saveDB(db);
         return db.running_costs[idx];
       }
       if (method === 'DELETE') {
         db.running_costs.splice(idx, 1);
+        recordAuditLog(db, { action: 'RUNNING_COST_DELETED', resource_type: 'RunningCost', resource_id: rcId });
         saveDB(db);
         return { success: true };
       }
@@ -1886,6 +2308,7 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.accounts.push(acc);
+      recordAuditLog(db, { action: 'LEDGER_ACCOUNT_CREATED', resource_type: 'Account', resource_id: acc.id, changes: { name: acc.name, code: acc.code, type: acc.type } });
       saveDB(db);
       return acc;
     }
@@ -1921,6 +2344,7 @@ export async function handleMockRequest(endpoint, options = {}) {
           });
         });
       }
+      recordAuditLog(db, { action: 'JOURNAL_ENTRY_POSTED', resource_type: 'JournalEntry', resource_id: je.id, changes: { entry_number: je.entry_number, narration: je.narration, lines_count: (body.lines || []).length } });
       saveDB(db);
       return je;
     }
@@ -2008,15 +2432,73 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (method === 'POST') {
       const inv = {
         id: nextId(db.invitations),
+        name: body.name || 'Team Member',
         email: body.email,
         role: body.role || 'SITE_ENGINEER',
         status: 'PENDING',
         invited_at: new Date().toISOString(),
       };
       db.invitations.push(inv);
+
+      // Automated invitation email delivery dispatch
+      db.dispatched_emails = db.dispatched_emails || [];
+      const emailRecord = {
+        id: `email_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        created_at: new Date().toISOString(),
+        recipient: body.email,
+        member_name: body.name || 'Team Member',
+        member_email: body.email,
+        role: body.role || 'SITE_ENGINEER',
+        password: '(Set via Invitation Link)',
+        subject: `BuildSphere Invitation: Join ${db.organizations[0]?.name || 'BuildSphere'} as ${body.role || 'Site Engineer'}`,
+        status: 'DELIVERED',
+        delivery_provider: localStorage.getItem('cmp_resend_api_key') ? 'Resend' : 'BuildSphere Outbox',
+        login_url: typeof window !== 'undefined' ? `${window.location.origin}/login?invite=${inv.id}` : 'https://buildsphere.com',
+      };
+      db.dispatched_emails.unshift(emailRecord);
+
       saveDB(db);
-      return inv;
+      return { ...inv, dispatched_email: emailRecord };
     }
+  }
+
+  if (pathname === '/org/dispatched-emails') {
+    if (method === 'GET') {
+      return db.dispatched_emails || [];
+    }
+    if (method === 'DELETE') {
+      db.dispatched_emails = [];
+      saveDB(db);
+      return { success: true };
+    }
+  }
+
+  if (pathname === '/org/resend-credentials' && method === 'POST') {
+    const user = (db.users || []).find(
+      (u) => String(u.id) === String(body.user_id) || u.email === body.email
+    );
+    if (!user) throw new Error('User not found');
+
+    const tempPassword = user.password || 'BuildSphere@2026';
+    const targetEmail = (body.notification_email || user.notification_email || user.email || '').trim();
+
+    db.dispatched_emails = db.dispatched_emails || [];
+    const emailRecord = {
+      id: `email_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      created_at: new Date().toISOString(),
+      recipient: targetEmail,
+      member_name: user.name || 'Team Member',
+      member_email: user.email,
+      role: user.role,
+      password: tempPassword,
+      subject: `[Resent] Your BuildSphere Login Credentials (${user.name || user.email})`,
+      status: 'DELIVERED',
+      delivery_provider: localStorage.getItem('cmp_resend_api_key') ? 'Resend' : 'BuildSphere Outbox',
+      login_url: typeof window !== 'undefined' ? window.location.origin : 'https://buildsphere.com',
+    };
+    db.dispatched_emails.unshift(emailRecord);
+    saveDB(db);
+    return { success: true, dispatched_email: emailRecord };
   }
 
   const invMatch = pathname.match(/^\/org\/invitations\/(\d+)(\/.*)?$/);
@@ -2043,9 +2525,166 @@ export async function handleMockRequest(endpoint, options = {}) {
   }
 
   // -------------------------------------------------------------
+  // AUDIT & ACTIVITY TRAIL (GUARANTEES PERSISTENCE OF EVERY ROLE ACTION)
+  // -------------------------------------------------------------
+  if (pathname === '/audit/logs') {
+    if (method === 'GET') {
+      let list = db.audit_logs || [];
+      const roleFilter = params.role;
+      const resourceFilter = params.resource_type;
+      const actionFilter = params.action;
+      const search = (params.search || '').toLowerCase().trim();
+
+      if (roleFilter && roleFilter !== 'ALL') {
+        list = list.filter((l) => (l.metadata?.actor_role || '').toLowerCase() === roleFilter.toLowerCase());
+      }
+      if (resourceFilter && resourceFilter !== 'ALL') {
+        list = list.filter((l) => (l.resource_type || '').toLowerCase() === resourceFilter.toLowerCase());
+      }
+      if (actionFilter && actionFilter !== 'ALL') {
+        list = list.filter((l) => (l.action || '').toLowerCase().includes(actionFilter.toLowerCase()));
+      }
+      if (search) {
+        list = list.filter((l) =>
+          (l.action || '').toLowerCase().includes(search) ||
+          (l.resource_type || '').toLowerCase().includes(search) ||
+          (l.resource_id || '').toLowerCase().includes(search) ||
+          (l.metadata?.actor_name || '').toLowerCase().includes(search) ||
+          (l.metadata?.actor_role || '').toLowerCase().includes(search) ||
+          (l.actor && l.actor.some((a) => a.toLowerCase().includes(search))) ||
+          JSON.stringify(l.changes || {}).toLowerCase().includes(search)
+        );
+      }
+
+      const total = list.length;
+      const limit = params.limit ? Number(params.limit) : 100;
+      const results = list.slice(0, limit);
+
+      return {
+        count: total,
+        results,
+      };
+    }
+
+    if (method === 'DELETE') {
+      db.audit_logs = [];
+      saveDB(db);
+      return { success: true, message: 'Audit logs cleared' };
+    }
+  }
+
+  if (pathname === '/audit/stats') {
+    const list = db.audit_logs || [];
+    const roleCounts = {};
+    const resourceCounts = {};
+    const actionCounts = {};
+
+    list.forEach((l) => {
+      const r = l.metadata?.actor_role || 'UNKNOWN';
+      roleCounts[r] = (roleCounts[r] || 0) + 1;
+
+      const res = l.resource_type || 'Other';
+      resourceCounts[res] = (resourceCounts[res] || 0) + 1;
+
+      const act = l.action || 'Other';
+      actionCounts[act] = (actionCounts[act] || 0) + 1;
+    });
+
+    return {
+      total_actions: list.length,
+      by_role: roleCounts,
+      by_resource: resourceCounts,
+      by_action: actionCounts,
+      last_activity: list[0] || null,
+      is_persistent: true,
+      storage_engine: 'LocalStorage + Django ORM Parity',
+    };
+  }
+
+  // -------------------------------------------------------------
+  // AI COST ESTIMATOR PERSISTENCE
+  // -------------------------------------------------------------
+  if (pathname === '/cost-estimator/estimates') {
+    if (method === 'GET') {
+      return db.cost_estimates || [];
+    }
+    if (method === 'POST') {
+      if (!db.cost_estimates) db.cost_estimates = [];
+      const newEst = {
+        id: nextId(db.cost_estimates),
+        ...body,
+        created_at: body.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      db.cost_estimates.unshift(newEst);
+      recordAuditLog(db, {
+        action: 'COST_ESTIMATE_SAVED',
+        resource_type: 'CostEstimate',
+        resource_id: newEst.id,
+        changes: {
+          project_name: newEst.project_name,
+          city: newEst.city,
+          grand_total: newEst.grand_total,
+          margin_percent: newEst.margin_percent,
+        },
+        metadata: {
+          quality_level: newEst.quality_level,
+          project_type: newEst.project_type,
+        },
+      });
+      saveDB(db);
+      return newEst;
+    }
+  }
+
+  const estMatch = pathname.match(/^\/cost-estimator\/estimates\/(\d+)/);
+  if (estMatch) {
+    const estId = Number(estMatch[1]);
+    const estIdx = (db.cost_estimates || []).findIndex((e) => e.id === estId);
+    if (estIdx !== -1) {
+      if (method === 'GET') return db.cost_estimates[estIdx];
+      if (method === 'PATCH') {
+        db.cost_estimates[estIdx] = {
+          ...db.cost_estimates[estIdx],
+          ...body,
+          updated_at: new Date().toISOString(),
+        };
+        recordAuditLog(db, {
+          action: 'COST_ESTIMATE_UPDATED',
+          resource_type: 'CostEstimate',
+          resource_id: estId,
+          changes: body,
+        });
+        saveDB(db);
+        return db.cost_estimates[estIdx];
+      }
+      if (method === 'DELETE') {
+        db.cost_estimates.splice(estIdx, 1);
+        recordAuditLog(db, {
+          action: 'COST_ESTIMATE_DELETED',
+          resource_type: 'CostEstimate',
+          resource_id: estId,
+        });
+        saveDB(db);
+        return { success: true };
+      }
+    }
+    return { success: true };
+  }
+
+  // -------------------------------------------------------------
   // REPORTS EXPORTS (PDF & EXCEL DOWNLOADS)
   // -------------------------------------------------------------
   if (pathname.startsWith('/reports/')) {
+    recordAuditLog(db, {
+      action: 'REPORT_EXPORTED',
+      resource_type: 'Report',
+      resource_id: pathname,
+      metadata: {
+        endpoint: pathname,
+        format: pathname.includes('pdf') ? 'PDF' : 'EXCEL',
+      },
+    });
     if (pathname.includes('/pdf')) {
       return createMockBlob('report.pdf', 'application/pdf');
     }

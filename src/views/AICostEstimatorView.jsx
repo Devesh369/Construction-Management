@@ -29,6 +29,7 @@ import {
 import toast from 'react-hot-toast';
 import { Badge } from '../components/ui/Badge';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../api/client';
 
 // Central Margin Presets Constant
 export const MARGIN_OPTIONS = [
@@ -276,24 +277,48 @@ export const AICostEstimatorView = ({ projects = [], onProjectsUpdated }) => {
     custom_margin_value: '15.0',
   });
 
-  // Load history from localStorage
+  // Load history from database / API with localStorage fallback
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('cmp_cost_estimates');
-      if (stored) {
-        setHistory(JSON.parse(stored));
+    const loadEstimates = async () => {
+      try {
+        const remote = await api.costEstimator.list();
+        if (Array.isArray(remote) && remote.length > 0) {
+          setHistory(remote);
+          localStorage.setItem('cmp_cost_estimates', JSON.stringify(remote));
+          return;
+        }
+      } catch (e) {
+        console.warn('API fetch for cost estimates failed, falling back to storage:', e);
       }
-    } catch (e) {
-      console.warn('Failed to load cost estimates history:', e);
-    }
+      try {
+        const stored = localStorage.getItem('cmp_cost_estimates');
+        if (stored) {
+          setHistory(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.warn('Failed to load cost estimates history:', e);
+      }
+    };
+    loadEstimates();
   }, []);
 
-  const saveHistory = (newHistory) => {
+  const saveHistory = async (newHistory) => {
     setHistory(newHistory);
     try {
       localStorage.setItem('cmp_cost_estimates', JSON.stringify(newHistory));
     } catch (e) {
       console.warn('Failed to save cost estimates history:', e);
+    }
+    // Also persist top estimate to API database table if new
+    if (newHistory && newHistory.length > 0) {
+      const topEstimate = newHistory[0];
+      if (topEstimate) {
+        try {
+          await api.costEstimator.save(topEstimate);
+        } catch (err) {
+          console.warn('Failed saving cost estimate to backend DB:', err);
+        }
+      }
     }
   };
 

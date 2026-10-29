@@ -23,6 +23,7 @@ INSTALLED_APPS = [
 
     # BuildSphere Apps
     'cost_estimator',
+    'audit',
 ]
 
 MIDDLEWARE = [
