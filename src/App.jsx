@@ -18,6 +18,7 @@ import { PaymentCentralView } from './views/PaymentCentralView';
 import { PayrollView } from './views/PayrollView';
 import { LedgerView } from './views/LedgerView';
 import { ReportsView } from './views/ReportsView';
+import { AICostEstimatorView } from './views/AICostEstimatorView';
 import { SettingsView } from './views/SettingsView';
 import { useUIStore } from './store/uiStore';
 import buildsphereLogo from './assets/buildsphere_logo.png';
@@ -35,6 +36,7 @@ export const ROLE_PERMISSIONS = {
   payroll: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT', 'employee/labour'],
   ledger: ['ORG_ADMIN', 'ACCOUNTANT'],
   reports: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR', 'ACCOUNTANT'],
+  cost_estimator: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'],
   settings: ['ORG_ADMIN'],
 };
 
@@ -218,6 +220,12 @@ const AppContent = () => {
               {activeTab === 'ledger' && <LedgerView />}
               {activeTab === 'reports' && (
                 <ReportsView selectedProjectId={selectedProjectId} />
+              )}
+              {activeTab === 'cost_estimator' && (
+                <AICostEstimatorView
+                  projects={projects}
+                  onProjectsUpdated={fetchProjects}
+                />
               )}
               {activeTab === 'settings' && <SettingsView />}
             </>

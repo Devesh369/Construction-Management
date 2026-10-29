@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Estimate Detail: {{ estimate.project_name }} — BuildSphere{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-xl-10 col-lg-11">
+
+      <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+        <div>
+          <a href="{% url 'cost_estimator:history' %}" class="text-muted text-decoration-none small">&larr; Back to History</a>
+          <h2 class="h3 font-weight-bold text-dark mb-0">{{ estimate.project_name }}</h2>
+          <span class="text-muted small">Generated on {{ estimate.created_at|date:"d M Y, h:i A" }}</span>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="{% url 'cost_estimator:result' estimate.pk %}" class="btn btn-outline-primary btn-sm">Full Interactive BOQ</a>
+          <a href="{% url 'cost_estimator:export_pdf' estimate.pk %}" class="btn btn-danger btn-sm">Download PDF</a>
+        </div>
+      </div>
+
+      <div class="card shadow-sm border-0 rounded-3 mb-4">
+        <div class="card-header bg-white py-3 border-bottom">
+          <h5 class="mb-0 fw-bold">Executive Specification Overview</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <span class="text-muted small d-block">Location</span>
+              <strong>{{ estimate.city }}, {{ estimate.state }} ({{ estimate.get_area_type_display }})</strong>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted small d-block">Project & Construction Type</span>
+              <strong>{{ estimate.get_project_type_display }} &bull; {{ estimate.get_construction_type_display }}</strong>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted small d-block">Total Built-up Area</span>
+              <strong>{{ estimate.total_builtup_area }} sq ft ({{ estimate.number_of_floors }} Floors)</strong>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted small d-block">Structure & Foundation</span>
+              <strong>{{ estimate.get_structure_type_display }} &bull; {{ estimate.get_foundation_type_display }}</strong>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted small d-block">Quality & Finishes</span>
+              <strong>{{ estimate.get_quality_level_display }}</strong>
+            </div>
+            <div class="col-md-4">
+              <span class="text-muted small d-block">Timeline & Margin</span>
+              <strong>{{ estimate.expected_duration_months }} Months &bull; {{ estimate.margin_percent }}% Margin</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Financial Totals Summary -->
+      <div class="card shadow-sm border-0 rounded-3 mb-4">
+        <div class="card-header bg-white py-3 border-bottom">
+          <h5 class="mb-0 fw-bold">Financial Summary</h5>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-bordered mb-0">
+            <tbody>
+              <tr>
+                <td class="ps-3 text-muted">Base Construction Cost</td>
+                <td class="text-end pe-3 fw-bold">{{ estimate.formatted_subtotal }}</td>
+              </tr>
+              <tr>
+                <td class="ps-3 text-muted">Contingency Buffer ({{ estimate.contingency_percent }}%)</td>
+                <td class="text-end pe-3 fw-bold">{{ estimate.formatted_contingency_amount }}</td>
+              </tr>
+              <tr class="table-success">
+                <td class="ps-3 text-success fw-bold">Contractor Margin ({{ estimate.margin_percent }}%)</td>
+                <td class="text-end pe-3 text-success fw-bolder">{{ estimate.formatted_margin_amount }}</td>
+              </tr>
+              <tr>
+                <td class="ps-3 text-muted">GST & Works Taxes (18%)</td>
+                <td class="text-end pe-3 fw-bold">{{ estimate.formatted_gst_or_taxes }}</td>
+              </tr>
+              <tr class="table-primary border-top border-2">
+                <td class="ps-3 fs-5 fw-bold text-primary">Grand Total Estimate</td>
+                <td class="text-end pe-3 fs-5 fw-bolder text-primary">{{ estimate.formatted_grand_total }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

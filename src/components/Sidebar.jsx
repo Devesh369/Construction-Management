@@ -16,6 +16,8 @@ import {
   Banknote,
   Receipt,
   Coins,
+  Sparkles,
+  Calculator,
 } from 'lucide-react';
 import buildsphereLogo from '../assets/buildsphere_logo.png';
 import { useAuth } from '../context/AuthContext';
@@ -99,6 +101,12 @@ export const Sidebar = ({ activeTab, setActiveTab }) => {
       label: 'Reports & Exports',
       icon: BarChart3,
       roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'SITE_ENGINEER', 'SUPERVISOR', 'ACCOUNTANT'],
+    },
+    {
+      id: 'cost_estimator',
+      label: 'AI Cost Estimator',
+      icon: Sparkles,
+      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'],
     },
     {
       id: 'settings',

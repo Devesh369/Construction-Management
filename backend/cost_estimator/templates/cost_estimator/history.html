@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Estimate History — BuildSphere{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-xl-11 col-lg-12">
+
+      <div class="d-flex flex-wrap align-items-center justify-content-between mb-4 pb-2 border-bottom gap-3">
+        <div>
+          <h2 class="h3 font-weight-bold text-dark mb-1">Cost Estimation History</h2>
+          <p class="text-muted small mb-0">Browse, filter and manage previous construction estimates.</p>
+        </div>
+        <div>
+          <a href="{% url 'cost_estimator:create' %}" class="btn btn-primary btn-sm d-flex align-items-center gap-1">
+            <i class="bi bi-plus-lg"></i> New AI Estimate
+          </a>
+        </div>
+      </div>
+
+      <!-- Filters & Search -->
+      <div class="card shadow-sm border-0 rounded-3 mb-4">
+        <div class="card-body p-3">
+          <form method="get" class="row g-2 align-items-center">
+            <div class="col-md-5">
+              <input type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Search by project name...">
+            </div>
+            <div class="col-md-4">
+              <select name="city" class="form-select">
+                <option value="">All Cities</option>
+                {% for c in available_cities %}
+                  <option value="{{ c }}" {% if city_filter == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+              <button type="submit" class="btn btn-secondary flex-grow-1">Filter</button>
+              {% if search_query or city_filter %}
+                <a href="{% url 'cost_estimator:history' %}" class="btn btn-outline-secondary">Reset</a>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Estimates Table -->
+      <div class="card shadow-sm border-0 rounded-3 mb-4">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Project Name</th>
+                <th>Location</th>
+                <th>Built-up Area</th>
+                <th>Quality</th>
+                <th>Margin %</th>
+                <th class="text-end">Grand Total (INR)</th>
+                <th class="text-end">Cost / sq ft</th>
+                <th>Status</th>
+                <th class="text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for est in page_obj %}
+                <tr>
+                  <td>
+                    <a href="{% url 'cost_estimator:result' est.pk %}" class="fw-bold text-primary text-decoration-none">
+                      {{ est.project_name }}
+                    </a>
+                    <div class="small text-muted">{{ est.created_at|date:"d M Y, h:i A" }}</div>
+                  </td>
+                  <td>{{ est.city }}, {{ est.state }}</td>
+                  <td>{{ est.total_builtup_area }} sq ft</td>
+                  <td><span class="badge bg-light text-dark border">{{ est.get_quality_level_display }}</span></td>
+                  <td><span class="badge bg-success-subtle text-success border border-success">{{ est.margin_percent }}%</span></td>
+                  <td class="text-end fw-bold">{{ est.formatted_grand_total }}</td>
+                  <td class="text-end small fw-semibold">{{ est.formatted_cost_per_sqft }}</td>
+                  <td>
+                    {% if est.used_fallback %}
+                      <span class="badge bg-warning text-dark">Fallback</span>
+                    {% else %}
+                      <span class="badge bg-primary">AI Verified</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    <div class="btn-group btn-group-sm">
+                      <a href="{% url 'cost_estimator:result' est.pk %}" class="btn btn-outline-primary" title="View BOQ">
+                        View
+                      </a>
+                      <a href="{% url 'cost_estimator:export_pdf' est.pk %}" class="btn btn-outline-danger" title="Export PDF">
+                        PDF
+                      </a>
+                      <form method="post" action="{% url 'cost_estimator:delete' est.pk %}" style="display:inline;" onsubmit="return confirm('Delete this estimate?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-secondary" title="Delete">
+                          &times;
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="9" class="text-center py-5 text-muted">
+                    <p class="mb-2">No cost estimates created yet.</p>
+                    <a href="{% url 'cost_estimator:create' %}" class="btn btn-primary btn-sm">Create First Estimate</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+          <div class="card-footer bg-white d-flex justify-content-between align-items-center py-3">
+            <span class="text-muted small">
+              Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            <ul class="pagination pagination-sm mb-0">
+              {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}&city={{ city_filter }}">&laquo;</a></li>
+              {% endif %}
+              <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+              {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&city={{ city_filter }}">&raquo;</a></li>
+              {% endif %}
+            </ul>
+          </div>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

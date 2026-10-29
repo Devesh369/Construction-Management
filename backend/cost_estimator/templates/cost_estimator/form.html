@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}AI Cost Estimator — BuildSphere{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-xl-10 col-lg-11">
+      
+      <!-- Page Header -->
+      <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+        <div>
+          <h2 class="h3 font-weight-bold text-dark mb-1 d-flex align-items-center gap-2">
+            <span class="badge bg-primary text-white p-2 rounded-3">AI</span>
+            <span>Construction Cost Estimator</span>
+          </h2>
+          <p class="text-muted small mb-0">
+            Generate city-adjusted, market-accurate Bill of Quantities (BOQ) and contractor profit margins powered by Anthropic AI.
+          </p>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="{% url 'cost_estimator:history' %}" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
+            <i class="bi bi-clock-history"></i> Estimate History
+          </a>
+        </div>
+      </div>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <!-- Estimation Form -->
+      <form method="post" id="costEstimatorForm" onsubmit="return handleFormSubmit(event)">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <!-- Section 1: Project Basics -->
+        <div class="card shadow-sm mb-4 border-0 rounded-3">
+          <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 13px;">1</div>
+            <h5 class="mb-0 fw-bold">Project Basics</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Project Name <span class="text-danger">*</span></label>
+                {{ form.project_name }}
+                {% if form.project_name.errors %}<div class="text-danger small">{{ form.project_name.errors }}</div>{% endif %}
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Project Type</label>
+                {{ form.project_type }}
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Construction Type</label>
+                {{ form.construction_type }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Location -->
+        <div class="card shadow-sm mb-4 border-0 rounded-3">
+          <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 13px;">2</div>
+            <h5 class="mb-0 fw-bold">Location & Market Rates</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">City <span class="text-danger">*</span></label>
+                {{ form.city }}
+                <div class="form-text text-muted">e.g. Ahmedabad, Anand, Mumbai, Bengaluru, Pune</div>
+                {% if form.city.errors %}<div class="text-danger small">{{ form.city.errors }}</div>{% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">State</label>
+                {{ form.state }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Area Classification</label>
+                {{ form.area_type }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 3: Size & Footprint -->
+        <div class="card shadow-sm mb-4 border-0 rounded-3">
+          <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 13px;">3</div>
+            <h5 class="mb-0 fw-bold">Dimensions & Area Breakdown</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Plot Area (sq ft) <span class="text-danger">*</span></label>
+                {{ form.plot_area_sqft }}
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Built-up per Floor (sq ft) <span class="text-danger">*</span></label>
+                {{ form.builtup_area_per_floor_sqft }}
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Number of Floors (G + N) <span class="text-danger">*</span></label>
+                {{ form.number_of_floors }}
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Total Built-up Area (sq ft)</label>
+                {{ form.total_builtup_area }}
+                <div class="form-text text-muted">Auto-computed (Floors × Footprint)</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Number of Units</label>
+                {{ form.number_of_units }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Parking Type</label>
+                {{ form.parking_type }}
+              </div>
+              <div class="col-md-4 d-flex align-items-center pt-3">
+                <div class="form-check form-switch mt-2">
+                  {{ form.has_basement }}
+                  <label class="form-check-label fw-semibold" for="{{ form.has_basement.id_for_label }}">
+                    Includes Underground Basement
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 4: Structure & Specifications -->
+        <div class="card shadow-sm mb-4 border-0 rounded-3">
+          <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 13px;">4</div>
+            <h5 class="mb-0 fw-bold">Structure & Civil Engineering Specs</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Structure Type</label>
+                {{ form.structure_type }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Foundation Type</label>
+                {{ form.foundation_type }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Wall Masonry Material</label>
+                {{ form.wall_material }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Roof Type</label>
+                {{ form.roof_type }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Soil Type (if known)</label>
+                {{ form.soil_type }}
+              </div>
+              <div class="col-md-4">
+                <div class="d-flex align-items-center gap-3 pt-4">
+                  <div class="form-check">
+                    {{ form.has_lift }}
+                    <label class="form-check-label fw-semibold" for="{{ form.has_lift.id_for_label }}">Include Passenger Lift</label>
+                  </div>
+                  <div id="liftCountWrapper" style="display: none; width: 110px;">
+                    {{ form.number_of_lifts }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 5: Quality Level & Interior Finishes -->
+        <div class="card shadow-sm mb-4 border-0 rounded-3">
+          <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 13px;">5</div>
+            <h5 class="mb-0 fw-bold">Quality Level & Finishes</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">General Quality Level</label>
+                {{ form.quality_level }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Flooring Type</label>
+                {{ form.flooring_type }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Kitchen & Bathroom Fittings</label>
+                {{ form.kitchen_bathroom_fittings }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Electrical Specifications</label>
+                {{ form.electrical_level }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Plumbing & Sanitary Lines</label>
+                {{ form.plumbing_level }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Internal & External Painting</label>
+                {{ form.painting_type }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Doors & Windows</label>
+                {{ form.doors_windows_type }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Total Bedrooms</label>
+                {{ form.number_of_bedrooms }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Total Bathrooms</label>
+                {{ form.number_of_bathrooms }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 6: Extras & Site Infrastructure -->
+        <div class="card shadow-sm mb-4 border-0 rounded-3">
+          <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 13px;">6</div>
+            <h5 class="mb-0 fw-bold">External Works & Add-ons</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <div class="form-check p-2 border rounded bg-light">
+                  {{ form.include_compound_wall }}
+                  <label class="form-check-label fw-semibold ms-2" for="{{ form.include_compound_wall.id_for_label }}">
+                    Compound Wall & Entry Gate
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-check p-2 border rounded bg-light">
+                  {{ form.include_landscaping }}
+                  <label class="form-check-label fw-semibold ms-2" for="{{ form.include_landscaping.id_for_label }}">
+                    Garden & Paver Landscaping
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-check p-2 border rounded bg-light">
+                  {{ form.include_solar }}
+                  <label class="form-check-label fw-semibold ms-2" for="{{ form.include_solar.id_for_label }}">
+                    Rooftop Solar PV Installation
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-check p-2 border rounded bg-light">
+                  {{ form.include_water_tank_borewell }}
+                  <label class="form-check-label fw-semibold ms-2" for="{{ form.include_water_tank_borewell.id_for_label }}">
+                    Underground Sump & Borewell
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-check p-2 border rounded bg-light">
+                  {{ form.include_interior_work }}
+                  <label class="form-check-label fw-semibold ms-2" for="{{ form.include_interior_work.id_for_label }}">
+                    Modular Interior Wardrobes/Ceiling
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-check p-2 border rounded bg-light">
+                  {{ form.include_approval_fees }}
+                  <label class="form-check-label fw-semibold ms-2" for="{{ form.include_approval_fees.id_for_label }}">
+                    Municipal NOC & Drawing Fees
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 7: Contract & Timeline -->
+        <div class="card shadow-sm mb-4 border-0 rounded-3">
+          <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 13px;">7</div>
+            <h5 class="mb-0 fw-bold">Contract Terms & Schedule</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Contract Type</label>
+                {{ form.contract_type }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Expected Timeline (Months)</label>
+                {{ form.expected_duration_months }}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Contingency Buffer (%)</label>
+                {{ form.contingency_percent }}
+                <div class="form-text text-muted">Standard safety buffer (default: 5%)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 8: Profit Margin Selection -->
+        <div class="card shadow-sm mb-4 border-primary border-2 rounded-3 bg-light">
+          <div class="card-header bg-primary text-white py-3 d-flex align-items-center gap-2">
+            <div class="rounded-circle bg-white text-primary d-flex align-items-center justify-content-center fw-bold" style="width: 28px; height: 28px; font-size: 13px;">8</div>
+            <h5 class="mb-0 fw-bold">Contractor Profit Margin</h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3 align-items-center">
+              <div class="col-md-6">
+                <label class="form-label fw-bold text-dark">Target Margin Preset</label>
+                {{ form.margin_option }}
+                <div class="form-text">Choose a standard tier or select Custom to enter an exact percentage.</div>
+              </div>
+              <div class="col-md-6" id="customMarginWrapper" style="display: none;">
+                <label class="form-label fw-bold text-dark">Custom Margin Percentage (%)</label>
+                <div class="input-group">
+                  {{ form.custom_margin_value }}
+                  <span class="input-group-text fw-bold">%</span>
+                </div>
+                <div class="form-text text-muted">Enter a value between 0.00% and 100.00% (decimals allowed).</div>
+                {% if form.custom_margin_value.errors %}
+                  <div class="text-danger small mt-1">{{ form.custom_margin_value.errors }}</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action / Submit -->
+        <div class="d-flex align-items-center justify-content-between p-3 bg-white rounded-3 shadow-sm border mb-5">
+          <a href="{% url 'cost_estimator:history' %}" class="btn btn-outline-secondary">
+            Cancel
+          </a>
+          <button type="submit" class="btn btn-primary px-4 py-2 d-flex align-items-center gap-2 fw-bold" id="submitBtn">
+            <span class="spinner-border spinner-border-sm" id="submitSpinner" style="display: none;" role="status"></span>
+            <span id="btnText">Calculate AI Construction Estimate</span>
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// Dynamic toggle for custom margin input
+function toggleCustomMarginInput(val) {
+  const wrapper = document.getElementById('customMarginWrapper');
+  const input = document.getElementById('id_custom_margin_value');
+  if (val === 'custom') {
+    wrapper.style.display = 'block';
+    if (!input.value) input.value = '15.0';
+    input.focus();
+  } else {
+    wrapper.style.display = 'none';
+  }
+}
+
+// Dynamic lift toggle
+function toggleLiftCount(isChecked) {
+  const wrapper = document.getElementById('liftCountWrapper');
+  if (wrapper) {
+    wrapper.style.display = isChecked ? 'block' : 'none';
+  }
+}
+
+// Auto-compute builtup area
+function updateBuiltupArea() {
+  const perFloor = parseFloat(document.getElementById('id_builtup_per_floor')?.value || 0);
+  const floors = parseInt(document.getElementById('id_floors')?.value || 1);
+  const totalInput = document.getElementById('id_total_builtup');
+  if (totalInput && perFloor > 0 && floors > 0) {
+    totalInput.value = (perFloor * floors).toFixed(0);
+  }
+}
+
+document.getElementById('id_builtup_per_floor')?.addEventListener('input', updateBuiltupArea);
+document.getElementById('id_floors')?.addEventListener('input', updateBuiltupArea);
+
+// Form submit handler with double-submission prevention and spinner
+function handleFormSubmit(e) {
+  const marginSelect = document.getElementById('id_margin_option');
+  const customInput = document.getElementById('id_custom_margin_value');
+
+  if (marginSelect && marginSelect.value === 'custom') {
+    const val = parseFloat(customInput.value);
+    if (isNaN(val) || val < 0 || val > 100) {
+      alert('Please enter a valid custom margin percentage between 0% and 100%.');
+      customInput.focus();
+      return false;
+    }
+  }
+
+  const btn = document.getElementById('submitBtn');
+  const spinner = document.getElementById('submitSpinner');
+  const text = document.getElementById('btnText');
+  
+  if (btn) btn.disabled = true;
+  if (spinner) spinner.style.display = 'inline-block';
+  if (text) text.innerText = 'Calculating AI Estimate... (Please wait)';
+  return true;
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+  const marginSelect = document.getElementById('id_margin_option');
+  if (marginSelect) toggleCustomMarginInput(marginSelect.value);
+
+  const liftCheck = document.getElementById('id_has_lift');
+  if (liftCheck) toggleLiftCount(liftCheck.checked);
+});
+</script>
+{% endblock %}
