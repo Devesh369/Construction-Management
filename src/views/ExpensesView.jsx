@@ -752,7 +752,7 @@ export const ExpensesView = ({ selectedProjectId }) => {
       {/* ========================================================================= */}
       {/* 1. TOP HEADER & QUICK ACTION HUB                                          */}
       {/* ========================================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border-default)] pb-5">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-[var(--border-default)] pb-5">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/40">
@@ -775,14 +775,14 @@ export const ExpensesView = ({ selectedProjectId }) => {
         </div>
 
         {/* Action Hub Buttons */}
-        <div className="flex items-center flex-wrap gap-2.5">
+        <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar py-1">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => fetchData(true)}
             isLoading={refreshing}
-            leftIcon={<RefreshCw className={cn('w-4 h-4', refreshing && 'animate-spin')} />}
-            className="text-[var(--text-secondary)]"
+            leftIcon={<RefreshCw className={cn('w-3.5 h-3.5', refreshing && 'animate-spin')} />}
+            className="h-9 px-3 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] border border-transparent hover:border-[var(--border-default)] rounded-xl whitespace-nowrap transition-all"
             title="Refresh Data"
           >
             Refresh
@@ -792,8 +792,8 @@ export const ExpensesView = ({ selectedProjectId }) => {
             variant="secondary"
             size="sm"
             onClick={handleExportCSV}
-            leftIcon={<Download className="w-4 h-4" />}
-            className="text-xs font-semibold"
+            leftIcon={<Download className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
+            className="h-9 px-3 text-xs font-semibold text-[var(--text-primary)] bg-[var(--bg-card)] hover:bg-[var(--bg-secondary)] border border-[var(--border-default)] rounded-xl whitespace-nowrap shadow-xs hover:shadow transition-all"
           >
             Export CSV
           </Button>
@@ -802,30 +802,30 @@ export const ExpensesView = ({ selectedProjectId }) => {
             variant="secondary"
             size="sm"
             onClick={() => setIsVendorModalOpen(true)}
-            leftIcon={<Building2 className="w-4 h-4 text-emerald-600" />}
-            className="text-xs font-bold"
+            leftIcon={<Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
+            className="h-9 px-3.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 hover:bg-emerald-100/90 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl whitespace-nowrap shadow-xs hover:shadow transition-all"
           >
-            + Register Vendor
+            Register Vendor
           </Button>
 
           <Button
             variant="secondary"
             size="sm"
             onClick={() => setIsRunningCostModalOpen(true)}
-            leftIcon={<Coins className="w-4 h-4 text-amber-500" />}
-            className="text-xs font-bold"
+            leftIcon={<Coins className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
+            className="h-9 px-3.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50/80 hover:bg-amber-100/90 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 border border-amber-200/80 dark:border-amber-800/60 rounded-xl whitespace-nowrap shadow-xs hover:shadow transition-all"
           >
-            + Log Running Cost
+            Log Running Cost
           </Button>
 
           <Button
             variant="primary"
             size="sm"
             onClick={() => setIsExpenseModalOpen(true)}
-            leftIcon={<Plus className="w-4 h-4" />}
-            className="text-xs font-bold shadow-md shadow-blue-500/20"
+            leftIcon={<Plus className="w-3.5 h-3.5 text-white" />}
+            className="h-9 px-4 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl whitespace-nowrap shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/35 transition-all border border-blue-500/30"
           >
-            + Log Site Expense
+            Log Site Expense
           </Button>
         </div>
       </div>
