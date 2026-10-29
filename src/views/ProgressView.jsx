@@ -51,6 +51,67 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
   const [filterFromDate, setFilterFromDate] = useState('2026-08-01');
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterProject, setFilterProject] = useState('all');
+  const [assignedOnlyFilter, setAssignedOnlyFilter] = useState(
+    role === 'employee/labour' || role === 'LABOUR' || role === 'EMPLOYEE'
+  );
+
+  // Helper to check if a work entry is assigned to the current logged in user or their role
+  const isAssignedToCurrentUser = (entry) => {
+    if (!user) return false;
+
+    // 1. Direct Employee ID match
+    if (user.employee_id) {
+      const empIds = Array.isArray(entry.employees)
+        ? entry.employees
+        : entry.employee
+        ? [entry.employee]
+        : [];
+      if (empIds.map(Number).includes(Number(user.employee_id))) {
+        return true;
+      }
+    }
+
+    // 2. Email or name match in employee details
+    if (Array.isArray(entry.employee_details)) {
+      if (
+        entry.employee_details.some(
+          (e) =>
+            (user.email && e.email && e.email.toLowerCase() === user.email.toLowerCase()) ||
+            (user.name && e.full_name && e.full_name.toLowerCase().includes(user.name.toLowerCase()))
+        )
+      ) {
+        return true;
+      }
+    }
+
+    // 3. Role or department match
+    const currentRole = (user.role || '').toLowerCase();
+    if (entry.department && entry.department.toLowerCase().includes(currentRole)) {
+      return true;
+    }
+
+    if (entry.role_counts) {
+      const roleKeys = Object.keys(entry.role_counts).map((r) => r.toLowerCase());
+      if (
+        roleKeys.some(
+          (r) =>
+            currentRole.includes(r) ||
+            r.includes(currentRole) ||
+            (currentRole.includes('labour') && (r.includes('karigar') || r.includes('labour') || r.includes('helper'))) ||
+            (currentRole.includes('engineer') && r.includes('eng')) ||
+            (currentRole.includes('supervisor') && r.includes('sup'))
+        )
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const assignedEntries = workEntries.filter(isAssignedToCurrentUser);
+  const assignedEntriesCount = assignedEntries.length;
+  const displayedWorkEntries = assignedOnlyFilter ? assignedEntries : workEntries;
 
   // Edit Entry Modal state (matches Screenshot 4)
   const [editingEntry, setEditingEntry] = useState(null);
@@ -736,6 +797,45 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
                 </button>
               </div>
             </div>
+
+            {/* Quick Assigned Work Toggle Bar */}
+            <div className="mt-4 pt-3 border-t border-[var(--border-default)] flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignedOnlyFilter(false)}
+                  className={cn(
+                    'px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer',
+                    !assignedOnlyFilter
+                      ? 'bg-slate-800 text-white shadow-sm'
+                      : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  )}
+                >
+                  All Site Work ({workEntries.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAssignedOnlyFilter(true)}
+                  className={cn(
+                    'px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
+                    assignedOnlyFilter
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                      : 'bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  )}
+                >
+                  <CheckCircle2 size={13} />
+                  <span>Assigned to My Role / Me ({assignedEntriesCount})</span>
+                </button>
+              </div>
+
+              {assignedEntriesCount > 0 && (
+                <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                  <Sparkles size={12} />
+                  <span>{assignedEntriesCount} task(s) explicitly assigned to your role ({user?.role || 'Member'})</span>
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Work Entries Table Card */}
@@ -750,7 +850,7 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
                     Work Entries
                   </h2>
                   <p className="text-[11px] text-[var(--text-muted)]">
-                    {workEntries.length} entries found
+                    {displayedWorkEntries.length} entries showing {assignedOnlyFilter ? '(Filtered for Your Role)' : ''}
                   </p>
                 </div>
               </div>
@@ -767,9 +867,11 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
               <div className="p-12 text-center text-xs text-[var(--text-muted)]">
                 Loading work entries...
               </div>
-            ) : workEntries.length === 0 ? (
+            ) : displayedWorkEntries.length === 0 ? (
               <div className="p-12 text-center text-xs text-[var(--text-muted)]">
-                No work entries found for the selected dates and project.
+                {assignedOnlyFilter
+                  ? `No work entries found assigned to your role (${user?.role || 'User'}). Click "All Site Work" above to view all tasks.`
+                  : 'No work entries found for the selected dates and project.'}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -788,7 +890,7 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border-default)]">
-                    {workEntries.map((entry, idx) => (
+                    {displayedWorkEntries.map((entry, idx) => (
                       <tr
                         key={entry.id}
                         className="hover:bg-[var(--bg-secondary)]/40 transition-colors"
@@ -800,11 +902,21 @@ export const ProgressView = ({ selectedProjectId, navState, onClearNavState }) =
                           {entry.date}
                         </td>
                         <td className="py-3.5 px-6">
-                          <div className="font-bold text-[var(--text-primary)] leading-snug">
-                            {entry.description}
+                          <div className="font-bold text-[var(--text-primary)] leading-snug flex items-center gap-2 flex-wrap">
+                            <span>{entry.description}</span>
+                            {isAssignedToCurrentUser(entry) && (
+                              <span className="px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] font-black uppercase flex items-center gap-1 shadow-sm">
+                                <CheckCircle2 size={11} /> Assigned to You ({user?.role || 'Your Role'})
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                            {entry.project_name || `Project #${entry.project}`}
+                          <div className="text-[11px] text-[var(--text-muted)] mt-0.5 flex items-center gap-2 flex-wrap">
+                            <span>{entry.project_name || `Project #${entry.project}`}</span>
+                            {entry.department && (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-bold">
+                                Dept: {entry.department}
+                              </span>
+                            )}
                           </div>
                         </td>
                         {roleColumns.map((roleName) => {

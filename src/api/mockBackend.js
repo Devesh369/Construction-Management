@@ -643,23 +643,91 @@ export async function handleMockRequest(endpoint, options = {}) {
     const activeProjects = filteredProjects.filter((p) => p.status === 'ACTIVE');
     const activeWorkers = (db.employees || []).filter((e) => e.is_active !== false && !e.deleted_at);
 
-    // Workers on site today
+    // Workers on site today calculation
     const todayStr = new Date().toISOString().split('T')[0];
+
+    // Find attendance records for today specifically
     const todayAtt = (db.attendances || []).filter(
       (a) =>
         (!projectId || a.project === projectId) &&
-        (a.status === 'PRESENT' || a.status === 'HALF_DAY')
+        a.date === todayStr &&
+        !a.deleted_at
     );
-    const workersOnSiteToday = todayAtt.length > 0 ? todayAtt.length : 8;
+
+    let workersOnSiteToday = 0;
+    let workersAbsentToday = 0;
+
+    if (todayAtt.length > 0) {
+      const presentCount = todayAtt.filter(
+        (a) => a.status === 'PRESENT' || a.status === 'HALF_DAY'
+      ).length;
+      const explicitAbsentCount = todayAtt.filter(
+        (a) => a.status === 'ABSENT' || a.status === 'LEAVE'
+      ).length;
+      workersOnSiteToday = presentCount;
+      const unloggedCount = Math.max(0, activeWorkers.length - todayAtt.length);
+      workersAbsentToday = explicitAbsentCount + unloggedCount;
+    } else {
+      // If no records marked yet for today specifically, check the latest date with attendance
+      const datesWithAtt = [...new Set((db.attendances || []).map((a) => a.date))]
+        .filter(Boolean)
+        .sort()
+        .reverse();
+
+      if (datesWithAtt.length > 0) {
+        const latestDate = datesWithAtt[0];
+        const latestAtt = (db.attendances || []).filter(
+          (a) => (!projectId || a.project === projectId) && a.date === latestDate && !a.deleted_at
+        );
+        const presentCount = latestAtt.filter(
+          (a) => a.status === 'PRESENT' || a.status === 'HALF_DAY'
+        ).length;
+        workersOnSiteToday = presentCount;
+        workersAbsentToday = Math.max(0, activeWorkers.length - presentCount);
+      } else {
+        workersOnSiteToday = 0;
+        workersAbsentToday = activeWorkers.length;
+      }
+    }
 
     const totalBudget = activeProjects.reduce((sum, p) => sum + Number(p.estimated_budget || 0), 0);
-    const actualSpend = activeProjects.reduce((sum, p) => sum + Number(p.actual_spend || 0), 0);
-    const budgetPct = totalBudget > 0 ? Math.round((actualSpend / totalBudget) * 100) : 0;
 
-    // Monthly burn: sum of expenses
-    const monthlyExpenses = (db.expenses || [])
-      .filter((e) => !projectId || e.project === projectId)
+    // Calculate total payments made to employees strictly as wages and UPAD advances
+    const employeePaymentsSum = (db.payments || [])
+      .filter((p) => {
+        if (projectId && p.project !== projectId) return false;
+        const status = (p.status || '').toUpperCase();
+        return status === 'PAID' || status === 'PROCESSED' || status === 'APPROVED';
+      })
+      .reduce((sum, p) => sum + Number(p.amount || p.base_salary || 0), 0);
+
+    const payrollVouchersSum = (db.payroll_vouchers || [])
+      .filter((v) => (v.status || '').toUpperCase() === 'PAID')
+      .reduce((sum, v) => sum + Number(v.net_pay || v.gross_pay || 0), 0);
+
+    const advancesSum = (db.advances || [])
+      .filter((a) => (!projectId || a.project === projectId))
+      .reduce((sum, a) => sum + Number(a.amount || 0), 0);
+
+    // Sum of all wages and UPAD advances paid to employees
+    const totalEmployeeAmount = employeePaymentsSum + payrollVouchersSum + advancesSum;
+
+    // Calculate total payments made across the entire platform (Employee Wages & UPAD + Approved Vendor Expenses + Running Costs)
+    const approvedExpensesSum = (db.expenses || [])
+      .filter((e) => {
+        if (projectId && e.project !== projectId) return false;
+        const status = (e.status || '').toUpperCase();
+        return status === 'APPROVED' || status === 'PAID' || status === 'APPROVED_BY_MANAGER';
+      })
       .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    const runningCostsSum = (db.running_costs || [])
+      .filter((rc) => (!projectId || rc.project === projectId))
+      .reduce((sum, rc) => sum + Number(rc.amount || 0), 0);
+
+    // Grand Total Payments Made
+    const totalPaymentsMade = totalEmployeeAmount + approvedExpensesSum + runningCostsSum;
+    const budgetPct = totalBudget > 0 ? Math.round((totalPaymentsMade / totalBudget) * 100) : 0;
 
     const pendingExpensesCount = (db.expenses || []).filter(
       (e) => (!projectId || e.project === projectId) && e.status === 'PENDING'
@@ -669,16 +737,50 @@ export async function handleMockRequest(endpoint, options = {}) {
       (p) => (!projectId || p.project === projectId) && p.status === 'PENDING'
     ).length;
 
-    // 7-day attendance trend
-    const attendanceTrend = [
-      { date: '2026-10-22', present: 7, absent: 2, half_day: 1, total: 10 },
-      { date: '2026-10-23', present: 8, absent: 1, half_day: 1, total: 10 },
-      { date: '2026-10-24', present: 9, absent: 1, half_day: 0, total: 10 },
-      { date: '2026-10-25', present: 8, absent: 2, half_day: 0, total: 10 },
-      { date: '2026-10-26', present: 9, absent: 0, half_day: 1, total: 10 },
-      { date: '2026-10-27', present: 8, absent: 1, half_day: 1, total: 10 },
-      { date: todayStr, present: workersOnSiteToday, absent: Math.max(0, activeWorkers.length - workersOnSiteToday), half_day: 1, total: activeWorkers.length },
-    ];
+    // 7-day dynamic attendance trend ending today
+    const attendanceTrend = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dStr = d.toISOString().split('T')[0];
+
+      const dayAtt = (db.attendances || []).filter(
+        (a) => (!projectId || a.project === projectId) && a.date === dStr && !a.deleted_at
+      );
+
+      if (dayAtt.length > 0) {
+        const pCount = dayAtt.filter((a) => a.status === 'PRESENT' || a.status === 'HALF_DAY').length;
+        const aCount = dayAtt.filter((a) => a.status === 'ABSENT' || a.status === 'LEAVE').length;
+        const unlogged = Math.max(0, activeWorkers.length - dayAtt.length);
+        attendanceTrend.push({
+          date: dStr,
+          present: pCount,
+          absent: aCount + unlogged,
+          half_day: dayAtt.filter((a) => a.status === 'HALF_DAY').length,
+          total: activeWorkers.length,
+        });
+      } else if (i === 0) {
+        attendanceTrend.push({
+          date: dStr,
+          present: workersOnSiteToday,
+          absent: workersAbsentToday,
+          half_day: 0,
+          total: activeWorkers.length,
+        });
+      } else {
+        const baseP = Math.min(
+          activeWorkers.length,
+          Math.max(0, Math.round(activeWorkers.length * (0.6 + (i % 3) * 0.15)))
+        );
+        attendanceTrend.push({
+          date: dStr,
+          present: baseP,
+          absent: Math.max(0, activeWorkers.length - baseP),
+          half_day: 1,
+          total: activeWorkers.length,
+        });
+      }
+    }
 
     // Project cards enhanced for dashboard drill-down
     const enhancedProjects = filteredProjects.map((p) => {
@@ -698,12 +800,17 @@ export async function handleMockRequest(endpoint, options = {}) {
       active_projects: activeProjects.length,
       active_workers: activeWorkers.length,
       workers_on_site_today: workersOnSiteToday,
+      attendance_today_absent: workersAbsentToday,
       total_budget: totalBudget,
-      actual_spend: actualSpend,
+      actual_spend: totalPaymentsMade,
+      total_spend: totalPaymentsMade,
+      total_payments: totalPaymentsMade,
+      month_expenditure: totalEmployeeAmount,
+      employee_amount: totalEmployeeAmount,
       budget_utilization_pct: budgetPct,
       budget_utilization_percent: budgetPct,
-      monthly_burn: monthlyExpenses || 45000,
-      monthly_payroll: 78000,
+      monthly_burn: approvedExpensesSum,
+      monthly_payroll: totalEmployeeAmount,
       pending_expenses: pendingExpensesCount,
       pending_advances: pendingAdvancesCount,
       attendance_trend: attendanceTrend,
@@ -1135,7 +1242,7 @@ export async function handleMockRequest(endpoint, options = {}) {
       const newAtt = {
         id: existingIdx !== -1 ? db.attendances[existingIdx].id : nextId(db.attendances),
         employee: eId,
-        project: projectId,
+        project: rec.project_id ? Number(rec.project_id) : projectId,
         date: date,
         status: rec.status || 'PRESENT',
         hours_worked: String(Number(rec.hours_worked || (rec.status === 'HALF_DAY' ? 4 : rec.status === 'PRESENT' ? 8 : 0)).toFixed(2)),
@@ -1439,28 +1546,98 @@ export async function handleMockRequest(endpoint, options = {}) {
   if (pathname === '/work-entries') {
     if (method === 'GET') {
       let list = db.work_entries || [];
-      if (params.project) list = list.filter((w) => w.project === Number(params.project));
+      if (params.project && params.project !== 'all') {
+        list = list.filter((w) => String(w.project) === String(params.project));
+      }
       if (params.date) list = list.filter((w) => w.date === params.date);
-      return list;
+      if (params.from_date) list = list.filter((w) => w.date >= params.from_date);
+      if (params.to_date) list = list.filter((w) => w.date <= params.to_date);
+
+      if (params.employee) {
+        const eId = Number(params.employee);
+        list = list.filter((w) =>
+          (Array.isArray(w.employees) && w.employees.map(Number).includes(eId)) ||
+          Number(w.employee) === eId
+        );
+      }
+
+      if (params.role) {
+        const rLower = params.role.toLowerCase();
+        list = list.filter((w) => {
+          const empIds = Array.isArray(w.employees) ? w.employees : (w.employee ? [w.employee] : []);
+          const empObjs = (db.employees || []).filter((e) => empIds.includes(e.id));
+          return (
+            empObjs.some((e) => (e.role || e.trade || '').toLowerCase().includes(rLower)) ||
+            (w.department && w.department.toLowerCase().includes(rLower))
+          );
+        });
+      }
+
+      // Hydrate project_name, employee_details, and role_counts
+      return list.map((w) => {
+        const empIds = Array.isArray(w.employees) ? w.employees : (w.employee ? [w.employee] : []);
+        const empObjs = (db.employees || []).filter((e) => empIds.includes(e.id));
+        const roleCounts = {};
+        empObjs.forEach((e) => {
+          const r = e.role || e.trade || 'Labour';
+          roleCounts[r] = (roleCounts[r] || 0) + 1;
+        });
+        const proj = (db.projects || []).find((p) => p.id === Number(w.project));
+        return {
+          ...w,
+          project_name: w.project_name || (proj ? proj.name : `Project #${w.project}`),
+          employee_details: empObjs,
+          role_counts: w.role_counts && Object.keys(w.role_counts).length > 0 ? w.role_counts : roleCounts,
+        };
+      });
     }
+
     if (method === 'POST') {
+      const empIds = Array.isArray(body.employees)
+        ? body.employees.map(Number)
+        : body.employee
+        ? [Number(body.employee)]
+        : [];
+
+      const proj = (db.projects || []).find((p) => p.id === Number(body.project));
+      const empObjs = (db.employees || []).filter((e) => empIds.includes(e.id));
+      const roleCounts = {};
+      empObjs.forEach((e) => {
+        const r = e.role || e.trade || 'Labour';
+        roleCounts[r] = (roleCounts[r] || 0) + 1;
+      });
+
       const entry = {
         id: nextId(db.work_entries),
-        employee: Number(body.employee_id || body.employee),
-        project: Number(body.project_id || body.project),
+        project: Number(body.project),
+        project_name: proj ? proj.name : `Project #${body.project}`,
         date: body.date || new Date().toISOString().split('T')[0],
-        task_description: body.task_description || '',
+        description: body.description || body.task_description || '',
+        task_description: body.description || body.task_description || '',
+        department: body.department || '',
         quantity_completed: body.quantity_completed || '1.0',
         unit: body.unit || 'sqft',
         hours_spent: String(Number(body.hours_spent || 8).toFixed(2)),
+        employees: empIds,
+        employee: empIds[0] || null,
+        employee_details: empObjs,
+        role_counts: roleCounts,
+        created_by: getActorFromSession().email,
         created_at: new Date().toISOString(),
       };
+
       db.work_entries.push(entry);
       recordAuditLog(db, {
         action: 'WORK_ENTRY_CREATED',
         resource_type: 'WorkEntry',
         resource_id: entry.id,
-        changes: { employee: entry.employee, project: entry.project, task: entry.task_description, quantity: entry.quantity_completed },
+        changes: {
+          project: entry.project,
+          date: entry.date,
+          description: entry.description,
+          assigned_count: empIds.length,
+          roles: Object.keys(roleCounts),
+        },
       });
       saveDB(db);
       return entry;
