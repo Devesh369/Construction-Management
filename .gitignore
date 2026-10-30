@@ -75,3 +75,6 @@ frontend/dist-ssr/
 .vite/
 frontend/.vite/
 
+
+*.bak
+**/*.bak
