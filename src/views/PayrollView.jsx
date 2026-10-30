@@ -681,13 +681,13 @@ export const PayrollView = ({ selectedProjectId }) => {
       {/* ========================================================================= */}
       {/* 1. TOP HEADER & QUICK ACTION BAR                                          */}
       {/* ========================================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white truncate">
               {isEmployeeLabour ? 'My Salary & Payslips' : 'Payroll & Wage Management'}
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shrink-0">
               {isEmployeeLabour ? 'Employee Portal' : role === 'ORG_ADMIN' ? 'Org Admin' : 'Site Manager'}
             </span>
           </div>
@@ -698,15 +698,15 @@ export const PayrollView = ({ selectedProjectId }) => {
           </p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Action Buttons - Always in ONE Single Line */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-nowrap overflow-x-auto pb-1 xl:pb-0">
           {/* CSV Export Button */}
           <button
             onClick={activeTab === 'advances' ? handleExportAdvancesCSV : handleExportSalariesCSV}
-            className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-sm"
+            className="px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
             title="Export Records to CSV"
           >
-            <FileDown size={15} />
+            <FileDown size={15} className="shrink-0" />
             <span>Export CSV</span>
           </button>
 
@@ -715,25 +715,25 @@ export const PayrollView = ({ selectedProjectId }) => {
             <>
               <button
                 onClick={() => setIsAdvanceModalOpen(true)}
-                className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 font-bold text-xs flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-sm"
+                className="px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 font-bold text-xs flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
               >
-                <IndianRupee size={15} className="text-amber-500" />
+                <IndianRupee size={15} className="text-amber-500 shrink-0" />
                 <span>Record Advance</span>
               </button>
 
               <button
                 onClick={() => setIsRunModalOpen(true)}
-                className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+                className="px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
               >
-                <Plus size={15} />
+                <Plus size={15} className="shrink-0" />
                 <span>Calculate Weekly Run</span>
               </button>
 
               <button
                 onClick={() => openSalaryModal()}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95"
+                className="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95 shrink-0 whitespace-nowrap"
               >
-                <Wallet size={15} />
+                <Wallet size={15} className="shrink-0" />
                 <span>Pay Full Salary</span>
               </button>
             </>
