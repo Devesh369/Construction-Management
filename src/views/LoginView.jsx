@@ -212,22 +212,6 @@ export const LoginView = ({ isAlreadyAuthenticated = false }) => {
     }
   };
 
-  // Demo accounts helper
-  const handleQuickDemo = async (demoEmail, demoPass) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError('');
-    setLoading(true);
-    try {
-      await login(demoEmail, demoPass);
-      window.history.replaceState({}, '', window.location.pathname);
-    } catch (err) {
-      setError(err.message || 'Quick login failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const showInviteTab = mode === 'invite' || Boolean(inviteForm.token);
 
   return (
@@ -817,67 +801,6 @@ export const LoginView = ({ isAlreadyAuthenticated = false }) => {
                 </button>
               </div>
 
-              {/* Organization Role Quick Access */}
-              <div className="mt-3 pt-3 border-t border-slate-800/80">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Quick Role Access
-                  </p>
-                  <span className="text-[9px] text-slate-500 font-medium">
-                    Click to sign in by role
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemo('deveshpatel@gmail.com', 'password123')}
-                    title="Org Admin (Devesh Patel)"
-                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
-                  >
-                    Org Admin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemo('viren@gmail.com', 'password123')}
-                    title="Project Manager (Viren Prajapati)"
-                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
-                  >
-                    Project Mgr
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemo('sitemanager@buildsphere.com', 'password123')}
-                    title="Site Manager (Site Operations & DPR)"
-                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
-                  >
-                    Site Manager
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemo('viren@buildsphere.com', 'password123')}
-                    title="Site Engineer (Field Engineering)"
-                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
-                  >
-                    Site Eng
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemo('san@gmail.com', 'password123')}
-                    title="Accountant (Sankalp - Finance & Ledger)"
-                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
-                  >
-                    Accountant
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleQuickDemo('labour@buildsphere.com', 'password123')}
-                    title="Labour / Employee (Darshil - Karigar)"
-                    className="px-2 py-1.5 text-[10px] font-bold bg-slate-800/90 hover:bg-blue-600/30 hover:border-blue-500/80 border border-slate-700/70 rounded-lg text-slate-200 hover:text-white transition-all text-center truncate cursor-pointer shadow-xs active:scale-95"
-                  >
-                    Labour / Emp
-                  </button>
-                </div>
-              </div>
             </form>
           )}
 
