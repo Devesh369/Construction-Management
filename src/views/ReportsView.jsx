@@ -137,7 +137,7 @@ export const ReportsView = ({ selectedProjectId }) => {
       format: 'PDF',
       icon: FileText,
       color: '#f87171',
-      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'],
+      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
       description:
         "Site-wise breakdown of worker attendance units, daily wage rates, gross earnings, advance/upad deductions, and net salary payouts for the selected project site.",
       statHighlight: {
@@ -169,7 +169,7 @@ export const ReportsView = ({ selectedProjectId }) => {
       format: 'EXCEL',
       icon: FileSpreadsheet,
       color: '#38bdf8',
-      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'],
+      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
       description:
         'Itemized material, fuel, transport, equipment, and vendor credit purchase records with approver audit timestamps for this project.',
       statHighlight: {
@@ -197,7 +197,7 @@ export const ReportsView = ({ selectedProjectId }) => {
       format: 'PDF',
       icon: FileText,
       color: '#60a5fa',
-      roles: ['ORG_ADMIN', 'ACCOUNTANT'],
+      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
       description:
         'Comprehensive project contract financial statement showing project contract revenues against direct site material, wage, and overhead costs.',
       statHighlight: {

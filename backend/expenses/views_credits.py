@@ -36,7 +36,7 @@ class CreditLogViewSet(TenantViewSet):
         user = self.request.user
 
         # Admins see only their own entries unless ORG_ADMIN or ACCOUNTANT
-        if user.role not in [Role.ORG_ADMIN, Role.ACCOUNTANT]:
+        if user.role != Role.ORG_ADMIN:
             qs = qs.filter(credited_by=user)
 
         status_filter = self.request.query_params.get("status")

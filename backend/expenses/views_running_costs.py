@@ -30,7 +30,7 @@ class RunningCostViewSet(TenantViewSet):
         user = self.request.user
 
         # Admins see only their own entries unless ORG_ADMIN or ACCOUNTANT (Section 3.4 B)
-        if user.role not in [Role.ORG_ADMIN, Role.ACCOUNTANT]:
+        if user.role != Role.ORG_ADMIN:
             qs = qs.filter(entered_by=user)
 
         project_id = self.request.query_params.get("project")

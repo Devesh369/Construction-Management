@@ -376,7 +376,7 @@ export const PayrollView = ({ selectedProjectId }) => {
     role === 'PROJECT_MANAGER' ||
     role === 'SITE_MANAGER';
 
-  if (!['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT', 'employee/labour', 'EMPLOYEE', 'LABOUR'].includes(role)) {
+  if (!['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'employee/labour', 'EMPLOYEE', 'LABOUR'].includes(role)) {
     return (
       <div className="card" style={{ maxWidth: '640px', margin: '48px auto', padding: '48px 32px', textAlign: 'center' }}>
         <ShieldAlert className="w-16 h-16 text-amber-500 mx-auto mb-4" />
@@ -401,7 +401,7 @@ export const PayrollView = ({ selectedProjectId }) => {
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
-          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT', 'SUPERVISOR'].includes(role) && !isEmployeeLabour && (
+          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
             <button
               onClick={() => openSalaryModal()}
               className="btn btn-primary"
@@ -420,13 +420,13 @@ export const PayrollView = ({ selectedProjectId }) => {
               <span>Pay Full Salary</span>
             </button>
           )}
-          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT', 'SUPERVISOR'].includes(role) && !isEmployeeLabour && (
+          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
             <button onClick={() => setIsAdvanceModalOpen(true)} className="btn btn-secondary">
               <IndianRupee size={16} />
               <span>Record Advance</span>
             </button>
           )}
-          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'].includes(role) && !isEmployeeLabour && (
+          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
             <button onClick={() => setIsRunModalOpen(true)} className="btn btn-secondary">
               <Plus size={16} />
               <span>Calculate Weekly Payroll</span>
@@ -821,7 +821,7 @@ export const PayrollView = ({ selectedProjectId }) => {
                         </button>
                       )}
 
-                      {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'].includes(role) && !isEmployeeLabour && (
+                      {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -910,7 +910,7 @@ export const PayrollView = ({ selectedProjectId }) => {
                                       <span>Payslip</span>
                                     </button>
                                     {v.status === 'DRAFT' || v.status === 'APPROVED' ? (
-                                      ['ORG_ADMIN', 'ACCOUNTANT'].includes(role) && !isEmployeeLabour ? (
+                                      ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour ? (
                                         <button
                                           onClick={() => handleMarkPaid(v.id)}
                                           className="btn btn-primary btn-sm"
@@ -1006,7 +1006,7 @@ export const PayrollView = ({ selectedProjectId }) => {
                       <div style={{ fontWeight: 500 }}>{adv.project_name || `Site #${adv.project}`}</div>
                     </td>
                     <td style={{ textAlign: 'center' }}>
-                      {adv.status === 'OPEN' && ['ORG_ADMIN', 'ACCOUNTANT'].includes(role) && !isEmployeeLabour && (
+                      {adv.status === 'OPEN' && ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
                         <button
                           onClick={() => handleDeleteAdvance(adv.id)}
                           className="btn btn-secondary btn-sm"

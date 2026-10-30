@@ -33,14 +33,11 @@ export const Topbar = ({
     if (!r) return 'User';
     const map = {
       ORG_ADMIN: 'Org Admin',
-      SITE_MANAGER: 'Site Manager',
-      PROJECT_MANAGER: 'Site Manager',
-      SITE_ENGINEER: 'Site Manager',
-      SUPERVISOR: 'Site Manager',
-      ACCOUNTANT: 'Org Admin',
-      'employee/labour': 'Employee / Labour',
-      EMPLOYEE: 'Employee / Labour',
-      LABOUR: 'Employee / Labour',
+      SITE_MANAGER: 'Site Manager / Project Manager',
+      PROJECT_MANAGER: 'Site Manager / Project Manager',
+      'employee/labour': 'Labour / Employee',
+      EMPLOYEE: 'Labour / Employee',
+      LABOUR: 'Labour / Employee',
     };
     return map[r] || r.replace('_', ' ');
   };

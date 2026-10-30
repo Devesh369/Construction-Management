@@ -41,8 +41,8 @@ import {
 
 const ROLE_OPTIONS = [
   { value: 'ORG_ADMIN', label: 'Org Admin (Super Admin - Full Access)', color: 'border-purple-500/30 text-purple-400 bg-purple-500/10' },
-  { value: 'SITE_MANAGER', label: 'Site Manager (Site Operations, Workforce & Progress)', color: 'border-blue-500/30 text-blue-400 bg-blue-500/10' },
-  { value: 'employee/labour', label: 'Employee / Labour (Attendance, Payroll & Upad)', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
+  { value: 'SITE_MANAGER', label: 'Site Manager / Project Manager (Site Operations, Workforce & Progress)', color: 'border-blue-500/30 text-blue-400 bg-blue-500/10' },
+  { value: 'employee/labour', label: 'Labour / Employee (Attendance, Payroll & Upad)', color: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10' },
 ];
 
 export const SettingsView = () => {
@@ -73,7 +73,7 @@ export const SettingsView = () => {
   const [userForm, setUserForm] = useState({
     name: '',
     email: '',
-    role: 'PROJECT_MANAGER',
+    role: 'SITE_MANAGER',
     password: '',
     phone: '',
     notification_email: '',
@@ -93,7 +93,7 @@ export const SettingsView = () => {
   const [inviteForm, setInviteForm] = useState({
     email: '',
     name: '',
-    role: 'PROJECT_MANAGER',
+    role: 'SITE_MANAGER',
   });
 
   const fetchData = async () => {
@@ -195,7 +195,7 @@ export const SettingsView = () => {
       setUserForm({
         name: '',
         email: '',
-        role: 'PROJECT_MANAGER',
+        role: 'SITE_MANAGER',
         password: '',
         phone: '',
         notification_email: '',
@@ -271,7 +271,7 @@ export const SettingsView = () => {
 
       setIsInviteModalOpen(false);
       const targetEmail = inviteForm.email.toLowerCase().trim();
-      setInviteForm({ email: '', name: '', role: 'PROJECT_MANAGER' });
+      setInviteForm({ email: '', name: '', role: 'SITE_MANAGER' });
       toast.success(`Team invitation link dispatched to ${targetEmail}!`);
 
       // Open Credentials Receipt Modal
@@ -347,7 +347,7 @@ export const SettingsView = () => {
       const rec = await dispatchMemberCredentialsEmail({
         name: 'Darshil Gajera',
         email: testRecipient,
-        role: 'PROJECT_MANAGER',
+        role: 'SITE_MANAGER',
         password: 'TestPassword@123',
         notification_email: testRecipient,
         organizationName: org?.name || 'BuildSphere org.',
@@ -363,7 +363,7 @@ export const SettingsView = () => {
         name: 'Darshil Gajera (Test)',
         email: testRecipient,
         targetEmail: testRecipient,
-        role: 'PROJECT_MANAGER',
+        role: 'SITE_MANAGER',
         password: 'TestPassword@123',
         dispatchRecord: rec,
       });
@@ -533,9 +533,9 @@ export const SettingsView = () => {
                       (['PROJECT_MANAGER', 'SUPERVISOR', 'SITE_ENGINEER', 'ACCOUNTANT'].includes(u.role)
                         ? ROLE_OPTIONS[1]
                         : ROLE_OPTIONS[2]);
-                    const currentVal = ['PROJECT_MANAGER', 'SUPERVISOR', 'SITE_ENGINEER', 'ACCOUNTANT'].includes(u.role)
+                    const currentVal = ['PROJECT_MANAGER', 'SITE_MANAGER'].includes(u.role)
                       ? 'SITE_MANAGER'
-                      : (ROLE_OPTIONS.some((r) => r.value === u.role) ? u.role : 'employee/labour');
+                      : (u.role === 'ORG_ADMIN' ? 'ORG_ADMIN' : 'employee/labour');
                     return (
                       <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                         <td className="py-4 px-5">

@@ -57,7 +57,7 @@ class ProjectScopedMixin:
             return queryset.none()
 
         role = getattr(user, "role", None)
-        if role in [Role.ORG_ADMIN, Role.ACCOUNTANT]:
+        if role == Role.ORG_ADMIN:
             return queryset
 
         # Lazy import contract from projects app to avoid circular dependencies

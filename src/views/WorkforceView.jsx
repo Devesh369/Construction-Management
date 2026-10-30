@@ -694,7 +694,7 @@ export const WorkforceView = () => {
 
             {/* Action Buttons: Edit & Delete */}
             <div className="flex items-center gap-2 pt-1">
-              {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'].includes(userRole) && (
+              {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(userRole) && (
                 <button
                   onClick={() => setIsEditModalOpen(true)}
                   className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-bold text-white transition-all backdrop-blur-md"
@@ -797,7 +797,7 @@ export const WorkforceView = () => {
               </span>
             </div>
 
-            {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'].includes(userRole) && (() => {
+            {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(userRole) && (() => {
               const hasAttendance = Boolean(
                 fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
               );
@@ -948,7 +948,7 @@ export const WorkforceView = () => {
           </div>
 
           {/* Project Assignment Dropdown + Button */}
-          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'SUPERVISOR'].includes(userRole) && (
+          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(userRole) && (
             <form onSubmit={handleAssignProject} className="flex items-center gap-2 max-w-xl">
               <select
                 value={assignProjectId}
@@ -1001,7 +1001,7 @@ export const WorkforceView = () => {
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40">
                       In progress
                     </span>
-                    {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'SUPERVISOR'].includes(userRole) && (
+                    {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(userRole) && (
                       <button
                         onClick={() => handleUnassignProject(proj.id)}
                         className="w-7 h-7 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center transition-colors"
@@ -1316,10 +1316,10 @@ export const WorkforceView = () => {
               </div>
 
               <Input
-                label={userRole === 'SUPERVISOR' ? 'Daily Wage (₹) (Read-only for Supervisors)' : 'Daily Wage (₹) *'}
+                label={false ? 'Daily Wage (₹) (Read-only for Supervisors)' : 'Daily Wage (₹) *'}
                 type="number"
                 step="0.01"
-                disabled={userRole === 'SUPERVISOR'}
+                disabled={false}
                 value={editForm.daily_rate}
                 onChange={(e) => setEditForm({ ...editForm, daily_rate: e.target.value })}
               />

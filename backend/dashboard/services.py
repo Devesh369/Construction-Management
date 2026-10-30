@@ -29,7 +29,7 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
     Caches results per organization and role/user for 60 seconds.
     """
     # 1. Check cache unless explicit refresh requested
-    if user.role in [Role.ORG_ADMIN, Role.ACCOUNTANT]:
+    if user.role == Role.ORG_ADMIN:
         cache_key = f"dashboard_overview_{org.id}_{user.role}"
     else:
         cache_key = f"dashboard_overview_{org.id}_{user.role}_{user.id}"
@@ -40,7 +40,7 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
             return cached_data
 
     # 2. Determine project scope
-    if user.role in [Role.ORG_ADMIN, Role.ACCOUNTANT]:
+    if user.role == Role.ORG_ADMIN:
         scoped_projects = Project.objects.filter(organization=org, deleted_at__isnull=True)
     else:
         allowed_ids = user_project_ids(user)
@@ -372,7 +372,7 @@ def get_project_dashboard(project: Project, user) -> dict:
     Generate project drill-down analytics for project managers and accountants.
     """
     # Permission scoping check
-    if user.role not in [Role.ORG_ADMIN, Role.ACCOUNTANT]:
+    if user.role != Role.ORG_ADMIN:
         allowed_ids = user_project_ids(user)
         if project.id not in allowed_ids:
             raise PermissionDenied("You are not assigned to this project.")

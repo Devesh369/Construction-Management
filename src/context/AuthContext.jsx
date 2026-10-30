@@ -108,7 +108,7 @@ export const AuthProvider = ({ children }) => {
     user?.role === 'ORG_ADMIN' ||
     user?.role === 'PROJECT_MANAGER' ||
     user?.role === 'SITE_MANAGER';
-  const isFinance = user?.role === 'ORG_ADMIN' || user?.role === 'ACCOUNTANT';
+  const isFinance = user?.role === 'ORG_ADMIN' || user?.role === 'PROJECT_MANAGER' || user?.role === 'SITE_MANAGER';
 
   const activeOrg =
     typeof user?.organization === 'object' && user?.organization !== null

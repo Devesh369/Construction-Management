@@ -476,12 +476,9 @@ logger = logging.getLogger(__name__)
 
 ROLE_DESCRIPTIONS = {
     Role.ORG_ADMIN: "Org Admin (Super Admin - Full Access)",
-    Role.SITE_MANAGER: "Site Manager (Site Operations, Workforce & Progress)",
-    Role.EMPLOYEE: "Employee / Labour (Attendance, Payroll & Upad)",
-    Role.PROJECT_MANAGER: "Site Manager (Site Operations, Workforce & Progress)",
-    Role.SITE_ENGINEER: "Site Engineer (DPR, Work Progress & Quantities)",
-    Role.SUPERVISOR: "Site Supervisor (Daily Attendance & Workers)",
-    Role.ACCOUNTANT: "Accountant (Ledger, Upad, Payment & Payroll)",
+    Role.SITE_MANAGER: "Site Manager / Project Manager (Site Operations, Workforce & Progress)",
+    Role.PROJECT_MANAGER: "Site Manager / Project Manager (Site Operations, Workforce & Progress)",
+    Role.EMPLOYEE: "Labour / Employee (Attendance, Payroll & Upad)",
 }
 
 

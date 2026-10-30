@@ -6,30 +6,21 @@ This document defines the Role-Based Access Control (RBAC) architecture, module 
 
 ## 1. System Role Hierarchy
 
-The platform categorizes users into five distinct operational tiers:
+The platform categorizes users into three operational roles:
 
 ```mermaid
 flowchart TD
     OA["👑 Org Admin (Super Admin)"]
-    PM["👷 Project Manager"]
-    SM["📋 Site Manager"]
-    SE["📐 Site Engineer"]
-    ACC["📊 Accountant"]
-    EMP["🦺 Employee / Labour"]
+    SM["👷 Site Manager / Project Manager"]
+    EMP["🦺 Labour / Employee"]
 
-    OA --> PM
     OA --> SM
-    OA --> ACC
-    PM --> SE
-    SM --> SE
-    PM --> EMP
     SM --> EMP
 ```
 
-- **Tier 1 (Executive & Governance)**: Org Admin
-- **Tier 2 (Operational Leadership)**: Project Manager, Site Manager
-- **Tier 3 (Specialized Operations)**: Accountant (Financials), Site Engineer (Field Engineering)
-- **Tier 4 (Field Workforce)**: Employee / Labour (Self-Service)
+- **Tier 1 (Executive & Governance)**: Org Admin (`ORG_ADMIN`)
+- **Tier 2 (Operational Leadership)**: Site Manager / Project Manager (`SITE_MANAGER`, `PROJECT_MANAGER`)
+- **Tier 3 (Field Workforce)**: Labour / Employee (`employee/labour`)
 
 ---
 
@@ -37,22 +28,22 @@ flowchart TD
 
 The table below outlines screen visibility and action capabilities across all platform modules:
 
-| Platform Module | Org Admin | Project Mgr | Site Mgr | Site Eng | Accountant | Labour / Emp |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Dashboard (KPIs & Telemetry)** | Full Access | Full Access | Full Access | Hidden | View-Only | Hidden |
-| **Projects Management** | Full (CRUD) | Full (Create/Edit) | Full (Create/Edit) | View-Only | View-Only | Hidden |
-| **Workforce & Employees** | Full (Manage/Wages) | Full (Manage/Assign) | Full (Manage/Assign) | View List | Wage Audit | Hidden |
-| **Attendance Register & Reports** | Full (Mark/Edit/All) | Full (Mark/Edit/All) | Full (Mark/Edit/All) | View/Mark | Reports Only | **Personal View Only** |
-| **Work Management (DPR & Tasks)** | Full Access | Full Access | Full Access | Full Access | Hidden | Hidden |
-| **Spend & Vendors** | Full (Approve & Log) | Full (Log & Bills) | Full (Log & Bills) | Running Cost | Full (Invoices/Ledger) | Hidden |
-| **Payment Central** | **Final Approval & Pay** | Request Only | Request Only | Hidden | Prepare Vouchers | Hidden |
-| **Upad (Worker Advances)** | **Approve, Disburse, Delete** | Request & Record | Request & Record | Hidden | Ledger & Settle | **Personal View / Request** |
-| **Payroll & Wages** | **Final Payout Release** | View & Compute | View & Compute | Hidden | Full (Compute/Export) | **Personal Payslips Only** |
-| **Financial Ledger (GL)** | Full Access | Hidden | Hidden | Hidden | Full Access | Hidden |
-| **Reports & Data Exports** | All Reports | Site Reports | Site Reports | Hidden | Financial Reports | Hidden |
-| **Cost Estimator & BOQ** | Full Access | Full Access | Full Access | Full Access | Rate Reference | Hidden |
-| **Settings & Invitations** | **Exclusive Access** | Forbidden | Forbidden | Forbidden | Forbidden | Forbidden |
-| **System Audit Logs** | **Exclusive Access** | Forbidden | Forbidden | Forbidden | Forbidden | Forbidden |
+| Platform Module | Org Admin | Site Manager / Project Manager | Labour / Employee |
+| :--- | :---: | :---: | :---: |
+| **Dashboard (KPIs & Telemetry)** | Full Access | Full Access | Hidden |
+| **Projects Management** | Full (CRUD) | Full (Create/Edit) | Hidden |
+| **Workforce & Employees** | Full (Manage/Wages) | Full (Manage/Assign) | Hidden |
+| **Attendance Register & Reports** | Full (Mark/Edit/All) | Full (Mark/Edit/All) | **Personal View Only** |
+| **Work Management (DPR & Tasks)** | Full Access | Full Access | Hidden |
+| **Spend & Vendors** | Full (Approve & Log) | Full (Log & Bills) | Hidden |
+| **Payment Central** | **Final Approval & Pay** | Request & View | Hidden |
+| **Upad (Worker Advances)** | **Approve, Disburse, Delete** | Request & Record | **Personal View / Request** |
+| **Payroll & Wages** | **Final Payout Release** | Compute & View | **Personal Payslips Only** |
+| **Financial Ledger (GL)** | Full Access | Full Operational Access | Hidden |
+| **Reports & Data Exports** | All Reports | Site & Operational Reports | Hidden |
+| **Cost Estimator & BOQ** | Full Access | Full Access | Hidden |
+| **Settings & Invitations** | **Exclusive Access** | Forbidden | Forbidden |
+| **System Audit Logs** | **Exclusive Access** | Forbidden | Forbidden |
 
 ---
 
@@ -66,12 +57,12 @@ The table below outlines screen visibility and action capabilities across all pl
   * **Team Provisioning**: Invite users via email tokens, assign roles, deactivate accounts, and manage seat licenses.
   * **Financial Authority**: Exclusive authority to approve payments in **Payment Central**, disburse **Payroll**, and approve/delete **Upad advances**.
   * **Compliance & Auditing**: Review immutable system audit logs for forensic event tracking.
-* **Access Scope**: Unrestricted across all 12 platform modules.
+* **Access Scope**: Unrestricted across all platform modules.
 
 ---
 
-### 👷 Project Manager (`PROJECT_MANAGER`) & Site Manager (`SITE_MANAGER`)
-> **Note**: Project Managers and Site Managers share identical operational authority over construction sites, personnel allocation, and daily activity tracking.
+### 👷 Site Manager / Project Manager (`SITE_MANAGER`, `PROJECT_MANAGER`)
+> **Note**: Site Managers and Project Managers share operational authority over construction sites, personnel allocation, daily activity tracking, and expense logging.
 
 * **Primary Capabilities:**
   * **Project Execution**: Create and edit project profiles, timelines, budgets, and client details.
@@ -83,38 +74,11 @@ The table below outlines screen visibility and action capabilities across all pl
   * **Cost Estimation**: Run the AI Cost Estimator and generate client BOQ PDF quotations.
 * **Restrictions:**
   * Cannot access **Organization Settings** or issue tenant team invitations.
-  * Cannot access the double-entry **Financial General Ledger**.
   * Cannot perform final company bank account disbursements without Org Admin sign-off.
 
 ---
 
-### 📐 Site Engineer (`SITE_ENGINEER`)
-* **Primary Capabilities:**
-  * View assigned projects and active project milestones.
-  * Enter and update Daily Progress Reports (DPR) and task tracking.
-  * Record minor on-site petty cash and operational running costs.
-  * Generate baseline Bill of Quantities (BOQ) estimates.
-* **Restrictions:**
-  * Cannot edit employee master salary wages.
-  * Cannot access Payment Central, Payroll, or Financial Ledger.
-  * Cannot access system configuration or user administration.
-
----
-
-### 📊 Accountant (`ACCOUNTANT`)
-* **Primary Capabilities:**
-  * **General Ledger**: Manage Chart of Accounts, manual Journal Entries, and Trial Balance reports.
-  * **Payroll Administration**: Compute monthly worker salaries, deductions, net payable calculations, and generate bank export sheets.
-  * **Upad Settlement**: Reconcile advance balances against payroll and record contra-ledger postings.
-  * **Accounts Payable**: Audit vendor invoices, GST calculations, and payment vouchers.
-  * **Financial Exports**: Export complete audit and ledger trails in CSV and PDF formats.
-* **Restrictions:**
-  * Cannot modify on-site engineering tasks or DPR work progress.
-  * Cannot modify tenant settings or user roles.
-
----
-
-### 🦺 Employee / Labour (`employee/labour`)
+### 🦺 Labour / Employee (`employee/labour`)
 > **Note**: The worker experience is streamlined for self-service transparency while safeguarding organizational finances.
 
 * **Primary Capabilities:**
@@ -134,11 +98,9 @@ All roles are synchronized with the active tenant organization (**Pragti Constru
 | Role | Name | Email | Password | Primary Module |
 | :--- | :--- | :--- | :--- | :--- |
 | **Org Admin** | Devesh Patel | `deveshpatel@gmail.com` | `password123` | Dashboard / Settings |
-| **Project Manager** | Viren Prajapati | `viren@gmail.com` | `password123` | Projects / Workforce |
-| **Site Manager** | Site Manager | `sitemanager@buildsphere.com` | `password123` | Attendance / DPR |
-| **Site Engineer** | Viren Prajapati | `viren@buildsphere.com` | `password123` | Work Management |
-| **Accountant** | Sankalp | `san@gmail.com` | `password123` | Financial Ledger |
-| **Labour / Employee** | Darshil (Karigar) | `labour@buildsphere.com` | `password123` | Personal Attendance |
+| **Site Manager / Project Mgr** | Viren Prajapati | `viren@gmail.com` | `password123` | Projects / Workforce |
+| **Site Manager / Project Mgr** | Site Manager | `sitemanager@buildsphere.com` | `password123` | Attendance / DPR |
+| **Labour / Employee** | Harshil | `harshil@gmail.com` | `password123` | Personal Attendance |
 
 ---
 
@@ -160,4 +122,3 @@ permission_classes = [IsAuthenticated, IsTenantUser, roles_required(Role.ORG_ADM
 1. **Sidebar Navigation**: Nav items are filtered at render time using `navItems.filter(item => !item.roles || item.roles.includes(role))`.
 2. **Route / Tab Shielding**: Unauthorized tabs redirect automatically to `DEFAULT_TAB_BY_ROLE[role]`.
 3. **Action-Level Control**: Approval, delete, and payment buttons conditionally render only when matching role privileges are satisfied.
-

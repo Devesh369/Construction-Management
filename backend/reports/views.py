@@ -39,7 +39,7 @@ class BaseReportView(views.APIView):
             (resolved_project_id, allowed_pids)
         """
         user = request.user
-        if user.role in [Role.ORG_ADMIN, Role.ACCOUNTANT]:
+        if user.role == Role.ORG_ADMIN:
             return project_id, None
 
         allowed_pids = user_project_ids(user)

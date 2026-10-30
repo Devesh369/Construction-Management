@@ -186,12 +186,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
         receipt = attrs.get("receipt") or (self.instance.receipt if self.instance else None)
         details = dict(attrs.get("details", getattr(self.instance, "details", {})) or {})
 
-        # 1. Role check: SUPERVISOR can only create TRANSPORT expenses
-        if user and getattr(user, "role", None) == Role.SUPERVISOR:
-            if category != ExpenseCategory.TRANSPORT:
-                raise serializers.ValidationError(
-                    {"category": "Supervisors are only permitted to log transport expenses."}
-                )
+        # 1. Role check
+        pass
 
         # 2. Receipt check: required if amount > org.expense_approval_limit
         if org and amount and amount > org.expense_approval_limit and not receipt:
