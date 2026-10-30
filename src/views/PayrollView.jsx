@@ -15,23 +15,50 @@ import {
   Trash2,
   Banknote,
   User,
+  Users,
+  Search,
+  Filter,
+  FileDown,
+  RefreshCw,
+  Building2,
+  Clock,
+  ChevronLeft,
+  X,
+  CreditCard,
+  Briefcase,
+  Layers,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
+import { cn } from '../utils/cn';
 
 export const PayrollView = ({ selectedProjectId }) => {
   const { user, role } = useAuth();
   const isEmployeeLabour = role === 'employee/labour' || role === 'EMPLOYEE' || role === 'LABOUR';
   const isOrgAdmin = role === 'ORG_ADMIN' || user?.is_superuser;
+  const isSiteManager = role === 'SITE_MANAGER' || role === 'PROJECT_MANAGER';
+  const canManagePayroll = isOrgAdmin || isSiteManager;
+
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const [activeTab, setActiveTab] = useState('salaries'); // 'salaries' | 'runs' | 'advances'
+
+  // Tabs: 'salaries' | 'runs' | 'advances'
+  const [activeTab, setActiveTab] = useState('salaries');
+
+  // Master Data
   const [runs, setRuns] = useState([]);
   const [advances, setAdvances] = useState([]);
   const [salaryDisbursements, setSalaryDisbursements] = useState([]);
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Expanded Run Rows
+  const [expandedRunId, setExpandedRunId] = useState(null);
+
+  // Current Employee ID matching (for employee/labour self-service)
   const currentEmpId = useMemo(() => {
     if (user?.employee_id) return Number(user.employee_id);
     const matched = employees.find(
@@ -42,12 +69,20 @@ export const PayrollView = ({ selectedProjectId }) => {
     );
     return matched ? matched.id : null;
   }, [user, employees]);
-  const [loading, setLoading] = useState(true);
-  const [expandedRunId, setExpandedRunId] = useState(null);
 
-  // Search & Filter in Salaries Tab
+  // Tab 1 (Salaries) Filters & Pagination
   const [salarySearch, setSalarySearch] = useState('');
-  const [salaryProjectFilter, setSalaryProjectFilter] = useState('all');
+  const [salaryProjectFilter, setSalaryProjectFilter] = useState(selectedProjectId || 'all');
+  const [salaryStatusFilter, setSalaryStatusFilter] = useState('all'); // 'all' | 'due' | 'settled'
+  const [salaryPage, setSalaryPage] = useState(1);
+  const salaryPageSize = 10;
+
+  // Tab 3 (Advances) Filters & Pagination
+  const [advanceSearch, setAdvanceSearch] = useState('');
+  const [advanceProjectFilter, setAdvanceProjectFilter] = useState(selectedProjectId || 'all');
+  const [advanceStatusFilter, setAdvanceStatusFilter] = useState('all'); // 'all' | 'OPEN' | 'DEDUCTED'
+  const [advancePage, setAdvancePage] = useState(1);
+  const advancePageSize = 10;
 
   // Modals
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
@@ -55,15 +90,15 @@ export const PayrollView = ({ selectedProjectId }) => {
   const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Forms
+  // Modal Forms
   const [runForm, setRunForm] = useState({
-    project_id: '',
+    project_id: selectedProjectId || '',
     period_start: '',
     period_end: '',
   });
 
   const [advanceForm, setAdvanceForm] = useState({
-    project: '',
+    project: selectedProjectId || '',
     employee: '',
     amount: '',
     advance_date: new Date().toISOString().split('T')[0],
@@ -73,7 +108,7 @@ export const PayrollView = ({ selectedProjectId }) => {
 
   const [salaryForm, setSalaryForm] = useState({
     employee_id: '',
-    project_id: '',
+    project_id: selectedProjectId || '',
     amount: '',
     date: new Date().toISOString().split('T')[0],
     payment_mode: 'CASH',
@@ -81,6 +116,18 @@ export const PayrollView = ({ selectedProjectId }) => {
     status: isOrgAdmin ? 'paid' : 'pending',
   });
 
+  // Sync selectedProjectId prop
+  useEffect(() => {
+    if (selectedProjectId) {
+      setSalaryProjectFilter(selectedProjectId);
+      setAdvanceProjectFilter(selectedProjectId);
+      setRunForm((prev) => ({ ...prev, project_id: selectedProjectId }));
+      setAdvanceForm((prev) => ({ ...prev, project: selectedProjectId }));
+      setSalaryForm((prev) => ({ ...prev, project_id: selectedProjectId }));
+    }
+  }, [selectedProjectId]);
+
+  // Fetch all payroll data
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -92,6 +139,7 @@ export const PayrollView = ({ selectedProjectId }) => {
         api.workforce.listEmployees({ page_size: 1000 }).catch(() => []),
         api.payments.list(params).catch(() => []),
       ]);
+
       let runList = Array.isArray(runRes) ? runRes : runRes.results || [];
       let advList = Array.isArray(advRes) ? advRes : advRes.results || [];
       let empList = Array.isArray(empRes) ? empRes : empRes.results || [];
@@ -149,7 +197,8 @@ export const PayrollView = ({ selectedProjectId }) => {
       setProjects(Array.isArray(projRes) ? projRes : projRes.results || []);
       setEmployees(empList);
     } catch (err) {
-      console.error('Failed to load payroll:', err);
+      console.error('Failed to load payroll data:', err);
+      toast.error('Failed to load payroll records');
     } finally {
       setLoading(false);
     }
@@ -157,10 +206,240 @@ export const PayrollView = ({ selectedProjectId }) => {
 
   useEffect(() => {
     fetchData();
-  }, [selectedProjectId]);
+  }, [selectedProjectId, currentEmpId]);
 
+  // Format currency: ₹XX,XXX
+  const formatCurrency = (val) => {
+    const num = Number(val || 0);
+    return `₹${num.toLocaleString('en-IN', {
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+    })}`;
+  };
+
+  // Format date: DD/MM/YYYY
+  const formatDateDMY = (dateVal) => {
+    if (!dateVal) return '—';
+    try {
+      const str = String(dateVal).trim();
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) return str;
+      const ymdMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (ymdMatch) {
+        const [, year, month, day] = ymdMatch;
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+      }
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+      return str;
+    } catch {
+      return dateVal;
+    }
+  };
+
+  // Filtered Employees for Salary Tab
+  const filteredEmployees = useMemo(() => {
+    return employees.filter((emp) => {
+      if (salaryProjectFilter !== 'all') {
+        const pId = emp.primary_project || '';
+        if (String(pId) !== String(salaryProjectFilter)) return false;
+      }
+      if (salarySearch) {
+        const q = salarySearch.toLowerCase();
+        const name = (emp.full_name || '').toLowerCase();
+        const code = (emp.employee_code || '').toLowerCase();
+        const trade = (emp.trade || emp.role || '').toLowerCase();
+        if (!name.includes(q) && !code.includes(q) && !trade.includes(q)) return false;
+      }
+      if (salaryStatusFilter === 'due') {
+        const fin = emp.financials || {};
+        const dailyWage = Number(emp.daily_rate || emp.wage_rate || 0);
+        const pagar = Number(fin.total_pagar || (fin.has_attendance ? dailyWage : 0));
+        const upad = Number(fin.total_upad || 0);
+        const paid = Number(fin.total_paid || 0);
+        const balance = fin.balance !== undefined && fin.balance !== null
+          ? Number(fin.balance)
+          : Math.max(0, pagar - upad - paid);
+        if (balance <= 0) return false;
+      } else if (salaryStatusFilter === 'settled') {
+        const fin = emp.financials || {};
+        const dailyWage = Number(emp.daily_rate || emp.wage_rate || 0);
+        const pagar = Number(fin.total_pagar || (fin.has_attendance ? dailyWage : 0));
+        const upad = Number(fin.total_upad || 0);
+        const paid = Number(fin.total_paid || 0);
+        const balance = fin.balance !== undefined && fin.balance !== null
+          ? Number(fin.balance)
+          : Math.max(0, pagar - upad - paid);
+        if (balance > 0) return false;
+      }
+      return true;
+    });
+  }, [employees, salaryProjectFilter, salarySearch, salaryStatusFilter]);
+
+  // Paginated Employees
+  const totalSalaryPages = Math.ceil(filteredEmployees.length / salaryPageSize) || 1;
+  const paginatedEmployees = useMemo(() => {
+    const start = (salaryPage - 1) * salaryPageSize;
+    return filteredEmployees.slice(start, start + salaryPageSize);
+  }, [filteredEmployees, salaryPage, salaryPageSize]);
+
+  // Filtered Advances for Tab 3
+  const filteredAdvances = useMemo(() => {
+    return advances.filter((adv) => {
+      if (advanceProjectFilter !== 'all') {
+        const pId = adv.project || '';
+        if (String(pId) !== String(advanceProjectFilter)) return false;
+      }
+      if (advanceSearch) {
+        const q = advanceSearch.toLowerCase();
+        const name = (adv.employee_name || '').toLowerCase();
+        const code = (adv.employee_code || '').toLowerCase();
+        const reason = (adv.reason || '').toLowerCase();
+        if (!name.includes(q) && !code.includes(q) && !reason.includes(q)) return false;
+      }
+      if (advanceStatusFilter !== 'all') {
+        if ((adv.status || '').toUpperCase() !== advanceStatusFilter.toUpperCase()) return false;
+      }
+      return true;
+    });
+  }, [advances, advanceProjectFilter, advanceSearch, advanceStatusFilter]);
+
+  const totalAdvancePages = Math.ceil(filteredAdvances.length / advancePageSize) || 1;
+  const paginatedAdvances = useMemo(() => {
+    const start = (advancePage - 1) * advancePageSize;
+    return filteredAdvances.slice(start, start + advancePageSize);
+  }, [filteredAdvances, advancePage, advancePageSize]);
+
+  // Aggregate Metrics
+  const metrics = useMemo(() => {
+    let totalPagar = 0;
+    let totalUpad = 0;
+    let totalPaid = 0;
+    let totalBalance = 0;
+
+    filteredEmployees.forEach((emp) => {
+      const fin = emp.financials || {};
+      const dailyWage = Number(emp.daily_rate || emp.wage_rate || 0);
+      const hasAtt = Boolean(fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0));
+      const pagar = Number(fin.total_pagar || (hasAtt ? dailyWage : 0));
+      const upad = Number(fin.total_upad || 0);
+      const paid = Number(fin.total_paid || 0);
+      const bal = fin.balance !== undefined && fin.balance !== null
+        ? Number(fin.balance)
+        : Math.max(0, pagar - upad - paid);
+
+      totalPagar += pagar;
+      totalUpad += upad;
+      totalPaid += paid;
+      totalBalance += bal;
+    });
+
+    return {
+      activeWorkers: filteredEmployees.length,
+      totalPagar,
+      totalUpad,
+      totalPaid,
+      totalBalance,
+    };
+  }, [filteredEmployees]);
+
+  // Selected Worker in Salary Modal
+  const selectedSalaryWorker = useMemo(() => {
+    return employees.find((emp) => String(emp.id) === String(salaryForm.employee_id));
+  }, [employees, salaryForm.employee_id]);
+
+  // Modal Open Handlers
+  const openSalaryModal = (worker = null) => {
+    const target = worker || filteredEmployees[0] || employees[0];
+    const fin = target?.financials || {};
+    const dailyWage = Number(target?.daily_rate || target?.wage_rate || 0);
+    const balance = fin.balance !== undefined && fin.balance !== null
+      ? Number(fin.balance)
+      : dailyWage;
+    const amountVal = balance > 0 ? String(balance) : (dailyWage > 0 ? String(dailyWage) : '');
+
+    setSalaryForm({
+      employee_id: target ? String(target.id) : '',
+      project_id: target?.primary_project || selectedProjectId || (projects[0]?.id ? String(projects[0].id) : ''),
+      amount: amountVal,
+      date: new Date().toISOString().split('T')[0],
+      payment_mode: 'CASH',
+      notes: target ? `Full salary payout for ${target.full_name}` : 'Full salary payout',
+      status: isOrgAdmin ? 'paid' : 'pending',
+    });
+    setIsSalaryModalOpen(true);
+  };
+
+  // Salary Payout Submit Handler
+  const handleDisburseSalary = async (e) => {
+    e.preventDefault();
+    if (!salaryForm.employee_id) {
+      toast.error('Please select a worker');
+      return;
+    }
+    const worker = employees.find((emp) => String(emp.id) === String(salaryForm.employee_id));
+    const fin = worker?.financials || {};
+    const hasAttendance = Boolean(
+      fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
+    );
+    if (!hasAttendance) {
+      toast.error('Cannot pay wages to an employee without marked attendance. Attendance must be recorded first.');
+      return;
+    }
+    if (!salaryForm.amount || Number(salaryForm.amount) <= 0) {
+      toast.error('Please enter a valid salary amount');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await api.payments.create({
+        employee: Number(salaryForm.employee_id),
+        employee_id: Number(salaryForm.employee_id),
+        project: salaryForm.project_id ? Number(salaryForm.project_id) : (worker?.primary_project || null),
+        project_id: salaryForm.project_id ? Number(salaryForm.project_id) : (worker?.primary_project || null),
+        amount: Number(salaryForm.amount),
+        method: salaryForm.payment_mode.toLowerCase(),
+        payment_mode: salaryForm.payment_mode.toUpperCase(),
+        type: 'salary',
+        payment_type: 'SALARY',
+        status: isOrgAdmin ? (salaryForm.status || 'paid') : 'pending',
+        date_from: salaryForm.date,
+        date_to: salaryForm.date,
+        date: salaryForm.date,
+        description: salaryForm.notes.trim() || `Full salary payment for ${worker?.full_name || 'worker'}`,
+      });
+
+      setIsSalaryModalOpen(false);
+      toast.success(
+        isOrgAdmin
+          ? 'Salary payout recorded successfully! Reflected in ledger, payroll, and worker balance.'
+          : 'Salary payout submitted as pending! Org Admin approval required.'
+      );
+      await fetchData();
+    } catch (err) {
+      toast.error(`Error disbursing salary: ${err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Create Payroll Run
   const handleCreateRun = async (e) => {
     e.preventDefault();
+    if (!runForm.project_id) {
+      toast.error('Please select a project site');
+      return;
+    }
+    if (!runForm.period_start || !runForm.period_end) {
+      toast.error('Please specify start and end dates');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await api.payroll.createRun({
@@ -169,28 +448,41 @@ export const PayrollView = ({ selectedProjectId }) => {
         period_end: runForm.period_end,
       });
       setIsRunModalOpen(false);
-      alert('Payroll run generated! Vouchers calculated from locked attendance and open advances.');
+      toast.success('Payroll run generated! Vouchers calculated from locked attendance and active Upad advances.');
       await fetchData();
     } catch (err) {
-      alert(`Error generating payroll: ${err.message}`);
+      toast.error(`Error generating payroll: ${err.message}`);
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Approve Payroll Run
   const handleApproveRun = async (runId) => {
     if (!window.confirm('Approve payroll run? This will post gross wages to the General Ledger and lock adjustments.')) {
       return;
     }
     try {
       await api.payroll.approveRun(runId);
-      alert('Payroll run approved and posted to General Ledger!');
+      toast.success('Payroll run approved and posted to General Ledger!');
       await fetchData();
     } catch (err) {
-      alert(`Approval error: ${err.message}`);
+      toast.error(`Approval error: ${err.message}`);
     }
   };
 
+  // Recalculate Payroll Run
+  const handleRecalculateRun = async (runId) => {
+    try {
+      await api.payroll.recalculateRun(runId);
+      toast.success('Payroll run recalculated successfully!');
+      await fetchData();
+    } catch (err) {
+      toast.error(`Recalculation error: ${err.message}`);
+    }
+  };
+
+  // Delete Payroll Run
   const handleDeleteRun = async (runId) => {
     if (
       !window.confirm(
@@ -201,38 +493,78 @@ export const PayrollView = ({ selectedProjectId }) => {
     }
     try {
       await api.payroll.deleteRun(runId);
-      alert('Payroll run deleted successfully.');
+      toast.success('Payroll run deleted successfully.');
       await fetchData();
     } catch (err) {
-      alert(`Delete error: ${err.message}`);
+      toast.error(`Delete error: ${err.message}`);
     }
   };
 
+  // Mark Voucher Paid
   const handleMarkPaid = async (voucherId) => {
     const ref = prompt('Enter payment transaction reference (e.g. UPI-TXN-101):', `TXN-${Date.now()}`);
     if (!ref) return;
     try {
       await api.payroll.markVoucherPaid(voucherId, ref);
-      alert('Voucher marked as paid.');
+      toast.success('Voucher marked as paid.');
       await fetchData();
     } catch (err) {
-      alert(`Payment error: ${err.message}`);
+      toast.error(`Payment error: ${err.message}`);
     }
   };
 
+  // Create Cash Advance
+  const handleCreateAdvance = async (e) => {
+    e.preventDefault();
+    if (!advanceForm.employee) {
+      toast.error('Please select an employee');
+      return;
+    }
+    if (!advanceForm.amount || Number(advanceForm.amount) <= 0) {
+      toast.error('Please enter a valid advance amount');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await api.payroll.createAdvance({
+        ...advanceForm,
+        project: advanceForm.project ? Number(advanceForm.project) : null,
+        employee: Number(advanceForm.employee),
+      });
+      setIsAdvanceModalOpen(false);
+      setAdvanceForm({
+        project: selectedProjectId || '',
+        employee: '',
+        amount: '',
+        advance_date: new Date().toISOString().split('T')[0],
+        reason: '',
+        payment_mode: 'CASH',
+      });
+      toast.success('Worker advance recorded and posted to Asset account 1100.');
+      await fetchData();
+    } catch (err) {
+      toast.error(`Error recording advance: ${err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Delete Cash Advance
   const handleDeleteAdvance = async (advanceId) => {
     if (!window.confirm('Are you sure you want to delete this advance? Any linked Upad payment will also be deleted.')) {
       return;
     }
     try {
       await api.payroll.deleteAdvance(advanceId);
-      alert('Advance deleted successfully');
-      await loadAdvances();
+      toast.success('Advance deleted successfully');
+      await fetchData();
     } catch (err) {
-      alert(`Could not delete advance: ${err.message}`);
+      toast.error(`Could not delete advance: ${err.message}`);
     }
   };
 
+  // Download PDF Payslip
   const handleDownloadPayslip = async (voucherId, voucherNum) => {
     try {
       const blob = await api.payroll.downloadVoucherPdf(voucherId);
@@ -244,324 +576,443 @@ export const PayrollView = ({ selectedProjectId }) => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      toast.success('Payslip downloaded successfully');
     } catch (err) {
-      alert(`Could not download payslip: ${err.message}`);
+      toast.error(`Could not download payslip: ${err.message}`);
     }
   };
 
-  const handleCreateAdvance = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      await api.payroll.createAdvance({
-        ...advanceForm,
-        project: Number(advanceForm.project),
-        employee: Number(advanceForm.employee),
-      });
-      setIsAdvanceModalOpen(false);
-      setAdvanceForm({
-        project: '',
-        employee: '',
-        amount: '',
-        advance_date: new Date().toISOString().split('T')[0],
-        reason: '',
-        payment_mode: 'CASH',
-      });
-      alert('Worker advance recorded and posted to Asset account 1100.');
-      await fetchData();
-    } catch (err) {
-      alert(`Error recording advance: ${err.message}`);
-    } finally {
-      setSubmitting(false);
+  // Export Salary Records to CSV
+  const handleExportSalariesCSV = () => {
+    if (filteredEmployees.length === 0) {
+      toast.error('No salary records to export');
+      return;
     }
-  };
+    const headers = [
+      'SR_NO,EMPLOYEE_NAME,EMPLOYEE_CODE,TRADE_OR_ROLE,PROJECT,ATTENDANCE_STATUS,DAILY_RATE,TOTAL_PAGAR_EARNED,UPAD_ADVANCE_DEDUCTED,TOTAL_PAID,NET_SALARY_DUE',
+    ];
+    const rows = filteredEmployees.map((emp, idx) => {
+      const fin = emp.financials || {};
+      const dailyWage = Number(emp.daily_rate || emp.wage_rate || 0);
+      const pagar = Number(fin.total_pagar || (fin.has_attendance ? dailyWage : 0));
+      const upad = Number(fin.total_upad || 0);
+      const paid = Number(fin.total_paid || 0);
+      const balance = fin.balance !== undefined && fin.balance !== null
+        ? Number(fin.balance)
+        : Math.max(0, pagar - upad - paid);
+      const projName = emp.primary_project_name || (projects.find((p) => p.id === emp.primary_project)?.name) || 'All Sites';
+      const attText = fin.has_attendance ? `${fin.attendance_days || 'Marked'} Days` : 'No Attendance';
 
-  const openSalaryModal = (worker = null) => {
-    const targetWorker = worker || employees[0];
-    const fin = targetWorker?.financials || {};
-    const dailyWage = Number(targetWorker?.daily_rate || targetWorker?.wage_rate || 0);
-    const balance = fin.balance !== undefined && fin.balance !== null
-      ? Number(fin.balance)
-      : dailyWage;
-    const amountVal = balance > 0 ? String(balance) : (dailyWage > 0 ? String(dailyWage) : '');
-
-    setSalaryForm({
-      employee_id: targetWorker ? String(targetWorker.id) : '',
-      project_id: targetWorker?.primary_project || selectedProjectId || (projects[0]?.id ? String(projects[0].id) : ''),
-      amount: amountVal,
-      date: new Date().toISOString().split('T')[0],
-      payment_mode: 'CASH',
-      notes: targetWorker ? `Full salary payout for ${targetWorker.full_name}` : 'Full salary payout',
-      status: isOrgAdmin ? 'paid' : 'pending',
+      return [
+        idx + 1,
+        `"${(emp.full_name || '').replace(/"/g, '""')}"`,
+        `"${emp.employee_code || ''}"`,
+        `"${emp.trade || emp.role || 'Worker'}"`,
+        `"${projName.replace(/"/g, '""')}"`,
+        `"${attText}"`,
+        dailyWage,
+        pagar,
+        upad,
+        paid,
+        balance,
+      ].join(',');
     });
-    setIsSalaryModalOpen(true);
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Salary_Ledger_${todayStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Salary records exported to CSV!');
   };
 
-  const handleDisburseSalary = async (e) => {
-    e.preventDefault();
-    if (!salaryForm.employee_id) {
-      alert('Please select a worker');
+  // Export Advances to CSV
+  const handleExportAdvancesCSV = () => {
+    if (filteredAdvances.length === 0) {
+      toast.error('No advance records to export');
       return;
     }
-    const worker = employees.find((emp) => String(emp.id) === String(salaryForm.employee_id));
-    const fin = worker?.financials || {};
-    const hasAttendance = Boolean(
-      fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
-    );
-    if (!hasAttendance) {
-      alert('Cannot pay wages to an employee without marked attendance. Attendance must be recorded first.');
-      return;
-    }
-    if (!salaryForm.amount || Number(salaryForm.amount) <= 0) {
-      alert('Please enter a valid salary amount');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      await api.payments.create({
-        employee: Number(salaryForm.employee_id),
-        project: salaryForm.project_id ? Number(salaryForm.project_id) : null,
-        amount: Number(salaryForm.amount),
-        method: salaryForm.payment_mode.toLowerCase(),
-        type: 'salary',
-        status: isOrgAdmin ? (salaryForm.status || 'paid') : 'pending',
-        date_from: salaryForm.date,
-        date_to: salaryForm.date,
-        description: salaryForm.notes.trim() || `Full salary payment for ${worker?.full_name || 'worker'}`,
-      });
-
-      setIsSalaryModalOpen(false);
-      alert(
-        isOrgAdmin
-          ? 'Salary payout recorded successfully! Reflected in ledger, payroll vouchers, attendance settlement, and worker balance.'
-          : 'Salary payout submitted as pending! Org Admin approval required before release.'
-      );
-      await fetchData();
-    } catch (err) {
-      alert(`Error disbursing salary: ${err.message}`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const selectedSalaryWorker = useMemo(() => {
-    return employees.find((emp) => String(emp.id) === String(salaryForm.employee_id));
-  }, [employees, salaryForm.employee_id]);
-
-  const filteredEmployees = useMemo(() => {
-    return employees.filter((emp) => {
-      if (salaryProjectFilter !== 'all') {
-        const pId = emp.primary_project || '';
-        if (String(pId) !== String(salaryProjectFilter)) return false;
-      }
-      if (salarySearch) {
-        const q = salarySearch.toLowerCase();
-        const name = (emp.full_name || '').toLowerCase();
-        const code = (emp.employee_code || '').toLowerCase();
-        const trade = (emp.trade || '').toLowerCase();
-        if (!name.includes(q) && !code.includes(q) && !trade.includes(q)) return false;
-      }
-      return true;
+    const headers = ['SR_NO,DATE,EMPLOYEE,PROJECT,AMOUNT,PAYMENT_MODE,REASON,STATUS'];
+    const rows = filteredAdvances.map((adv, idx) => {
+      return [
+        idx + 1,
+        adv.advance_date,
+        `"${(adv.employee_name || `Worker #${adv.employee}`).replace(/"/g, '""')}"`,
+        `"${(adv.project_name || 'General Site').replace(/"/g, '""')}"`,
+        adv.amount,
+        adv.payment_mode,
+        `"${(adv.reason || 'Cash Advance').replace(/"/g, '""')}"`,
+        adv.status,
+      ].join(',');
     });
-  }, [employees, salaryProjectFilter, salarySearch]);
-
-  const formatCurrency = (val) => {
-    const num = Number(val || 0);
-    return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Worker_Advances_${todayStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Advance records exported to CSV!');
   };
 
-  const canApprove =
-    role === 'ORG_ADMIN' ||
-    role === 'PROJECT_MANAGER' ||
-    role === 'SITE_MANAGER';
-
+  // Access restriction guard
   if (!['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'employee/labour', 'EMPLOYEE', 'LABOUR'].includes(role)) {
     return (
-      <div className="card" style={{ maxWidth: '640px', margin: '48px auto', padding: '48px 32px', textAlign: 'center' }}>
+      <div className="max-w-xl mx-auto my-16 p-8 text-center rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
         <ShieldAlert className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '8px' }}>Payroll Access Restricted</h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' }}>
-          Payroll generation and salary voucher management are restricted to Organization Admins, Project Managers, and Financial Accountants.
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Payroll Access Restricted</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Payroll generation and salary voucher management are restricted to Organization Admins, Site Managers, Project Managers, and registered Employees.
         </p>
       </div>
     );
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+    <div className="space-y-6">
+      {/* ========================================================================= */}
+      {/* 1. TOP HEADER & QUICK ACTION BAR                                          */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 style={{ fontSize: '1.6rem', fontWeight: 700, marginBottom: '4px' }}>
-            Payroll Engine & Worker Advances
-          </h2>
-          <p style={{ color: 'var(--text-subtle)', fontSize: '0.88rem' }}>
-            Weekly wage calculation, FIFO advance deductions, payslips, and journal postings.
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+              {isEmployeeLabour ? 'My Salary & Payslips' : 'Payroll & Wage Management'}
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+              {isEmployeeLabour ? 'Employee Portal' : role === 'ORG_ADMIN' ? 'Org Admin' : 'Site Manager'}
+            </span>
+          </div>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            {isEmployeeLabour
+              ? 'Review your accrued daily wages, cash advances (Upad), disbursements, and official payslips.'
+              : 'Biometric wage calculation, cash advance (Upad) deductions, and official payslip disbursements.'}
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
-          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
-            <button
-              onClick={() => openSalaryModal()}
-              className="btn btn-primary"
-              style={{
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                borderColor: '#059669',
-                color: '#ffffff',
-                fontWeight: 700,
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <Wallet size={16} />
-              <span>Pay Full Salary</span>
-            </button>
-          )}
-          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
-            <button onClick={() => setIsAdvanceModalOpen(true)} className="btn btn-secondary">
-              <IndianRupee size={16} />
-              <span>Record Advance</span>
-            </button>
-          )}
-          {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
-            <button onClick={() => setIsRunModalOpen(true)} className="btn btn-secondary">
-              <Plus size={16} />
-              <span>Calculate Weekly Payroll</span>
-            </button>
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* CSV Export Button */}
+          <button
+            onClick={activeTab === 'advances' ? handleExportAdvancesCSV : handleExportSalariesCSV}
+            className="px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-sm"
+            title="Export Records to CSV"
+          >
+            <FileDown size={15} />
+            <span>Export CSV</span>
+          </button>
+
+          {/* Manager Actions */}
+          {canManagePayroll && !isEmployeeLabour && (
+            <>
+              <button
+                onClick={() => setIsAdvanceModalOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 font-bold text-xs flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-sm"
+              >
+                <IndianRupee size={15} className="text-amber-500" />
+                <span>Record Advance</span>
+              </button>
+
+              <button
+                onClick={() => setIsRunModalOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                <Plus size={15} />
+                <span>Calculate Weekly Run</span>
+              </button>
+
+              <button
+                onClick={() => openSalaryModal()}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95"
+              >
+                <Wallet size={15} />
+                <span>Pay Full Salary</span>
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '12px' }}>
+      {/* ========================================================================= */}
+      {/* 2. EXECUTIVE METRIC SUMMARY CARDS                                         */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Workers / Payees */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <Users size={22} />
+          </div>
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              {isEmployeeLabour ? 'Assigned Trade' : 'Active Workers'}
+            </div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">
+              {isEmployeeLabour
+                ? employees[0]?.trade || employees[0]?.role || 'Worker'
+                : metrics.activeWorkers}
+            </div>
+            <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              {isEmployeeLabour ? `Code: ${employees[0]?.employee_code || 'EMP-1'}` : 'Across project sites'}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Total Earned / Accrued Pagar */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+            <Banknote size={22} />
+          </div>
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              {isEmployeeLabour ? 'Total Earned (Pagar)' : 'Total Accrued Pagar'}
+            </div>
+            <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+              {formatCurrency(metrics.totalPagar)}
+            </div>
+            <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              Computed from attendance
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Cash Advances Deducted (Upad) */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+            <IndianRupee size={22} />
+          </div>
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Advances Deducted (Upad)
+            </div>
+            <div className="text-2xl font-black text-rose-500 mt-0.5">
+              -{formatCurrency(metrics.totalUpad)}
+            </div>
+            <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              Upad cash disbursed
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Net Outstanding Salary */}
+        <div className="p-5 rounded-2xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/30 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <Wallet size={22} />
+          </div>
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+              {isEmployeeLabour ? 'Net Balance Due' : 'Net Salary Payable'}
+            </div>
+            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+              {formatCurrency(metrics.totalBalance)}
+            </div>
+            <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              Direct settlement balance
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. NAVIGATION TABS                                                        */}
+      {/* ========================================================================= */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800 gap-6">
         <button
           onClick={() => setActiveTab('salaries')}
-          className={`btn btn-sm ${activeTab === 'salaries' ? 'btn-primary' : 'btn-secondary'}`}
+          className={cn(
+            'pb-3 text-xs sm:text-sm font-black transition-all flex items-center gap-2 relative cursor-pointer',
+            activeTab === 'salaries'
+              ? 'text-blue-600 dark:text-blue-400'
+              : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+          )}
         >
-          Worker Salaries & Full Payments ({employees.length})
+          <Wallet size={16} />
+          <span>{isEmployeeLabour ? 'My Salary & Ledger' : 'Worker Salaries & Payouts'}</span>
+          <span
+            className={cn(
+              'px-2 py-0.5 rounded-full text-[10px] font-bold',
+              activeTab === 'salaries'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+            )}
+          >
+            {filteredEmployees.length}
+          </span>
+          {activeTab === 'salaries' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full" />
+          )}
         </button>
+
         <button
           onClick={() => setActiveTab('runs')}
-          className={`btn btn-sm ${activeTab === 'runs' ? 'btn-primary' : 'btn-secondary'}`}
+          className={cn(
+            'pb-3 text-xs sm:text-sm font-black transition-all flex items-center gap-2 relative cursor-pointer',
+            activeTab === 'runs'
+              ? 'text-blue-600 dark:text-blue-400'
+              : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+          )}
         >
-          Payroll Runs ({runs.length})
+          <Layers size={16} />
+          <span>Payroll Runs & Cycles</span>
+          <span
+            className={cn(
+              'px-2 py-0.5 rounded-full text-[10px] font-bold',
+              activeTab === 'runs'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+            )}
+          >
+            {runs.length}
+          </span>
+          {activeTab === 'runs' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full" />
+          )}
         </button>
+
         <button
           onClick={() => setActiveTab('advances')}
-          className={`btn btn-sm ${activeTab === 'advances' ? 'btn-primary' : 'btn-secondary'}`}
+          className={cn(
+            'pb-3 text-xs sm:text-sm font-black transition-all flex items-center gap-2 relative cursor-pointer',
+            activeTab === 'advances'
+              ? 'text-blue-600 dark:text-blue-400'
+              : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+          )}
         >
-          Worker Advances ({advances.length})
+          <IndianRupee size={16} />
+          <span>Cash Advances (Upad)</span>
+          <span
+            className={cn(
+              'px-2 py-0.5 rounded-full text-[10px] font-bold',
+              activeTab === 'advances'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+            )}
+          >
+            {advances.length}
+          </span>
+          {activeTab === 'advances' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full" />
+          )}
         </button>
       </div>
 
-      {/* 1. Salaries Tab */}
+      {/* ========================================================================= */}
+      {/* 4. TAB 1: WORKER SALARIES & FULL PAYMENTS                                 */}
+      {/* ========================================================================= */}
       {activeTab === 'salaries' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Summary Stat Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
-            <div className="card" style={{ padding: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-subtle)' }}>
-                Active Workers
+        <div className="space-y-6">
+          {/* Filter Bar */}
+          <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              {/* Search */}
+              <div className="relative min-w-[240px] sm:min-w-[280px]">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search worker by name, trade, code..."
+                  value={salarySearch}
+                  onChange={(e) => {
+                    setSalarySearch(e.target.value);
+                    setSalaryPage(1);
+                  }}
+                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
+                />
+                {salarySearch && (
+                  <button
+                    onClick={() => setSalarySearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--text-main)', marginTop: '4px' }}>
-                {filteredEmployees.length}
-              </div>
-              <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginTop: '2px' }}>
-                Across project sites
-              </div>
-            </div>
 
-            <div className="card" style={{ padding: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-subtle)' }}>
-                Total Accrued Pagar
-              </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#3b82f6', marginTop: '4px' }}>
-                {formatCurrency(filteredEmployees.reduce((acc, e) => acc + Number(e.financials?.total_pagar || e.daily_rate || 0), 0))}
-              </div>
-              <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginTop: '2px' }}>
-                From attendance & vouchers
-              </div>
-            </div>
-
-            <div className="card" style={{ padding: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-subtle)' }}>
-                Advances Deducted
-              </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#f87171', marginTop: '4px' }}>
-                {formatCurrency(filteredEmployees.reduce((acc, e) => acc + Number(e.financials?.total_upad || 0), 0))}
-              </div>
-              <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginTop: '2px' }}>
-                Upad cash given
-              </div>
-            </div>
-
-            <div className="card" style={{ padding: '16px', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#10b981' }}>
-                Net Outstanding Salary
-              </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#10b981', marginTop: '4px' }}>
-                {formatCurrency(filteredEmployees.reduce((acc, e) => acc + Number(e.financials?.balance || 0), 0))}
-              </div>
-              <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginTop: '2px' }}>
-                Payable directly to workers
-              </div>
-            </div>
-          </div>
-
-          {/* Search & Project Filter Bar */}
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: '10px', flex: 1, minWidth: '280px' }}>
-              <input
-                type="text"
-                placeholder="Search worker by name, trade, code..."
-                className="form-control"
-                value={salarySearch}
-                onChange={(e) => setSalarySearch(e.target.value)}
-                style={{ maxWidth: '360px' }}
-              />
+              {/* Project Filter */}
               <select
-                className="form-control"
                 value={salaryProjectFilter}
-                onChange={(e) => setSalaryProjectFilter(e.target.value)}
-                style={{ maxWidth: '240px' }}
+                onChange={(e) => {
+                  setSalaryProjectFilter(e.target.value);
+                  setSalaryPage(1);
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
               >
-                <option value="all">All Projects</option>
+                <option value="all">All Project Sites</option>
                 {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
               </select>
+
+              {/* Status Filter */}
+              <select
+                value={salaryStatusFilter}
+                onChange={(e) => {
+                  setSalaryStatusFilter(e.target.value);
+                  setSalaryPage(1);
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
+              >
+                <option value="all">All Balances</option>
+                <option value="due">Salary Due Only</option>
+                <option value="settled">Fully Settled</option>
+              </select>
+            </div>
+
+            <div className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              Showing <span className="text-slate-900 dark:text-white">{filteredEmployees.length}</span> workers
             </div>
           </div>
 
-          {/* Worker Salaries & Full Payout Table */}
-          <div className="card card-table">
-            <div className="table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Worker</th>
-                    <th>Site Project</th>
-                    <th style={{ textAlign: 'center' }}>Attendance Units</th>
-                    <th style={{ textAlign: 'right' }}>Daily Rate</th>
-                    <th style={{ textAlign: 'right' }}>Total Earned (Pagar)</th>
-                    <th style={{ textAlign: 'right' }}>Advance Taken</th>
-                    <th style={{ textAlign: 'right' }}>Total Paid</th>
-                    <th style={{ textAlign: 'right', width: '150px' }}>Net Salary Due</th>
-                    <th style={{ textAlign: 'center', width: '160px' }}>Salary Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredEmployees.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                        No employees found matching filter criteria.
-                      </td>
+          {/* Master Table: Worker Salary Ledger */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+            {/* Top Table Header Banner */}
+            <div className="py-3 px-6 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wallet size={16} className="text-blue-600 dark:text-blue-400" />
+                <span className="font-black text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  Worker Salary Ledger & Settlements
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Sorted by outstanding salary
+              </span>
+            </div>
+
+            {loading ? (
+              <div className="p-16 text-center text-xs text-slate-400 font-semibold flex flex-col items-center gap-2">
+                <RefreshCw size={24} className="animate-spin text-blue-500" />
+                <span>Loading payroll & wage ledger...</span>
+              </div>
+            ) : filteredEmployees.length === 0 ? (
+              <div className="p-16 text-center text-xs text-slate-400 font-semibold">
+                No worker salary records found matching current filters.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/40 text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      <th className="py-3.5 px-5 font-black">Worker Details</th>
+                      <th className="py-3.5 px-5 font-black">Project Site</th>
+                      <th className="py-3.5 px-5 text-center font-black">Attendance Log</th>
+                      <th className="py-3.5 px-5 text-right font-black">Daily Wage</th>
+                      <th className="py-3.5 px-5 text-right font-black">Total Earned</th>
+                      <th className="py-3.5 px-5 text-right font-black">Upad Advance</th>
+                      <th className="py-3.5 px-5 text-right font-black">Total Paid</th>
+                      <th className="py-3.5 px-5 text-right font-black">Net Salary Due</th>
+                      <th className="py-3.5 px-5 text-center font-black">Actions</th>
                     </tr>
-                  ) : (
-                    filteredEmployees.map((emp) => {
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {paginatedEmployees.map((emp) => {
                       const fin = emp.financials || {};
                       const dailyWage = Number(emp.daily_rate || emp.wage_rate || 0);
                       const hasAttendance = Boolean(
@@ -574,482 +1025,736 @@ export const PayrollView = ({ selectedProjectId }) => {
                         ? Number(fin.balance)
                         : Math.max(0, pagar - upad - paid);
 
+                      const projName = emp.primary_project_name || (projects.find((p) => p.id === emp.primary_project)?.name) || 'All Sites';
+                      const initial = (emp.full_name || 'W').charAt(0).toUpperCase();
+
                       return (
-                        <tr key={emp.id}>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.8rem' }}>
-                                {(emp.full_name || 'W').charAt(0).toUpperCase()}
+                        <tr
+                          key={emp.id}
+                          className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
+                        >
+                          {/* Worker Details */}
+                          <td className="py-3.5 px-5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-xs shrink-0">
+                                {initial}
                               </div>
                               <div>
-                                <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{emp.full_name}</div>
-                                <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>
-                                  {emp.role || emp.trade || 'Worker'} • {emp.employee_code || `EMP-${emp.id}`}
+                                <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                  <span>{emp.full_name}</span>
+                                  {emp.employee_code && (
+                                    <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                                      {emp.employee_code}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                  <span>{emp.trade || emp.role || 'Worker'}</span>
+                                  {emp.phone && (
+                                    <>
+                                      <span>•</span>
+                                      <span>{emp.phone}</span>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </div>
                           </td>
-                          <td>
-                            <div style={{ fontWeight: 500, fontSize: '0.84rem' }}>
-                              {emp.primary_project_name || (projects.find((p) => p.id === emp.primary_project)?.name) || 'All Sites'}
-                            </div>
+
+                          {/* Project Site */}
+                          <td className="py-3.5 px-5 font-semibold text-slate-700 dark:text-slate-300">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                              {projName}
+                            </span>
                           </td>
-                          <td style={{ textAlign: 'center' }}>
+
+                          {/* Attendance Units */}
+                          <td className="py-3.5 px-5 text-center">
                             {hasAttendance ? (
-                              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                                {fin.attendance_days ? `${fin.attendance_days} Days` : 'Marked Present'}
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                {fin.attendance_days ? `${fin.attendance_days} Days Marked` : 'Marked Present'}
                               </span>
                             ) : (
-                              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No attendance</span>
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                                No Attendance
+                              </span>
                             )}
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-heading)' }}>
-                            ₹{dailyWage.toFixed(2)}
+
+                          {/* Daily Rate */}
+                          <td className="py-3.5 px-5 text-right font-mono font-semibold text-slate-700 dark:text-slate-300">
+                            ₹{dailyWage.toFixed(0)}/d
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: '#3b82f6', fontFamily: 'var(--font-heading)' }}>
+
+                          {/* Total Earned (Pagar) */}
+                          <td className="py-3.5 px-5 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
                             {formatCurrency(pagar)}
                           </td>
-                          <td style={{ textAlign: 'right' }}>
+
+                          {/* Upad Advance Taken */}
+                          <td className="py-3.5 px-5 text-right font-mono font-bold">
                             {upad > 0 ? (
-                              <span style={{ fontWeight: 700, color: '#ef4444', fontFamily: 'var(--font-heading)' }}>
-                                -{formatCurrency(upad)}
-                              </span>
+                              <span className="text-rose-500">-{formatCurrency(upad)}</span>
                             ) : (
-                              <span style={{ fontSize: '0.75rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                                ₹0 (No Advance)
-                              </span>
+                              <span className="text-slate-400 font-normal">₹0</span>
                             )}
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--text-subtle)', fontFamily: 'var(--font-heading)' }}>
+
+                          {/* Total Paid */}
+                          <td className="py-3.5 px-5 text-right font-mono font-semibold text-slate-500 dark:text-slate-400">
                             {formatCurrency(paid)}
                           </td>
-                          <td style={{ textAlign: 'right' }}>
+
+                          {/* Net Balance Due */}
+                          <td className="py-3.5 px-5 text-right font-mono font-black">
                             {balance > 0 ? (
-                              <span style={{ fontWeight: 800, color: '#10b981', fontSize: '1.05rem', fontFamily: 'var(--font-heading)' }}>
+                              <span className="text-emerald-600 dark:text-emerald-400 text-sm">
                                 {formatCurrency(balance)}
                               </span>
                             ) : (
-                              <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.88rem' }}>₹0.00</span>
+                              <span className="text-slate-400 font-semibold">₹0</span>
                             )}
                           </td>
-                          <td style={{ textAlign: 'center' }}>
+
+                          {/* Action Button */}
+                          <td className="py-3.5 px-5 text-center">
                             {!isEmployeeLabour ? (
                               balance > 0 ? (
                                 <button
                                   onClick={() => openSalaryModal(emp)}
-                                  className="btn btn-sm btn-primary"
-                                  style={{
-                                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                    borderColor: '#059669',
-                                    color: '#fff',
-                                    fontWeight: 700,
-                                    fontSize: '0.75rem',
-                                    padding: '5px 12px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '5px',
-                                    boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
-                                  }}
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] inline-flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
+                                  title="Disburse full/partial salary to worker"
                                 >
-                                  <Wallet size={13} />
-                                  <span>Pay Full Salary</span>
+                                  <Wallet size={12} />
+                                  <span>Pay Salary</span>
                                 </button>
                               ) : (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#10b981', fontSize: '0.78rem', fontWeight: 700 }}>
-                                  <CheckCircle2 size={14} />
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                  <CheckCircle2 size={13} />
                                   <span>Fully Settled</span>
                                 </span>
                               )
                             ) : (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+                              <span
+                                className={cn(
+                                  'px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider',
+                                  balance > 0
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                )}
+                              >
                                 {balance > 0 ? 'Salary Due' : 'Paid'}
                               </span>
                             )}
                           </td>
                         </tr>
                       );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    })}
+                  </tbody>
+
+                  {/* Summary Totals Footer */}
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/60 font-black text-slate-900 dark:text-white">
+                      <td colSpan={4} className="py-3 px-5 text-right uppercase tracking-wider text-[10px] text-slate-500">
+                        Page & Filter Totals:
+                      </td>
+                      <td className="py-3 px-5 text-right font-mono text-indigo-600 dark:text-indigo-400">
+                        {formatCurrency(metrics.totalPagar)}
+                      </td>
+                      <td className="py-3 px-5 text-right font-mono text-rose-500">
+                        -{formatCurrency(metrics.totalUpad)}
+                      </td>
+                      <td className="py-3 px-5 text-right font-mono text-slate-500 dark:text-slate-400">
+                        {formatCurrency(metrics.totalPaid)}
+                      </td>
+                      <td className="py-3 px-5 text-right font-mono text-emerald-600 dark:text-emerald-400 text-sm">
+                        {formatCurrency(metrics.totalBalance)}
+                      </td>
+                      <td className="py-3 px-5"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalSalaryPages > 1 && (
+              <div className="py-3 px-6 bg-slate-50/50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                  Page {salaryPage} of {totalSalaryPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={salaryPage <= 1}
+                    onClick={() => setSalaryPage((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    disabled={salaryPage >= totalSalaryPages}
+                    onClick={() => setSalaryPage((p) => Math.min(totalSalaryPages, p + 1))}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Itemized Salary Disbursements List */}
+          {/* Direct Salary Disbursements History Table */}
           {salaryDisbursements.length > 0 && (
-            <div style={{ marginTop: '8px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '10px', color: 'var(--text-main)' }}>
-                Recent Direct Salary Disbursements ({salaryDisbursements.length})
-              </h3>
-              <div className="card card-table">
-                <div className="table-container">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '120px' }}>Date</th>
-                        <th>Worker</th>
-                        <th>Site Project</th>
-                        <th style={{ textAlign: 'right', width: '130px' }}>Amount Disbursed</th>
-                        <th style={{ textAlign: 'center', width: '120px' }}>Method</th>
-                        <th style={{ textAlign: 'center', width: '120px' }}>Status</th>
-                        <th>Reference / Notes</th>
-                        <th style={{ textAlign: 'center', width: '100px' }}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {salaryDisbursements.map((sal) => (
-                        <tr key={sal.id}>
-                          <td>
-                            <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>
-                              {sal.date_from || (sal.created_at ? sal.created_at.split('T')[0] : '—')}
-                            </div>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+              <div className="py-3 px-6 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Banknote size={16} className="text-emerald-600 dark:text-emerald-400" />
+                  <span className="font-black text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Recent Direct Salary Disbursements ({salaryDisbursements.length})
+                  </span>
+                </div>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                  Recorded salary payment transactions
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/40 text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      <th className="py-3.5 px-5 font-black">Date</th>
+                      <th className="py-3.5 px-5 font-black">Worker</th>
+                      <th className="py-3.5 px-5 font-black">Project</th>
+                      <th className="py-3.5 px-5 text-right font-black">Amount</th>
+                      <th className="py-3.5 px-5 text-center font-black">Mode</th>
+                      <th className="py-3.5 px-5 text-center font-black">Status</th>
+                      <th className="py-3.5 px-5 font-black">Reference / Notes</th>
+                      <th className="py-3.5 px-5 text-center font-black">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {salaryDisbursements.slice(0, 10).map((sal) => {
+                      const rawDate = sal.date_from || sal.date || (sal.created_at ? sal.created_at.split('T')[0] : '');
+                      const formattedDate = formatDateDMY(rawDate);
+
+                      return (
+                        <tr key={sal.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                          <td className="py-3 px-5 font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                            {formattedDate}
                           </td>
-                          <td>
-                            <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{sal.employee_name || `Worker #${sal.employee}`}</div>
+                          <td className="py-3 px-5">
+                            <span className="font-bold text-slate-900 dark:text-white">
+                              {sal.employee_name || `Worker #${sal.employee}`}
+                            </span>
                             {sal.employee_trade && (
-                              <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{sal.employee_trade}</div>
+                              <div className="text-[10px] text-slate-400">{sal.employee_trade}</div>
                             )}
                           </td>
-                          <td>
-                            <div style={{ fontSize: '0.84rem' }}>{sal.project_name || 'All Sites'}</div>
+                          <td className="py-3 px-5 font-semibold text-slate-700 dark:text-slate-300">
+                            {sal.project_name || 'All Sites'}
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'var(--font-heading)', color: '#10b981', fontSize: '0.95rem' }}>
+                          <td className="py-3 px-5 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(sal.amount)}
                           </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <Badge status={sal.method}>{sal.method?.toUpperCase() || 'CASH'}</Badge>
+                          <td className="py-3 px-5 text-center">
+                            <span className="px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                              {(sal.method || 'CASH').toUpperCase()}
+                            </span>
                           </td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td className="py-3 px-5 text-center">
                             <Badge status={sal.status}>{sal.status?.toUpperCase() || 'PAID'}</Badge>
                           </td>
-                          <td style={{ fontSize: '0.8rem', color: 'var(--text-subtle)', maxWidth: '200px' }}>
+                          <td className="py-3 px-5 text-slate-500 dark:text-slate-400 text-[11px] max-w-xs truncate">
                             {sal.description || 'Full salary payment'}
                           </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700 }}>
-                              ✓ Disbursed
+                          <td className="py-3 px-5 text-center">
+                            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1">
+                              <CheckCircle2 size={13} />
+                              <span>Disbursed</span>
                             </span>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* 2. Payroll Runs Tab */}
+      {/* ========================================================================= */}
+      {/* 5. TAB 2: PAYROLL RUNS & ITEMIZED VOUCHERS                                 */}
+      {/* ========================================================================= */}
       {activeTab === 'runs' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="space-y-6">
           {loading ? (
-            <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
-              Loading payroll engine...
+            <div className="p-16 text-center text-xs text-slate-400 font-semibold flex flex-col items-center gap-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <RefreshCw size={24} className="animate-spin text-blue-500" />
+              <span>Loading payroll calculation cycles...</span>
             </div>
           ) : runs.length === 0 ? (
-            <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-              <Wallet size={36} color="var(--text-subtle)" style={{ margin: '0 auto 12px' }} />
-              <h3>No Payroll Runs Generated Yet</h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '4px' }}>
-                Click "Calculate Weekly Payroll" to run attendance calculations for a project.
+            <div className="p-16 text-center rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+              <div className="w-14 h-14 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center mx-auto mb-3">
+                <Layers size={28} />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">No Payroll Runs Generated Yet</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+                {isEmployeeLabour
+                  ? 'No weekly payroll vouchers found for your account yet.'
+                  : 'Click "Calculate Weekly Run" above to compute attendance wages and advance deductions for a site project.'}
               </p>
+              {canManagePayroll && !isEmployeeLabour && (
+                <button
+                  onClick={() => setIsRunModalOpen(true)}
+                  className="mt-4 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs inline-flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+                >
+                  <Plus size={15} />
+                  <span>Calculate Weekly Run</span>
+                </button>
+              )}
             </div>
           ) : (
-            runs.map((r) => {
-              const isExpanded = expandedRunId === r.id;
-              const vouchers = r.vouchers || [];
+            <div className="space-y-4">
+              {runs.map((r) => {
+                const isExpanded = expandedRunId === r.id;
+                const vouchers = r.vouchers || [];
+                const grossTotal = Number(r.total_gross) > 0 ? Number(r.total_gross) : vouchers.reduce((acc, v) => acc + Number(v.gross_pay || 0), 0);
+                const advanceTotal = Number(r.total_advances ?? r.total_advances_deducted) > 0
+                  ? Number(r.total_advances ?? r.total_advances_deducted)
+                  : vouchers.reduce((acc, v) => acc + Number(v.advances_deducted || 0), 0);
+                const netTotal = Number(r.total_net) > 0 ? Number(r.total_net) : vouchers.reduce((acc, v) => acc + Number(v.net_pay || 0), 0);
 
-              return (
-                <div key={r.id} className="card" style={{ padding: '20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <button
-                        onClick={() => setExpandedRunId(isExpanded ? null : r.id)}
-                        className="btn btn-secondary btn-sm"
-                        style={{ padding: '6px' }}
-                      >
-                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                      </button>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                            Period: {r.period_start} → {r.period_end}
-                          </h3>
-                          <Badge status={r.status}>{r.status}</Badge>
+                return (
+                  <div
+                    key={r.id}
+                    className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden transition-all"
+                  >
+                    {/* Header Summary Row */}
+                    <div className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+                      {/* Left: Expand Chevron & Run Details */}
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setExpandedRunId(isExpanded ? null : r.id)}
+                          className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
+                          title={isExpanded ? 'Collapse vouchers' : 'Expand vouchers'}
+                        >
+                          {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </button>
+
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-slate-900 dark:text-white text-sm sm:text-base flex items-center gap-1.5">
+                              <Calendar size={15} className="text-blue-500" />
+                              <span>{formatDateDMY(r.period_start)} → {formatDateDMY(r.period_end)}</span>
+                            </span>
+                            <Badge status={r.status}>{r.status}</Badge>
+                          </div>
+                          <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
+                            <span>Project: <strong className="text-slate-700 dark:text-slate-300">{r.project_name || `Site #${r.project}`}</strong></span>
+                            <span>•</span>
+                            <span>Vouchers: <strong className="text-slate-700 dark:text-slate-300">{vouchers.length}</strong></span>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-subtle)', marginTop: '2px' }}>
-                          Project: {r.project_name || `Site #${r.project}`} • Vouchers: {vouchers.length}
+                      </div>
+
+                      {/* Right: Metrics & Actions */}
+                      <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+                        {/* Gross */}
+                        <div className="text-right">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Gross</div>
+                          <div className="font-mono font-bold text-slate-900 dark:text-white text-sm sm:text-base">
+                            {formatCurrency(grossTotal)}
+                          </div>
                         </div>
+
+                        {/* Advances Deducted */}
+                        <div className="text-right">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Advances</div>
+                          <div className="font-mono font-bold text-rose-500 text-sm sm:text-base">
+                            -{formatCurrency(advanceTotal)}
+                          </div>
+                        </div>
+
+                        {/* Net Disbursed */}
+                        <div className="text-right">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Net Payable</div>
+                          <div className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm sm:text-base">
+                            {formatCurrency(netTotal)}
+                          </div>
+                        </div>
+
+                        {/* Recalculate Button (for Draft Runs) */}
+                        {r.status === 'DRAFT' && canManagePayroll && !isEmployeeLabour && (
+                          <button
+                            onClick={() => handleRecalculateRun(r.id)}
+                            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                            title="Recalculate vouchers from attendance"
+                          >
+                            <RefreshCw size={15} />
+                          </button>
+                        )}
+
+                        {/* Approve Button */}
+                        {r.status === 'DRAFT' && canManagePayroll && !isEmployeeLabour && (
+                          <button
+                            onClick={() => handleApproveRun(r.id)}
+                            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                          >
+                            <CheckCircle size={14} />
+                            <span>Approve & Post</span>
+                          </button>
+                        )}
+
+                        {/* Delete Button */}
+                        {canManagePayroll && !isEmployeeLabour && (
+                          <button
+                            onClick={() => handleDeleteRun(r.id)}
+                            className="p-2 rounded-xl border border-rose-200 dark:border-rose-900/40 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer"
+                            title="Delete this payroll run"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                      <div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>
-                          Total Gross
+                    {/* Expandable Itemized Vouchers Table */}
+                    {isExpanded && (
+                      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-4 sm:p-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-black text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                            Itemized Worker Payslips & Deductions ({vouchers.length})
+                          </h4>
+                          <span className="text-[11px] text-slate-400">
+                            Computed from biometric attendance & active FIFO cash advances
+                          </span>
                         </div>
-                        <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>
-                          {formatCurrency(Number(r.total_gross) > 0 ? r.total_gross : vouchers.reduce((acc, v) => acc + Number(v.gross_pay || 0), 0))}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>
-                          Advances Deducted
-                        </div>
-                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#f87171' }}>
-                          -{formatCurrency(Number(r.total_advances ?? r.total_advances_deducted) > 0 ? (r.total_advances ?? r.total_advances_deducted) : vouchers.reduce((acc, v) => acc + Number(v.advances_deducted || 0), 0))}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', textTransform: 'uppercase' }}>
-                          Net Payable
-                        </div>
-                        <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#34d399' }}>
-                          {formatCurrency(Number(r.total_net) > 0 ? r.total_net : vouchers.reduce((acc, v) => acc + Number(v.net_pay || 0), 0))}
-                        </div>
-                      </div>
 
-                      {r.status === 'DRAFT' && canApprove && (
-                        <button
-                          onClick={() => handleApproveRun(r.id)}
-                          className="btn btn-success btn-sm"
-                        >
-                          <CheckCircle size={15} />
-                          <span>Approve & Post Ledger</span>
-                        </button>
-                      )}
-
-                      {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteRun(r.id);
-                          }}
-                          className="btn btn-secondary btn-sm"
-                          style={{
-                            color: '#ef4444',
-                            borderColor: 'rgba(239, 68, 68, 0.4)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                          }}
-                          title="Delete this payroll run"
-                        >
-                          <Trash2 size={14} />
-                          <span>Delete</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Vouchers Breakdown */}
-                  {isExpanded && (
-                    <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <h4 style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                          Itemized Worker Payslips & Deductions ({vouchers.length})
-                        </h4>
-                        <span style={{ fontSize: '0.76rem', color: 'var(--text-subtle)' }}>
-                          Weekly calculations computed from biometric attendance & active FIFO cash advances
-                        </span>
-                      </div>
-                      <div className="table-container" style={{ border: '1px solid var(--border-default)' }}>
-                        <table className="data-table">
-                          <thead>
-                            <tr>
-                              <th style={{ width: '220px' }}>Worker</th>
-                              <th>Attendance Units</th>
-                              <th style={{ textAlign: 'right', width: '110px' }}>Daily Rate</th>
-                              <th style={{ textAlign: 'right', width: '130px' }}>Gross Pay</th>
-                              <th style={{ textAlign: 'right', width: '140px' }}>Advance Deduction</th>
-                              <th style={{ textAlign: 'right', width: '130px' }}>Net Pay</th>
-                              <th style={{ textAlign: 'center', width: '100px' }}>Status</th>
-                              <th style={{ textAlign: 'center', width: '150px' }}>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {vouchers.map((v) => (
-                              <tr key={v.id}>
-                                <td>
-                                  <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{v.employee_name || `Worker #${v.employee}`}</div>
-                                  <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>
-                                    {v.trade || v.employee_trade || 'Trade Worker'}
-                                  </div>
-                                </td>
-                                <td>
-                                  <span style={{ fontSize: '0.84rem' }}>
-                                    {v.days_present} Present + {v.half_days} Half-day ({Number(v.ot_hours || 0)}h OT)
-                                  </span>
-                                </td>
-                                <td style={{ textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-heading)' }}>
-                                  ₹{Number(v.daily_rate_used ?? v.daily_rate ?? 0).toFixed(2)}
-                                </td>
-                                <td style={{ textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-heading)' }}>
-                                  {formatCurrency(v.gross_pay)}
-                                </td>
-                                <td style={{ textAlign: 'right', fontWeight: 600, color: Number(v.advances_deducted) > 0 ? '#f87171' : 'var(--text-subtle)' }}>
-                                  -{formatCurrency(v.advances_deducted)}
-                                </td>
-                                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-heading)', color: '#34d399', fontSize: '0.95rem' }}>
-                                  {formatCurrency(v.net_pay)}
-                                </td>
-                                <td style={{ textAlign: 'center' }}>
-                                  <Badge status={v.status}>{v.status}</Badge>
-                                </td>
-                                <td style={{ textAlign: 'center' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                    <button
-                                      onClick={() => handleDownloadPayslip(v.id, v.voucher_number)}
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                      title="Download Official Payslip PDF with Letterhead"
-                                    >
-                                      <Download size={12} />
-                                      <span>Payslip</span>
-                                    </button>
-                                    {v.status === 'DRAFT' || v.status === 'APPROVED' ? (
-                                      ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour ? (
-                                        <button
-                                          onClick={() => handleMarkPaid(v.id)}
-                                          className="btn btn-primary btn-sm"
-                                          style={{ fontSize: '0.72rem' }}
-                                        >
-                                          Mark Paid
-                                        </button>
-                                      ) : (
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-                                          Pending Payment
-                                        </span>
-                                      )
-                                    ) : (
-                                      <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-                                        Paid ({v.payment_reference || 'UPI'})
+                        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead>
+                                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/40 text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                                  <th className="py-3 px-4 font-black">Worker</th>
+                                  <th className="py-3 px-4 font-black">Attendance Units</th>
+                                  <th className="py-3 px-4 text-right font-black">Daily Rate</th>
+                                  <th className="py-3 px-4 text-right font-black">Gross Pay</th>
+                                  <th className="py-3 px-4 text-right font-black">Advance Deduction</th>
+                                  <th className="py-3 px-4 text-right font-black">Net Pay</th>
+                                  <th className="py-3 px-4 text-center font-black">Status</th>
+                                  <th className="py-3 px-4 text-center font-black">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                {vouchers.map((v) => (
+                                  <tr key={v.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                                    <td className="py-3 px-4">
+                                      <div className="font-bold text-slate-900 dark:text-white">
+                                        {v.employee_name || `Worker #${v.employee}`}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400">
+                                        {v.trade || v.employee_trade || 'Trade Worker'}
+                                      </div>
+                                    </td>
+                                    <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                                      <span className="font-semibold">
+                                        {v.days_present} Present + {v.half_days} Half ({Number(v.ot_hours || 0)}h OT)
                                       </span>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr>
-                              <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.76rem' }}>
-                                Run Vouchers Total:
-                              </td>
-                              <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-heading)' }}>
-                                {formatCurrency(vouchers.reduce((acc, v) => acc + Number(v.gross_pay || 0), 0))}
-                              </td>
-                              <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-heading)', color: '#f87171' }}>
-                                -{formatCurrency(vouchers.reduce((acc, v) => acc + Number(v.advances_deducted || 0), 0))}
-                              </td>
-                              <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'var(--font-heading)', color: '#34d399', fontSize: '1rem' }}>
-                                {formatCurrency(vouchers.reduce((acc, v) => acc + Number(v.net_pay || 0), 0))}
-                              </td>
-                              <td colSpan={2}></td>
-                            </tr>
-                          </tfoot>
-                        </table>
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-mono text-slate-700 dark:text-slate-300">
+                                      ₹{Number(v.daily_rate_used ?? v.daily_rate ?? 0).toFixed(0)}
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                      {formatCurrency(v.gross_pay)}
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-mono font-bold">
+                                      {Number(v.advances_deducted) > 0 ? (
+                                        <span className="text-rose-500">-{formatCurrency(v.advances_deducted)}</span>
+                                      ) : (
+                                        <span className="text-slate-400 font-normal">₹0</span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
+                                      {formatCurrency(v.net_pay)}
+                                    </td>
+                                    <td className="py-3 px-4 text-center">
+                                      <Badge status={v.status}>{v.status}</Badge>
+                                    </td>
+                                    <td className="py-3 px-4 text-center">
+                                      <div className="flex items-center justify-center gap-1.5">
+                                        <button
+                                          onClick={() => handleDownloadPayslip(v.id, v.voucher_number)}
+                                          className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-all"
+                                          title="Download Official Payslip PDF"
+                                        >
+                                          <Download size={12} />
+                                          <span>Payslip</span>
+                                        </button>
+
+                                        {(v.status === 'DRAFT' || v.status === 'APPROVED') && canManagePayroll && !isEmployeeLabour ? (
+                                          <button
+                                            onClick={() => handleMarkPaid(v.id)}
+                                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer"
+                                          >
+                                            Mark Paid
+                                          </button>
+                                        ) : v.status === 'PAID' ? (
+                                          <span className="text-[10px] text-emerald-600 font-bold">Paid</span>
+                                        ) : null}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+
+                              {/* Vouchers Total Footer */}
+                              <tfoot>
+                                <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 font-black text-slate-900 dark:text-white">
+                                  <td colSpan={3} className="py-2.5 px-4 text-right uppercase tracking-wider text-[10px] text-slate-500">
+                                    Vouchers Total:
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-mono text-indigo-600 dark:text-indigo-400">
+                                    {formatCurrency(vouchers.reduce((acc, v) => acc + Number(v.gross_pay || 0), 0))}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-mono text-rose-500">
+                                    -{formatCurrency(vouchers.reduce((acc, v) => acc + Number(v.advances_deducted || 0), 0))}
+                                  </td>
+                                  <td className="py-2.5 px-4 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                                    {formatCurrency(vouchers.reduce((acc, v) => acc + Number(v.net_pay || 0), 0))}
+                                  </td>
+                                  <td colSpan={2}></td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
 
-      {/* 3. Advances Tab */}
+      {/* ========================================================================= */}
+      {/* 6. TAB 3: CASH ADVANCES (UPAD)                                            */}
+      {/* ========================================================================= */}
       {activeTab === 'advances' && (
-        <div className="card card-table">
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '130px' }}>Date</th>
-                  <th>Worker</th>
-                  <th style={{ textAlign: 'right', width: '130px' }}>Amount</th>
-                  <th style={{ textAlign: 'center', width: '140px' }}>Payment Mode</th>
-                  <th>Reason</th>
-                  <th style={{ textAlign: 'center', width: '120px' }}>Status</th>
-                  <th>Site Project</th>
-                  <th style={{ textAlign: 'center', width: '90px' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {advances.map((adv) => (
-                  <tr key={adv.id}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{adv.advance_date}</div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{adv.employee_name || `Worker #${adv.employee}`}</div>
-                      {adv.employee_code && (
-                        <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>Code: {adv.employee_code}</div>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-heading)', color: '#fbbf24', fontSize: '0.95rem' }}>
-                      {formatCurrency(adv.amount)}
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <Badge status={adv.payment_mode}>{adv.payment_mode}</Badge>
-                    </td>
-                    <td style={{ fontSize: '0.84rem', color: 'var(--text-subtle)', maxWidth: '240px' }}>
-                      {adv.reason || 'Personal / emergency advance'}
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <Badge status={adv.status}>{adv.status}</Badge>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 500 }}>{adv.project_name || `Site #${adv.project}`}</div>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      {adv.status === 'OPEN' && ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(role) && !isEmployeeLabour && (
-                        <button
-                          onClick={() => handleDeleteAdvance(adv.id)}
-                          className="btn btn-secondary btn-sm"
-                          style={{
-                            fontSize: '0.72rem',
-                            color: '#ef4444',
-                            borderColor: 'rgba(239, 68, 68, 0.3)',
-                            padding: '4px 8px',
-                          }}
-                          title="Delete Advance"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+        <div className="space-y-6">
+          {/* Filter Bar */}
+          <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <div className="relative min-w-[240px] sm:min-w-[280px]">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search advances by worker, reason..."
+                  value={advanceSearch}
+                  onChange={(e) => {
+                    setAdvanceSearch(e.target.value);
+                    setAdvancePage(1);
+                  }}
+                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
+                />
+                {advanceSearch && (
+                  <button
+                    onClick={() => setAdvanceSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              <select
+                value={advanceProjectFilter}
+                onChange={(e) => {
+                  setAdvanceProjectFilter(e.target.value);
+                  setAdvancePage(1);
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
+              >
+                <option value="all">All Project Sites</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={2} style={{ textAlign: 'right', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.76rem' }}>
-                    Total Cash Advances:
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'var(--font-heading)', color: '#fbbf24', fontSize: '1rem' }}>
-                    {formatCurrency(advances.reduce((acc, a) => acc + Number(a.amount || 0), 0))}
-                  </td>
-                  <td colSpan={5} style={{ fontSize: '0.76rem', color: 'var(--text-subtle)' }}>
-                    {advances.length} advance transactions recorded
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+              </select>
+
+              <select
+                value={advanceStatusFilter}
+                onChange={(e) => {
+                  setAdvanceStatusFilter(e.target.value);
+                  setAdvancePage(1);
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
+              >
+                <option value="all">All Statuses</option>
+                <option value="OPEN">Open / Active</option>
+                <option value="DEDUCTED">Deducted / Cleared</option>
+              </select>
+            </div>
+
+            <div className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              Showing <span className="text-slate-900 dark:text-white">{filteredAdvances.length}</span> advances
+            </div>
+          </div>
+
+          {/* Advances Table */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+            <div className="py-3 px-6 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <IndianRupee size={16} className="text-amber-500" />
+                <span className="font-black text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  Worker Cash Advances (Upad) Records
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                Short-term cash loans settled via weekly wages
+              </span>
+            </div>
+
+            {loading ? (
+              <div className="p-16 text-center text-xs text-slate-400 font-semibold flex flex-col items-center gap-2">
+                <RefreshCw size={24} className="animate-spin text-blue-500" />
+                <span>Loading worker advance records...</span>
+              </div>
+            ) : filteredAdvances.length === 0 ? (
+              <div className="p-16 text-center text-xs text-slate-400 font-semibold">
+                No advance records found matching filter criteria.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/40 text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      <th className="py-3.5 px-5 font-black">Date</th>
+                      <th className="py-3.5 px-5 font-black">Worker Details</th>
+                      <th className="py-3.5 px-5 font-black">Project Site</th>
+                      <th className="py-3.5 px-5 text-right font-black">Amount Disbursed</th>
+                      <th className="py-3.5 px-5 text-center font-black">Payment Mode</th>
+                      <th className="py-3.5 px-5 font-black">Reason / Emergency Note</th>
+                      <th className="py-3.5 px-5 text-center font-black">Status</th>
+                      <th className="py-3.5 px-5 text-center font-black">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {paginatedAdvances.map((adv) => {
+                      const formattedDate = formatDateDMY(adv.advance_date);
+
+                      return (
+                        <tr key={adv.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                          <td className="py-3 px-5 font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                            {formattedDate}
+                          </td>
+                          <td className="py-3 px-5">
+                            <div className="font-bold text-slate-900 dark:text-white">
+                              {adv.employee_name || `Worker #${adv.employee}`}
+                            </div>
+                            {adv.employee_code && (
+                              <div className="text-[10px] text-slate-400 font-mono">Code: {adv.employee_code}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-5 font-semibold text-slate-700 dark:text-slate-300">
+                            {adv.project_name || `Site #${adv.project}`}
+                          </td>
+                          <td className="py-3 px-5 text-right font-mono font-black text-amber-600 dark:text-amber-400 text-sm">
+                            {formatCurrency(adv.amount)}
+                          </td>
+                          <td className="py-3 px-5 text-center">
+                            <span className="px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                              {adv.payment_mode}
+                            </span>
+                          </td>
+                          <td className="py-3 px-5 text-slate-600 dark:text-slate-400 text-[11px] max-w-xs truncate">
+                            {adv.reason || 'Personal / emergency advance'}
+                          </td>
+                          <td className="py-3 px-5 text-center">
+                            <Badge status={adv.status}>{adv.status}</Badge>
+                          </td>
+                          <td className="py-3 px-5 text-center">
+                            {adv.status === 'OPEN' && canManagePayroll && !isEmployeeLabour ? (
+                              <button
+                                onClick={() => handleDeleteAdvance(adv.id)}
+                                className="p-1.5 rounded-lg border border-rose-200 dark:border-rose-900/40 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer"
+                                title="Delete Advance"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+
+                  <tfoot>
+                    <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 font-black text-slate-900 dark:text-white">
+                      <td colSpan={3} className="py-3 px-5 text-right uppercase tracking-wider text-[10px] text-slate-500">
+                        Total Advances:
+                      </td>
+                      <td className="py-3 px-5 text-right font-mono text-amber-600 dark:text-amber-400 text-sm">
+                        {formatCurrency(filteredAdvances.reduce((acc, a) => acc + Number(a.amount || 0), 0))}
+                      </td>
+                      <td colSpan={4} className="py-3 px-5 text-[11px] text-slate-400">
+                        {filteredAdvances.length} advance transactions recorded
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalAdvancePages > 1 && (
+              <div className="py-3 px-6 bg-slate-50/50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                  Page {advancePage} of {totalAdvancePages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={advancePage <= 1}
+                    onClick={() => setAdvancePage((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    disabled={advancePage >= totalAdvancePages}
+                    onClick={() => setAdvancePage((p) => Math.min(totalAdvancePages, p + 1))}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* 7. MODALS (Calculate Run, Record Advance, Pay Full Salary)                */}
+      {/* ========================================================================= */}
+
       {/* Calculate Run Modal */}
       <Modal isOpen={isRunModalOpen} onClose={() => setIsRunModalOpen(false)} title="Calculate Weekly Payroll Run">
-        <form onSubmit={handleCreateRun}>
-          <div className="form-group">
-            <label className="form-label">Site Project *</label>
+        <form onSubmit={handleCreateRun} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Site Project *
+            </label>
             <select
-              className="form-control"
+              required
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
               value={runForm.project_id}
               onChange={(e) => setRunForm({ ...runForm, project_id: e.target.value })}
             >
@@ -1060,38 +1765,52 @@ export const PayrollView = ({ selectedProjectId }) => {
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            <div className="form-group">
-              <label className="form-label">Period Start (e.g. Monday) *</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Period Start *
+              </label>
               <input
                 type="date"
-                max={new Date().toISOString().split('T')[0]}
-                className="form-control"
+                required
+                max={todayStr}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
                 value={runForm.period_start}
                 onChange={(e) => setRunForm({ ...runForm, period_start: e.target.value })}
               />
             </div>
-            <div className="form-group">
-              <label className="form-label">Period End (e.g. Sunday) *</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Period End *
+              </label>
               <input
                 type="date"
-                max={new Date().toISOString().split('T')[0]}
-                className="form-control"
+                required
+                max={todayStr}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
                 value={runForm.period_end}
                 onChange={(e) => setRunForm({ ...runForm, period_end: e.target.value })}
               />
             </div>
           </div>
 
-          <p style={{ fontSize: '0.78rem', color: 'var(--text-subtle)', marginBottom: '16px' }}>
-            Note: Payroll calculations require that site attendance for the selected date range has been locked.
-          </p>
+          <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 text-[11px] leading-relaxed">
+            Automatic calculation reads locked biometric attendance and automatically recovers outstanding FIFO cash advances (Upad) from weekly wages.
+          </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-            <button type="button" onClick={() => setIsRunModalOpen(false)} className="btn btn-secondary">
+          <div className="flex justify-end gap-2.5 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsRunModalOpen(false)}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+            >
               Cancel
             </button>
-            <button type="submit" disabled={submitting} className="btn btn-primary">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs transition-all shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50"
+            >
               {submitting ? 'Computing...' : 'Calculate Vouchers'}
             </button>
           </div>
@@ -1100,11 +1819,13 @@ export const PayrollView = ({ selectedProjectId }) => {
 
       {/* Record Advance Modal */}
       <Modal isOpen={isAdvanceModalOpen} onClose={() => setIsAdvanceModalOpen(false)} title="Record Cash Advance to Worker">
-        <form onSubmit={handleCreateAdvance}>
-          <div className="form-group">
-            <label className="form-label">Site Project *</label>
+        <form onSubmit={handleCreateAdvance} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Site Project *
+            </label>
             <select
-              className="form-control"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
               value={advanceForm.project}
               onChange={(e) => setAdvanceForm({ ...advanceForm, project: e.target.value })}
             >
@@ -1115,16 +1836,21 @@ export const PayrollView = ({ selectedProjectId }) => {
             </select>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Worker *</label>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Worker *
+            </label>
             <select
-              className="form-control"
+              required
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
               value={advanceForm.employee}
               onChange={(e) => setAdvanceForm({ ...advanceForm, employee: e.target.value })}
             >
               <option value="">Select Worker</option>
               {employees.map((e) => (
-                <option key={e.id} value={e.id}>{e.full_name} ({e.trade || 'Worker'})</option>
+                <option key={e.id} value={e.id}>
+                  {e.full_name} ({e.trade || 'Worker'}) • {e.employee_code || `EMP-${e.id}`}
+                </option>
               ))}
             </select>
           </div>
@@ -1138,104 +1864,121 @@ export const PayrollView = ({ selectedProjectId }) => {
             const entered = Number(advanceForm.amount || 0);
             const remaining = Math.max(0, curBal - entered);
             return (
-              <div style={{ padding: '12px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#64748B', marginBottom: '8px' }}>
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400 mb-2">
                   <span>Upad & Salary Breakdown</span>
-                  <span style={{ color: '#2563EB' }}>{worker.full_name}</span>
+                  <span className="text-blue-600 dark:text-blue-400">{worker.full_name}</span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
-                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 700 }}>DAILY WAGE</div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>₹{dailyWage}</div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <div className="text-[9px] font-black uppercase text-slate-400">Daily Wage</div>
+                    <div className="text-xs font-black text-slate-900 dark:text-white mt-0.5">₹{dailyWage}</div>
                   </div>
-                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 700 }}>CURRENT BAL</div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#4F46E5', marginTop: '2px' }}>₹{curBal}</div>
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <div className="text-[9px] font-black uppercase text-slate-400">Current Bal</div>
+                    <div className="text-xs font-black text-blue-600 dark:text-blue-400 mt-0.5">₹{curBal}</div>
                   </div>
-                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 700 }}>REMAIN SALARY</div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#16A34A', marginTop: '2px' }}>₹{remaining}</div>
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <div className="text-[9px] font-black uppercase text-slate-400">Remaining</div>
+                    <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-0.5">₹{remaining}</div>
                   </div>
                 </div>
-                {entered > 0 && (
-                  <div style={{ fontSize: '11px', textAlign: 'center', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #E2E8F0', color: '#475569', fontWeight: 600 }}>
-                    Taking <strong style={{ color: '#2563EB' }}>₹{entered}</strong> Upad from daily wage ₹{dailyWage || curBal} leaves <strong style={{ color: '#16A34A' }}>₹{remaining}</strong> remaining salary.
-                  </div>
-                )}
               </div>
             );
           })()}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
-            <div className="form-group">
-              <label className="form-label">Advance Amount (₹) *</label>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Amount (₹) *
+              </label>
               <input
                 type="number"
                 step="0.01"
-                className="form-control"
-                placeholder="1500.00"
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
+                placeholder="1500"
                 value={advanceForm.amount}
                 onChange={(e) => setAdvanceForm({ ...advanceForm, amount: e.target.value })}
               />
             </div>
-            <div className="form-group">
-              <label className="form-label">Advance Date *</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Advance Date *
+              </label>
               <input
                 type="date"
+                required
                 max={todayStr}
-                className="form-control"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
                 value={advanceForm.advance_date}
                 onChange={(e) => setAdvanceForm({ ...advanceForm, advance_date: e.target.value })}
               />
             </div>
-            <div className="form-group">
-              <label className="form-label">Payment Mode *</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Mode *
+              </label>
               <select
-                className="form-control"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
                 value={advanceForm.payment_mode}
                 onChange={(e) => setAdvanceForm({ ...advanceForm, payment_mode: e.target.value })}
               >
                 <option value="CASH">Cash</option>
+                <option value="UPI">UPI</option>
                 <option value="BANK_TRANSFER">Bank Transfer</option>
               </select>
             </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Reason *</label>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Reason / Emergency Note *
+            </label>
             <input
               type="text"
-              className="form-control"
-              placeholder="e.g. Medical emergency assistance"
+              required
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
+              placeholder="e.g. Medical assistance / family emergency"
               value={advanceForm.reason}
               onChange={(e) => setAdvanceForm({ ...advanceForm, reason: e.target.value })}
             />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-            <button type="button" onClick={() => setIsAdvanceModalOpen(false)} className="btn btn-secondary">
+          <div className="flex justify-end gap-2.5 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsAdvanceModalOpen(false)}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+            >
               Cancel
             </button>
-            <button type="submit" disabled={submitting} className="btn btn-primary">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs transition-all shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50"
+            >
               {submitting ? 'Recording...' : 'Disburse Advance'}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* 3. Pay Full Salary Modal */}
+      {/* Pay Full Salary Modal */}
       <Modal
         isOpen={isSalaryModalOpen}
         onClose={() => setIsSalaryModalOpen(false)}
         title="Disburse Full Salary / Wages"
         subtitle="Disburse employee salary and immediately reflect in ledgers, attendance, and worker balance"
       >
-        <form onSubmit={handleDisburseSalary}>
-          <div className="form-group">
-            <label className="form-label">Worker *</label>
+        <form onSubmit={handleDisburseSalary} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Worker *
+            </label>
             <select
               required
-              className="form-control"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
               value={salaryForm.employee_id}
               onChange={(e) => {
                 const empId = e.target.value;
@@ -1276,85 +2019,66 @@ export const PayrollView = ({ selectedProjectId }) => {
             );
 
             return (
-              <div style={{ padding: '14px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#64748B' }}>
-                    Salary & Wage Computation
-                  </div>
-                  <span style={{ color: '#2563EB', fontWeight: 800, fontSize: '0.85rem' }}>
-                    {selectedSalaryWorker.full_name}
-                  </span>
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex justify-between items-center text-[10px] font-black uppercase text-slate-400">
+                  <span>Salary & Wage Computation</span>
+                  <span className="text-blue-600 dark:text-blue-400 font-bold">{selectedSalaryWorker.full_name}</span>
                 </div>
 
                 {!hasAttendance && (
-                  <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#ef4444', fontSize: '11px', fontWeight: 600, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <AlertCircle size={14} />
-                    <span>Worker has no marked attendance yet. Please record site attendance first before disbursing salary.</span>
+                  <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-2">
+                    <AlertCircle size={14} className="shrink-0" />
+                    <span>Worker has no marked attendance yet. Please record attendance first.</span>
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', textAlign: 'center', marginBottom: '10px' }}>
-                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '9px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>DAILY RATE</div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>₹{dailyWage}</div>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <div className="text-[9px] font-black uppercase text-slate-400">Daily Rate</div>
+                    <div className="text-xs font-black text-slate-900 dark:text-white mt-0.5">₹{dailyWage}</div>
                   </div>
-                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '9px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>TOTAL PAGAR</div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#3B82F6', marginTop: '2px' }}>₹{pagar}</div>
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <div className="text-[9px] font-black uppercase text-slate-400">Total Pagar</div>
+                    <div className="text-xs font-black text-indigo-600 dark:text-indigo-400 mt-0.5">₹{pagar}</div>
                   </div>
-                  <div style={{ padding: '8px', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '9px', color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase' }}>ADVANCE DEDUCTED</div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: upad > 0 ? '#EF4444' : '#10B981', marginTop: '2px' }}>
+                  <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                    <div className="text-[9px] font-black uppercase text-slate-400">Upad Deducted</div>
+                    <div className="text-xs font-black text-rose-500 mt-0.5">
                       {upad > 0 ? `-₹${upad}` : '₹0'}
                     </div>
                   </div>
-                  <div style={{ padding: '8px', background: '#ECFDF5', borderRadius: '8px', border: '1px solid #A7F3D0' }}>
-                    <div style={{ fontSize: '9px', color: '#047857', fontWeight: 800, textTransform: 'uppercase' }}>FULL SALARY DUE</div>
-                    <div style={{ fontSize: '13px', fontWeight: 900, color: '#059669', marginTop: '2px' }}>₹{balance}</div>
+                  <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                    <div className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400">Salary Due</div>
+                    <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-0.5">₹{balance}</div>
                   </div>
                 </div>
 
-                {upad === 0 ? (
-                  <div style={{ padding: '6px 10px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.25)', color: '#059669', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <CheckCircle2 size={13} />
-                      Worker did not take money in advance. 100% full salary payable: ₹{balance > 0 ? balance : dailyWage}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSalaryForm((prev) => ({ ...prev, amount: String(balance > 0 ? balance : dailyWage) }))}
-                      className="btn btn-sm"
-                      style={{ fontSize: '10px', padding: '2px 8px', background: '#059669', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 800 }}
-                    >
-                      Fill Full
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ padding: '6px 10px', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.25)', color: '#b45309', fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <AlertCircle size={13} />
-                      ₹{upad} advance already taken. Remaining net salary: ₹{balance}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSalaryForm((prev) => ({ ...prev, amount: String(balance > 0 ? balance : dailyWage) }))}
-                      className="btn btn-sm"
-                      style={{ fontSize: '10px', padding: '2px 8px', background: '#b45309', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 800 }}
-                    >
-                      Fill Remaining
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                    {upad === 0
+                      ? 'No previous Upad taken. 100% full salary due.'
+                      : `₹${upad} Upad advance already taken. Remaining balance: ₹${balance}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSalaryForm((prev) => ({ ...prev, amount: String(balance > 0 ? balance : dailyWage) }))}
+                    className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white text-[10px] font-black cursor-pointer"
+                  >
+                    Auto-Fill
+                  </button>
+                </div>
               </div>
             );
           })()}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            <div className="form-group">
-              <label className="form-label">Site Project *</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Site Project *
+              </label>
               <select
                 required
-                className="form-control"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
                 value={salaryForm.project_id}
                 onChange={(e) => setSalaryForm({ ...salaryForm, project_id: e.target.value })}
               >
@@ -1365,38 +2089,44 @@ export const PayrollView = ({ selectedProjectId }) => {
               </select>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Disbursement Amount (₹) *</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Amount (₹) *
+              </label>
               <input
                 type="number"
                 step="0.01"
                 min="0.01"
                 required
-                className="form-control"
-                placeholder="e.g. 950.00"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
+                placeholder="950.00"
                 value={salaryForm.amount}
                 onChange={(e) => setSalaryForm({ ...salaryForm, amount: e.target.value })}
               />
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            <div className="form-group">
-              <label className="form-label">Payment Date *</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Payment Date *
+              </label>
               <input
                 type="date"
                 required
                 max={todayStr}
-                className="form-control"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
                 value={salaryForm.date}
                 onChange={(e) => setSalaryForm({ ...salaryForm, date: e.target.value })}
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Payment Mode *</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Payment Mode *
+              </label>
               <select
-                className="form-control"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
                 value={salaryForm.payment_mode}
                 onChange={(e) => setSalaryForm({ ...salaryForm, payment_mode: e.target.value })}
               >
@@ -1408,11 +2138,13 @@ export const PayrollView = ({ selectedProjectId }) => {
             </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Payment Reference / Remarks</label>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Payment Reference / Remarks
+            </label>
             <input
               type="text"
-              className="form-control"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
               placeholder="e.g. Full salary payment for October"
               value={salaryForm.notes}
               onChange={(e) => setSalaryForm({ ...salaryForm, notes: e.target.value })}
@@ -1420,10 +2152,12 @@ export const PayrollView = ({ selectedProjectId }) => {
           </div>
 
           {isOrgAdmin ? (
-            <div className="form-group">
-              <label className="form-label">Payment Status *</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Payment Status *
+              </label>
               <select
-                className="form-control"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
                 value={salaryForm.status}
                 onChange={(e) => setSalaryForm({ ...salaryForm, status: e.target.value })}
               >
@@ -1432,25 +2166,23 @@ export const PayrollView = ({ selectedProjectId }) => {
               </select>
             </div>
           ) : (
-            <div style={{ padding: '8px 12px', background: '#F1F5F9', borderRadius: '8px', fontSize: '11px', color: '#64748B', fontWeight: 600, marginBottom: '14px' }}>
+            <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-semibold">
               Status: <strong>Pending Approval</strong> (Payments created by Site Managers require Org Admin approval).
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
-            <button type="button" onClick={() => setIsSalaryModalOpen(false)} className="btn btn-secondary">
+          <div className="flex justify-end gap-2.5 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsSalaryModalOpen(false)}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+            >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="btn btn-primary"
-              style={{
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                borderColor: '#059669',
-                color: '#fff',
-                fontWeight: 700,
-              }}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition-all shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
             >
               {submitting ? 'Disbursing...' : `Disburse Salary (₹${salaryForm.amount || '0'})`}
             </button>
