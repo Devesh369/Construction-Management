@@ -3,14 +3,7 @@ import { api, getToken, setToken, getRefreshToken, setRefreshToken, getStoredUse
 
 const AuthContext = createContext(null);
 
-export const DEMO_USERS = [
-  { key: 'org_admin', label: 'Org Admin (Devesh Patel)', role: 'ORG_ADMIN', email: 'deveshpatel@gmail.com', password: 'password123' },
-  { key: 'project_manager', label: 'Project Manager (Viren Prajapati)', role: 'PROJECT_MANAGER', email: 'viren@gmail.com', password: 'password123' },
-  { key: 'site_manager', label: 'Site Manager', role: 'SITE_MANAGER', email: 'sitemanager@buildsphere.com', password: 'password123' },
-  { key: 'site_engineer', label: 'Site Engineer (Viren Prajapati)', role: 'SITE_ENGINEER', email: 'viren@buildsphere.com', password: 'password123' },
-  { key: 'accountant', label: 'Accountant (Sankalp)', role: 'ACCOUNTANT', email: 'san@gmail.com', password: 'password123' },
-  { key: 'employee_labour', label: 'Employee / Labour (Darshil)', role: 'employee/labour', email: 'labour@buildsphere.com', password: 'password123', employee_id: 100 },
-];
+// Quick Role Access removed - only authentic credentials permitted
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(getStoredUser());
@@ -109,11 +102,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const quickLogin = async (demoKey) => {
-    const target = DEMO_USERS.find((d) => d.key === demoKey);
-    if (!target) return;
-    return await login(target.email, target.password);
-  };
+
 
   const isAdminOrPM =
     user?.role === 'ORG_ADMIN' ||
@@ -138,7 +127,6 @@ export const AuthProvider = ({ children }) => {
         setupAdmin,
         acceptInvite,
         logout,
-        quickLogin,
         isAdminOrPM,
         isFinance,
       }}

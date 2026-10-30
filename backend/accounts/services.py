@@ -234,61 +234,32 @@ def login_user(email: str, password: str, request=None) -> tuple[User, dict]:
         user.locked_until = None
         user.save(update_fields=["failed_login_count", "locked_until"])
 
-    # 2. Check password
+    # 2. Check password strictly against stored hash
     if not user.check_password(password):
-        allowed_dev_passwords = [
-            "AdminPass123#",
-            "password123",
-            "password",
-            "admin",
-            "admin123",
-            "devesh",
-            "devesh123",
-            "12345678",
-            "123456",
-            "Pass@12345",
-            "BuildSphere@2026",
-            "harshil",
-            "harshil123",
-            "Harshil@123",
-        ]
-        # For employee/labour accounts, also accept employee's name or code as password in dev
-        if user.role in [Role.EMPLOYEE, "employee/labour", "EMPLOYEE", "LABOUR"]:
-            allowed_dev_passwords.extend([
-                user.name.lower().replace(" ", ""),
-                user.name.replace(" ", ""),
-                (user.email.split("@")[0]).lower(),
-            ])
-        if settings.DEBUG and password in allowed_dev_passwords:
-            user.set_password(password)
-            user.failed_login_count = 0
-            user.locked_until = None
-            user.save()
+        user.failed_login_count += 1
+        if user.failed_login_count >= 5:
+            user.locked_until = now + timedelta(minutes=30)
+            user.save(update_fields=["failed_login_count", "locked_until"])
+            log_action(
+                user=user,
+                action=AuditAction.LOGIN_FAILED,
+                obj=user,
+                metadata={"reason": "Account locked after 5 consecutive failures"},
+                request=request,
+                organization=user.organization,
+            )
+            raise AccountLockedError()
         else:
-            user.failed_login_count += 1
-            if user.failed_login_count >= 5:
-                user.locked_until = now + timedelta(minutes=30)
-                user.save(update_fields=["failed_login_count", "locked_until"])
-                log_action(
-                    user=user,
-                    action=AuditAction.LOGIN_FAILED,
-                    obj=user,
-                    metadata={"reason": "Account locked after 5 consecutive failures"},
-                    request=request,
-                    organization=user.organization,
-                )
-                raise AccountLockedError()
-            else:
-                user.save(update_fields=["failed_login_count"])
-                log_action(
-                    user=user,
-                    action=AuditAction.LOGIN_FAILED,
-                    obj=user,
-                    metadata={"failed_attempts": user.failed_login_count},
-                    request=request,
-                    organization=user.organization,
-                )
-                raise BusinessRuleError("Invalid email or password.", code="invalid_credentials")
+            user.save(update_fields=["failed_login_count"])
+            log_action(
+                user=user,
+                action=AuditAction.LOGIN_FAILED,
+                obj=user,
+                metadata={"failed_attempts": user.failed_login_count},
+                request=request,
+                organization=user.organization,
+            )
+            raise BusinessRuleError("Invalid email or password.", code="invalid_credentials")
 
     # 3. Successful login resets counters
     if user.failed_login_count > 0 or user.locked_until:
