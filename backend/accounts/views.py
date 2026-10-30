@@ -134,11 +134,26 @@ class SetupAdminView(views.APIView):
             )
 
         user, tokens = login_user(email=email, password=password, request=request)
+        emp = None
+        if user.organization:
+            from workforce.models import Employee
+            from django.db.models import Q
+            emp = Employee.objects.filter(
+                organization=user.organization,
+                deleted_at__isnull=True,
+            ).filter(
+                Q(email__iexact=user.email) |
+                (Q(phone=user.phone) & ~Q(phone="")) |
+                Q(full_name__iexact=user.name)
+            ).first()
+
         user_data = {
             "id": user.id,
             "name": user.name,
             "email": user.email,
             "role": user.role,
+            "employee_id": emp.id if emp else None,
+            "employee_code": emp.employee_code if emp else None,
             "organization": {
                 "id": user.organization.id if user.organization else None,
                 "name": user.organization.name if user.organization else None,
@@ -171,11 +186,26 @@ class LoginView(views.APIView):
             request=request,
         )
 
+        emp = None
+        if user.organization:
+            from workforce.models import Employee
+            from django.db.models import Q
+            emp = Employee.objects.filter(
+                organization=user.organization,
+                deleted_at__isnull=True,
+            ).filter(
+                Q(email__iexact=user.email) |
+                (Q(phone=user.phone) & ~Q(phone="")) |
+                Q(full_name__iexact=user.name)
+            ).first()
+
         user_data = {
             "id": user.id,
             "name": user.name,
             "email": user.email,
             "role": user.role,
+            "employee_id": emp.id if emp else None,
+            "employee_code": emp.employee_code if emp else None,
             "organization": {
                 "id": user.organization.id if user.organization else None,
                 "name": user.organization.name if user.organization else None,

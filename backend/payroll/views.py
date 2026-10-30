@@ -51,15 +51,56 @@ class AdvanceViewSet(ProjectScopedMixin, TenantViewSet):
     permission_classes = [
         IsAuthenticated,
         IsTenantUser,
-        roles_required(Role.ACCOUNTANT, Role.PROJECT_MANAGER, Role.ORG_ADMIN, Role.SUPERVISOR),
+        roles_required(
+            Role.ACCOUNTANT,
+            Role.PROJECT_MANAGER,
+            Role.ORG_ADMIN,
+            Role.SUPERVISOR,
+            Role.SITE_MANAGER,
+            Role.SITE_ENGINEER,
+            Role.EMPLOYEE,
+            "employee/labour",
+        ),
     ]
     filterset_fields = ["project", "employee", "status", "payment_mode"]
     search_fields = ["employee__full_name", "employee__employee_code", "reason"]
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve", "balance", "employee_balance"]:
+            return [
+                IsAuthenticated(),
+                IsTenantUser(),
+                roles_required(
+                    Role.ACCOUNTANT,
+                    Role.PROJECT_MANAGER,
+                    Role.ORG_ADMIN,
+                    Role.SUPERVISOR,
+                    Role.SITE_MANAGER,
+                    Role.SITE_ENGINEER,
+                    Role.EMPLOYEE,
+                    "employee/labour",
+                )(),
+            ]
+        return [
+            IsAuthenticated(),
+            IsTenantUser(),
+            roles_required(Role.ACCOUNTANT, Role.PROJECT_MANAGER, Role.ORG_ADMIN, Role.SUPERVISOR)(),
+        ]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Advance.objects.none()
         qs = super().get_queryset().select_related("employee", "project", "given_by")
+        user = self.request.user
+        if user.is_authenticated and user.role in [Role.EMPLOYEE, "employee/labour", "EMPLOYEE", "LABOUR"]:
+            from django.db.models import Q
+            from workforce.models import Employee
+            emp_ids = list(
+                Employee.objects.filter(organization=user.organization, deleted_at__isnull=True)
+                .filter(Q(email__iexact=user.email) | (Q(phone=user.phone) & ~Q(phone="")) | Q(full_name__iexact=user.name))
+                .values_list("id", flat=True)
+            )
+            return qs.filter(employee_id__in=emp_ids)
         return self.filter_project_scope(qs)
 
     def create(self, request, *args, **kwargs):
@@ -116,15 +157,54 @@ class PayrollRunViewSet(ProjectScopedMixin, TenantViewSet):
     permission_classes = [
         IsAuthenticated,
         IsTenantUser,
-        roles_required(Role.ACCOUNTANT, Role.ORG_ADMIN),
+        roles_required(
+            Role.ACCOUNTANT,
+            Role.ORG_ADMIN,
+            Role.PROJECT_MANAGER,
+            Role.SITE_MANAGER,
+            Role.SITE_ENGINEER,
+            Role.EMPLOYEE,
+            "employee/labour",
+        ),
     ]
     filterset_fields = ["project", "status"]
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [
+                IsAuthenticated(),
+                IsTenantUser(),
+                roles_required(
+                    Role.ACCOUNTANT,
+                    Role.ORG_ADMIN,
+                    Role.PROJECT_MANAGER,
+                    Role.SITE_MANAGER,
+                    Role.SITE_ENGINEER,
+                    Role.EMPLOYEE,
+                    "employee/labour",
+                )(),
+            ]
+        return [
+            IsAuthenticated(),
+            IsTenantUser(),
+            roles_required(Role.ACCOUNTANT, Role.ORG_ADMIN)(),
+        ]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return PayrollRun.objects.none()
         qs = super().get_queryset().select_related("project", "created_by", "approved_by")
         qs = qs.prefetch_related("vouchers__employee")
+        user = self.request.user
+        if user.is_authenticated and user.role in [Role.EMPLOYEE, "employee/labour", "EMPLOYEE", "LABOUR"]:
+            from django.db.models import Q
+            from workforce.models import Employee
+            emp_ids = list(
+                Employee.objects.filter(organization=user.organization, deleted_at__isnull=True)
+                .filter(Q(email__iexact=user.email) | (Q(phone=user.phone) & ~Q(phone="")) | Q(full_name__iexact=user.name))
+                .values_list("id", flat=True)
+            )
+            return qs.filter(vouchers__employee_id__in=emp_ids).distinct()
         return self.filter_project_scope(qs)
 
     def create(self, request, *args, **kwargs):

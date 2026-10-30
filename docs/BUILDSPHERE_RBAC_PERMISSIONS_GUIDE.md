@@ -160,3 +160,4 @@ permission_classes = [IsAuthenticated, IsTenantUser, roles_required(Role.ORG_ADM
 1. **Sidebar Navigation**: Nav items are filtered at render time using `navItems.filter(item => !item.roles || item.roles.includes(role))`.
 2. **Route / Tab Shielding**: Unauthorized tabs redirect automatically to `DEFAULT_TAB_BY_ROLE[role]`.
 3. **Action-Level Control**: Approval, delete, and payment buttons conditionally render only when matching role privileges are satisfied.
+

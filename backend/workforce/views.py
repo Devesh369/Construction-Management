@@ -32,10 +32,32 @@ class EmployeeViewSet(TenantViewSet):
     filterset_fields = ["trade", "primary_project", "group", "employment_type", "is_active"]
     search_fields = ["full_name", "employee_code", "phone"]
 
+    def get_permissions(self):
+        if self.action in ["list", "retrieve", "lookup"]:
+            return [
+                IsAuthenticated(),
+                IsTenantUser(),
+                roles_required(
+                    Role.ORG_ADMIN,
+                    Role.PROJECT_MANAGER,
+                    Role.SUPERVISOR,
+                    Role.ACCOUNTANT,
+                    Role.SITE_MANAGER,
+                    Role.SITE_ENGINEER,
+                    Role.EMPLOYEE,
+                    "employee/labour",
+                )(),
+            ]
+        return [
+            IsAuthenticated(),
+            IsTenantUser(),
+            roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR)(),
+        ]
+
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Employee.objects.none()
-        return (
+        qs = (
             Employee.objects.filter(
                 organization=self.request.user.organization,
                 deleted_at__isnull=True,
@@ -43,6 +65,15 @@ class EmployeeViewSet(TenantViewSet):
             .select_related("primary_project", "group")
             .prefetch_related("assigned_projects")
         )
+        user = self.request.user
+        if user.is_authenticated and user.role in [Role.EMPLOYEE, "employee/labour", "EMPLOYEE", "LABOUR"]:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(email__iexact=user.email) |
+                (Q(phone=user.phone) & ~Q(phone="")) |
+                Q(full_name__iexact=user.name)
+            )
+        return qs
 
     def create(self, request, *args, **kwargs):
         if request.user.role not in [
@@ -272,8 +303,39 @@ class LaborGroupViewSet(TenantViewSet):
     permission_classes = [
         IsAuthenticated,
         IsTenantUser,
-        roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR),
+        roles_required(
+            Role.ORG_ADMIN,
+            Role.PROJECT_MANAGER,
+            Role.SUPERVISOR,
+            Role.ACCOUNTANT,
+            Role.SITE_MANAGER,
+            Role.SITE_ENGINEER,
+            Role.EMPLOYEE,
+            "employee/labour",
+        ),
     ]
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [
+                IsAuthenticated(),
+                IsTenantUser(),
+                roles_required(
+                    Role.ORG_ADMIN,
+                    Role.PROJECT_MANAGER,
+                    Role.SUPERVISOR,
+                    Role.ACCOUNTANT,
+                    Role.SITE_MANAGER,
+                    Role.SITE_ENGINEER,
+                    Role.EMPLOYEE,
+                    "employee/labour",
+                )(),
+            ]
+        return [
+            IsAuthenticated(),
+            IsTenantUser(),
+            roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR)(),
+        ]
     filterset_fields = ["project", "is_active"]
     search_fields = ["name"]
 

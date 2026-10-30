@@ -36,6 +36,48 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    employee_id = serializers.SerializerMethodField()
+    employee_code = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
+
+    def get_organization(self, obj):
+        if not getattr(obj, "organization", None):
+            return None
+        return {
+            "id": obj.organization.id,
+            "name": obj.organization.name,
+        }
+
+    def get_employee_id(self, obj):
+        if not getattr(obj, "organization", None):
+            return None
+        from workforce.models import Employee
+        from django.db.models import Q
+        emp = Employee.objects.filter(
+            organization=obj.organization,
+            deleted_at__isnull=True,
+        ).filter(
+            Q(email__iexact=obj.email) |
+            (Q(phone=obj.phone) & ~Q(phone="")) |
+            Q(full_name__iexact=obj.name)
+        ).first()
+        return emp.id if emp else None
+
+    def get_employee_code(self, obj):
+        if not getattr(obj, "organization", None):
+            return None
+        from workforce.models import Employee
+        from django.db.models import Q
+        emp = Employee.objects.filter(
+            organization=obj.organization,
+            deleted_at__isnull=True,
+        ).filter(
+            Q(email__iexact=obj.email) |
+            (Q(phone=obj.phone) & ~Q(phone="")) |
+            Q(full_name__iexact=obj.name)
+        ).first()
+        return emp.employee_code if emp else None
+
     def validate_phone(self, value):
         from core.validators import validate_mobile_10_digits
 
@@ -45,8 +87,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "email", "name", "phone", "role"]
-        read_only_fields = ["id", "email", "role"]
+        fields = ["id", "email", "name", "phone", "role", "employee_id", "employee_code", "organization"]
+        read_only_fields = ["id", "email", "role", "employee_id", "employee_code", "organization"]
 
 
 class UserSerializer(serializers.ModelSerializer):
