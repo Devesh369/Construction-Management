@@ -19,6 +19,14 @@ export const AuthProvider = ({ children }) => {
       }
       try {
         const me = await api.auth.me();
+        if (me && (me.is_active === false || me.status === 'INACTIVE')) {
+          console.warn('User account is deactivated by org admin, clearing session');
+          setToken(null);
+          setRefreshToken(null);
+          setUser(null);
+          setStoredUser(null);
+          return;
+        }
         setUser(me);
         setStoredUser(me);
       } catch (err) {
@@ -49,6 +57,15 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const res = await api.auth.login(email, password);
+      if (res?.user && (res.user.is_active === false || res.user.status === 'INACTIVE')) {
+        setToken(null);
+        setRefreshToken(null);
+        setUser(null);
+        setStoredUser(null);
+        throw new Error(
+          'This account has been deactivated by the organization admin. Please contact your administrator.'
+        );
+      }
       setToken(res.access);
       if (res.refresh) setRefreshToken(res.refresh);
       setUser(res.user);

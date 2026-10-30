@@ -654,8 +654,24 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (!user) {
       throw new Error('Invalid email or password.');
     }
-    if (!user) {
-      throw new Error('Invalid email or password.');
+    // CRITICAL SECURITY: Block deactivated users from logging in
+    if (user.is_active === false) {
+      throw new Error(
+        'This account has been deactivated by the organization admin. Please contact your administrator.'
+      );
+    }
+    // Check if linked workforce employee is marked inactive
+    const linkedEmp = (db.employees || []).find(
+      (e) => (user.employee_id && e.id === user.employee_id) ||
+             (e.email && e.email.toLowerCase() === email) ||
+             (user.phone && e.phone && e.phone === user.phone)
+    );
+    if (linkedEmp && (linkedEmp.is_active === false || linkedEmp.status === 'INACTIVE')) {
+      user.is_active = false;
+      saveDB(db);
+      throw new Error(
+        'This account has been deactivated by the organization admin. Please contact your administrator.'
+      );
     }
     if (user.role === 'employee/labour' && !user.employee_id) {
       user.employee_id = 100;
@@ -878,6 +894,18 @@ export async function handleMockRequest(endpoint, options = {}) {
     const idx = db.users.findIndex((u) => String(u.id) === String(uId));
     if (method === 'PATCH' && idx !== -1) {
       db.users[idx] = { ...db.users[idx], ...body };
+      // Sync is_active with linked employee record
+      if (body.is_active !== undefined) {
+        const empIdx = (db.employees || []).findIndex(
+          (e) => (db.users[idx].employee_id && e.id === db.users[idx].employee_id) ||
+                 (db.users[idx].email && e.email && e.email.toLowerCase() === db.users[idx].email.toLowerCase()) ||
+                 (db.users[idx].name && e.full_name && e.full_name.toLowerCase() === db.users[idx].name.toLowerCase())
+        );
+        if (empIdx !== -1) {
+          db.employees[empIdx].is_active = body.is_active;
+          db.employees[empIdx].status = body.is_active ? 'ACTIVE' : 'INACTIVE';
+        }
+      }
       if (
         (body.role === 'employee/labour' || body.role === 'LABOUR') &&
         (!db.users[idx].employee_id || !(db.employees || []).some((e) => e.id === db.users[idx].employee_id))

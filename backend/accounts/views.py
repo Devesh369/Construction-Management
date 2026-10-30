@@ -426,12 +426,28 @@ class UserViewSet(TenantViewSet):
                     )
 
         old_role = user_to_update.role
+        old_is_active = user_to_update.is_active
         updated_user = serializer.save()
 
-        # If role changed, bump token_version immediately to revoke old permissions
-        if new_role and new_role != old_role:
+        # If role or active status changed, bump token_version immediately to revoke old tokens/sessions
+        if (new_role and new_role != old_role) or (new_is_active is not None and new_is_active != old_is_active):
             updated_user.token_version += 1
             updated_user.save(update_fields=["token_version"])
+
+        # Sync active status with linked workforce Employee
+        if new_is_active is not None and updated_user.organization:
+            from workforce.models import Employee
+            from django.db.models import Q
+            Employee.objects.filter(
+                organization=updated_user.organization,
+                deleted_at__isnull=True,
+            ).filter(
+                Q(email__iexact=updated_user.email)
+                | (Q(phone=updated_user.phone) & ~Q(phone=""))
+                | Q(full_name__iexact=updated_user.name)
+            ).update(
+                is_active=new_is_active,
+            )
 
         log_action(
             user=self.request.user,

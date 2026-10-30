@@ -196,6 +196,12 @@ def login_user(email: str, password: str, request=None) -> tuple[User, dict]:
             .first()
         )
         if emp:
+            # If the employee is inactive or marked deleted, block login immediately!
+            if getattr(emp, "is_active", True) is False:
+                raise BusinessRuleError(
+                    "This account has been deactivated by the organization admin. Please contact your administrator.",
+                    code="account_deactivated",
+                )
             user_email = (
                 emp.email.lower().strip()
                 if emp.email
@@ -209,7 +215,7 @@ def login_user(email: str, password: str, request=None) -> tuple[User, dict]:
                     phone=emp.phone or "",
                     role=Role.EMPLOYEE,
                     organization=emp.organization,
-                    is_active=True,
+                    is_active=getattr(emp, "is_active", True),
                 )
                 user.set_password(password)
                 user.save()
@@ -221,6 +227,50 @@ def login_user(email: str, password: str, request=None) -> tuple[User, dict]:
 
     if not user:
         raise BusinessRuleError("Invalid email or password.", code="invalid_credentials")
+
+    # CRITICAL SECURITY CHECK: Reject login if user is deactivated or deleted
+    if not user.is_active or getattr(user, "deleted_at", None) is not None:
+        log_action(
+            user=user,
+            action=AuditAction.LOGIN_FAILED,
+            obj=user,
+            metadata={"reason": "User account is deactivated by organization admin"},
+            request=request,
+            organization=user.organization,
+        )
+        raise BusinessRuleError(
+            "This account has been deactivated by the organization admin. Please contact your administrator.",
+            code="account_deactivated",
+        )
+
+    # Check if linked workforce Employee is inactive
+    if user.organization:
+        from workforce.models import Employee
+        emp = (
+            Employee.objects.filter(organization=user.organization, deleted_at__isnull=True)
+            .filter(
+                Q(email__iexact=user.email)
+                | (Q(phone=user.phone) & ~Q(phone=""))
+                | Q(full_name__iexact=user.name)
+            )
+            .first()
+        )
+        if emp and (getattr(emp, "is_active", True) is False):
+            if user.is_active:
+                user.is_active = False
+                user.save(update_fields=["is_active"])
+            log_action(
+                user=user,
+                action=AuditAction.LOGIN_FAILED,
+                obj=user,
+                metadata={"reason": "Linked employee record is deactivated"},
+                request=request,
+                organization=user.organization,
+            )
+            raise BusinessRuleError(
+                "This account has been deactivated by the organization admin. Please contact your administrator.",
+                code="account_deactivated",
+            )
 
     now = timezone.now()
 

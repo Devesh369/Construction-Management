@@ -133,11 +133,21 @@ export const LoginView = ({ isAlreadyAuthenticated = false }) => {
         window.history.replaceState({}, '', window.location.pathname);
       }
     } catch (err) {
-      setError(
-        err.message?.includes('invalid_credentials') || err.message?.includes('Invalid email')
-          ? 'Invalid email or password. Please verify credentials or register your organization.'
-          : err.message || 'Authentication failed. Please check credentials.'
-      );
+      const msg = err.message || '';
+      if (
+        msg.includes('deactivated') ||
+        msg.includes('account_deactivated') ||
+        msg.includes('inactive') ||
+        msg.includes('user_inactive')
+      ) {
+        setError(
+          'This account has been deactivated by the organization admin. Please contact your administrator.'
+        );
+      } else if (msg.includes('invalid_credentials') || msg.includes('Invalid email')) {
+        setError('Invalid email or password. Please verify credentials or register your organization.');
+      } else {
+        setError(msg || 'Authentication failed. Please check credentials.');
+      }
     } finally {
       setLoading(false);
     }
