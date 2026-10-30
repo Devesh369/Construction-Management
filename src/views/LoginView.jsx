@@ -129,7 +129,9 @@ export const LoginView = ({ isAlreadyAuthenticated = false }) => {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      window.history.replaceState({}, '', window.location.pathname);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
     } catch (err) {
       setError(
         err.message?.includes('invalid_credentials') || err.message?.includes('Invalid email')

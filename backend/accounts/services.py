@@ -171,11 +171,55 @@ def accept_invitation(token: str, password: str, name: str = "", request=None) -
 def login_user(email: str, password: str, request=None) -> tuple[User, dict]:
     """
     UC-03: Authenticate email + password with 5-failure lockout and JWT issuance.
+    Supports email, mobile phone, or employee code lookup and workforce sync.
     """
-    email_clean = email.lower().strip()
-    try:
-        user = User.objects.select_related("organization").get(email=email_clean)
-    except User.DoesNotExist:
+    ident = email.strip()
+    ident_lower = ident.lower()
+    from django.db.models import Q
+    user = (
+        User.objects.select_related("organization")
+        .filter(Q(email__iexact=ident_lower) | (Q(phone=ident) & ~Q(phone="")))
+        .first()
+    )
+
+    if not user:
+        # Check if an employee exists in workforce.Employee!
+        from workforce.models import Employee
+        emp = (
+            Employee.objects.select_related("organization")
+            .filter(deleted_at__isnull=True)
+            .filter(
+                Q(email__iexact=ident_lower)
+                | (Q(phone=ident) & ~Q(phone=""))
+                | Q(employee_code__iexact=ident)
+            )
+            .first()
+        )
+        if emp:
+            user_email = (
+                emp.email.lower().strip()
+                if emp.email
+                else f"{emp.employee_code.lower()}@worker.buildsphere.local"
+            )
+            user = User.objects.filter(email__iexact=user_email).first()
+            if not user:
+                user = User(
+                    email=user_email,
+                    name=emp.full_name,
+                    phone=emp.phone or "",
+                    role=Role.EMPLOYEE,
+                    organization=emp.organization,
+                    is_active=True,
+                )
+                user.set_password(password)
+                user.save()
+            else:
+                user.role = Role.EMPLOYEE
+                if not user.organization:
+                    user.organization = emp.organization
+                user.save()
+
+    if not user:
         raise BusinessRuleError("Invalid email or password.", code="invalid_credentials")
 
     now = timezone.now()
@@ -202,7 +246,19 @@ def login_user(email: str, password: str, request=None) -> tuple[User, dict]:
             "devesh123",
             "12345678",
             "123456",
+            "Pass@12345",
+            "BuildSphere@2026",
+            "harshil",
+            "harshil123",
+            "Harshil@123",
         ]
+        # For employee/labour accounts, also accept employee's name or code as password in dev
+        if user.role in [Role.EMPLOYEE, "employee/labour", "EMPLOYEE", "LABOUR"]:
+            allowed_dev_passwords.extend([
+                user.name.lower().replace(" ", ""),
+                user.name.replace(" ", ""),
+                (user.email.split("@")[0]).lower(),
+            ])
         if settings.DEBUG and password in allowed_dev_passwords:
             user.set_password(password)
             user.failed_login_count = 0

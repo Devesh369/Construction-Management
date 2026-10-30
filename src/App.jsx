@@ -134,6 +134,7 @@ const AppContent = () => {
 
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const isExplicitAuthView =
+    !isAuthenticated &&
     urlParams &&
     (urlParams.has('invite') ||
       urlParams.get('mode') === 'setup' ||
