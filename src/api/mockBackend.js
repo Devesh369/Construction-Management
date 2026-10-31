@@ -1,20 +1,31 @@
 import { INITIAL_DB } from './initialData.js';
 
 const STORAGE_KEY = 'buildsphere_mock_db';
+const DB_VERSION_KEY = 'buildsphere_db_version';
+const CURRENT_DB_VERSION = 'v_factory_reset_clean_20261031';
 
 // Helper to deep clone
 const clone = (obj) => JSON.parse(JSON.stringify(obj));
 
-// Load DB from localStorage or seed with INITIAL_DB
+// Load DB from localStorage or seed with clean INITIAL_DB
 function loadDB() {
   let target = null;
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.projects && parsed.users) {
-          target = parsed;
+      const storedVersion = window.localStorage.getItem(DB_VERSION_KEY);
+      if (storedVersion !== CURRENT_DB_VERSION) {
+        window.localStorage.removeItem(STORAGE_KEY);
+        window.localStorage.removeItem('cmp_access_token');
+        window.localStorage.removeItem('cmp_refresh_token');
+        window.localStorage.removeItem('cmp_user');
+        window.localStorage.setItem(DB_VERSION_KEY, CURRENT_DB_VERSION);
+      } else {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            target = parsed;
+          }
         }
       }
     }
@@ -26,284 +37,19 @@ function loadDB() {
     target = clone(INITIAL_DB);
   }
 
-  // Ensure default structures
-  if (!target.employees) target.employees = clone(INITIAL_DB.employees || []);
-  if (!target.labor_groups) target.labor_groups = [];
-  if (!target.dprs) target.dprs = [];
-  if (!target.night_shifts) target.night_shifts = [];
-  if (!target.credit_logs) target.credit_logs = [];
-  if (!target.running_costs) target.running_costs = [];
-  if (!target.invitations) target.invitations = [];
-  if (!target.audit_logs) target.audit_logs = clone(INITIAL_DB.audit_logs || []);
-  if (!target.cost_estimates) target.cost_estimates = [];
-  if (!target.dispatched_emails) target.dispatched_emails = [];
+  // Ensure default structure arrays exist
+  const collections = [
+    'organizations', 'users', 'projects', 'project_memberships', 'budget_categories',
+    'employees', 'attendances', 'holidays', 'work_entries', 'expenses', 'vendors',
+    'advances', 'payroll_runs', 'payroll_vouchers', 'payments', 'accounts',
+    'journal_entries', 'journal_lines', 'transactions', 'audit_logs', 'labor_groups',
+    'dprs', 'night_shifts', 'credit_logs', 'running_costs', 'invitations',
+    'cost_estimates', 'dispatched_emails'
+  ];
+  collections.forEach((col) => {
+    if (!Array.isArray(target[col])) target[col] = [];
+  });
 
-  // Auto-sync: Ensure any user in target.users with role 'employee/labour' has a valid employee record in target.employees
-  let dbChanged = false;
-  if (Array.isArray(target.users) && Array.isArray(target.employees)) {
-    const allProjIds = (target.projects || []).map((p) => p.id);
-    target.users.forEach((u) => {
-      if (u.role === 'employee/labour' || u.role === 'LABOUR' || u.role === 'EMPLOYEE') {
-        // Find existing employee record
-        let existingEmp = target.employees.find(
-          (e) => (u.employee_id && e.id === u.employee_id) || (u.email && e.email === u.email)
-        );
-
-        // If u.employee_id is 100 (dummy fallback) but this user's name is NOT Darshil (id 100), detach them and give them their own record!
-        if (existingEmp && existingEmp.id === 100 && u.name && u.name.toLowerCase() !== 'darshil') {
-          existingEmp = null;
-        }
-
-        if (!existingEmp) {
-          const nextEmpId = nextId(target.employees);
-          const empCode = `EMP-${String(nextEmpId).padStart(4, '0')}`;
-          const newEmp = {
-            id: nextEmpId,
-            employee_code: empCode,
-            full_name: u.name || 'New Employee',
-            phone: u.phone || '',
-            email: u.email || '',
-            role: 'Labour',
-            trade: 'HELPER',
-            skill_level: 'SKILLED',
-            employment_type: 'DAILY_WAGE',
-            daily_rate: '800.00',
-            ot_hourly_rate: '150.00',
-            monthly_salary: '0.00',
-            is_active: true,
-            deleted_at: null,
-            primary_project: null,
-            assigned_projects: [],
-            joining_date: new Date().toISOString().split('T')[0],
-            created_at: u.created_at || new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-          target.employees.push(newEmp);
-          u.employee_id = newEmp.id;
-          dbChanged = true;
-        } else if (u.employee_id !== existingEmp.id) {
-          u.employee_id = existingEmp.id;
-          dbChanged = true;
-        }
-      }
-    });
-
-    // Ensure Site Manager user exists
-    if (!target.users.some((u) => u.role === 'SITE_MANAGER')) {
-      target.users.push({
-        id: nextId(target.users),
-        name: 'Darshil (Site Manager)',
-        email: 'sitemanager@buildsphere.com',
-        role: 'SITE_MANAGER',
-        phone: '9876543210',
-        is_active: true,
-        organization: 10,
-        created_at: new Date().toISOString(),
-      });
-      dbChanged = true;
-    }
-
-    // Ensure Supervisor user exists
-    if (!target.users.some((u) => u.role === 'SUPERVISOR')) {
-      target.users.push({
-        id: nextId(target.users),
-        name: 'Sup Sanjay',
-        email: 'sup1@alpha.test',
-        role: 'SUPERVISOR',
-        phone: '+91 98765 33333',
-        is_active: true,
-        organization: 10,
-        created_at: new Date().toISOString(),
-      });
-      dbChanged = true;
-    }
-  }
-
-  // Multi-tenant database self-healing & migrations
-  if (Array.isArray(target.organizations)) {
-    let org10 = target.organizations.find((o) => Number(o.id) === 10);
-    if (!org10) {
-      org10 = clone(INITIAL_DB.organizations[0]);
-      target.organizations.unshift(org10);
-      dbChanged = true;
-    } else if (target.organizations.length === 1 && org10.name !== 'BuildSphere org.') {
-      const customName = org10.name;
-      org10.name = 'BuildSphere org.';
-      const newOrg = {
-        ...clone(org10),
-        id: 11,
-        name: customName,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      target.organizations.push(newOrg);
-      dbChanged = true;
-    }
-  }
-
-  // Self-heal & enrich payments table with employee_name, project_name, and normalized dates
-  if (!target.payments) {
-    target.payments = clone(INITIAL_DB.payments || []);
-    dbChanged = true;
-  }
-  if (Array.isArray(target.payments) && Array.isArray(target.employees)) {
-    target.payments.forEach((p) => {
-      const empId = Number(p.employee || p.employee_id || 0);
-      const emp = target.employees.find((e) => Number(e.id) === empId);
-      const projId = Number(p.project || p.project_id || emp?.primary_project || target.projects?.[0]?.id || 29);
-      const proj = (target.projects || []).find((pr) => Number(pr.id) === projId);
-
-      if (!p.employee_name && emp) {
-        p.employee_name = emp.full_name;
-        dbChanged = true;
-      }
-      if (!p.employee_code && emp) {
-        p.employee_code = emp.employee_code || '';
-        dbChanged = true;
-      }
-      if (!p.project) {
-        p.project = projId;
-        dbChanged = true;
-      }
-      if (!p.project_name && proj) {
-        p.project_name = proj.name;
-        dbChanged = true;
-      }
-      const rawDate = p.payment_date || p.date_from || p.date_to || p.date || p.advance_date || (p.created_at ? p.created_at.split('T')[0] : '');
-      if (rawDate) {
-        const norm = String(rawDate).split('T')[0];
-        if (!p.payment_date) { p.payment_date = norm; dbChanged = true; }
-        if (!p.date_from) { p.date_from = norm; dbChanged = true; }
-        if (!p.date_to) { p.date_to = norm; dbChanged = true; }
-        if (!p.date) { p.date = norm; dbChanged = true; }
-        if (!p.advance_date) { p.advance_date = norm; dbChanged = true; }
-      }
-    });
-  }
-
-  // Self-heal: ensure wage / salary payments are mirrored into transactions (Payment Central) and payroll_vouchers (Payroll)
-  if (Array.isArray(target.payments)) {
-    if (!target.transactions) target.transactions = [];
-    if (!target.payroll_vouchers) target.payroll_vouchers = [];
-
-    target.payments.forEach((p) => {
-      const pType = (p.payment_type || p.type || '').toLowerCase();
-      const isSalary = pType === 'salary' || pType === 'wage' || (p.description && p.description.toLowerCase().includes('wage settlement'));
-      if (isSalary) {
-        const empId = Number(p.employee || p.employee_id || 0);
-        const emp = (target.employees || []).find((e) => Number(e.id) === empId);
-        const pDate = p.payment_date || p.date || (p.created_at ? p.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
-        const existsTx = target.transactions.find((t) => 
-          t.metadata?.payment_id === p.id ||
-          (t.category === 'salary' && Number(t.amount) === Number(p.amount) && Number(t.metadata?.employee_id || 0) === empId)
-        );
-        if (!existsTx) {
-          const nextTxId = nextId(target.transactions);
-          target.transactions.push({
-            id: nextTxId,
-            transaction_id: `TXN-SAL-${p.id}`,
-            type: 'outgoing',
-            category: 'salary',
-            payer_name: 'Pragati Construction',
-            payee_name: p.employee_name || emp?.full_name || 'Worker',
-            amount: String(Number(p.amount || 0).toFixed(2)),
-            method: (p.method || p.payment_mode || 'cash').toLowerCase(),
-            status: 'completed',
-            date: pDate,
-            description: `[PAYROLL] Wage settlement for ${p.employee_name || emp?.full_name || 'Worker'}`,
-            recorded_by: p.created_by || 1,
-            recorded_by_name: p.recorded_by_name || 'Naresh Prajapati',
-            metadata: {
-              source: 'payroll',
-              employee_id: empId,
-              paymentType: 'salary',
-              payment_id: p.id,
-            },
-            organization: Number(p.organization || 10),
-            created_at: p.created_at || new Date().toISOString(),
-          });
-          dbChanged = true;
-        }
-
-        const existsVoucher = target.payroll_vouchers.find((v) =>
-          Number(v.employee) === empId && Number(v.net_pay || v.gross_pay || v.net_payable || 0) === Number(p.amount)
-        );
-        if (!existsVoucher) {
-          const nextVId = nextId(target.payroll_vouchers);
-          target.payroll_vouchers.push({
-            id: nextVId,
-            voucher_number: `VOU-${String(nextVId).padStart(4, '0')}`,
-            employee: empId,
-            employee_name: p.employee_name || emp?.full_name || 'Worker',
-            employee_code: p.employee_code || emp?.employee_code || '',
-            daily_rate: emp?.daily_rate || '800.00',
-            gross_amount: String(Number(p.amount || 0).toFixed(2)),
-            gross_pay: String(Number(p.amount || 0).toFixed(2)),
-            basic_pay: String(Number(p.amount || 0).toFixed(2)),
-            advance_deductions: '0.00',
-            net_payable: String(Number(p.amount || 0).toFixed(2)),
-            net_pay: String(Number(p.amount || 0).toFixed(2)),
-            payment_mode: (p.payment_mode || 'CASH').toUpperCase(),
-            status: 'PAID',
-            paid_at: p.created_at || new Date().toISOString(),
-            date: pDate,
-            payment_reference: p.notes || `Wage Settlement - ${pDate}`,
-            organization: Number(p.organization || 10),
-            project: Number(p.project || 29),
-            created_at: p.created_at || new Date().toISOString(),
-          });
-          dbChanged = true;
-        }
-      }
-    });
-  }
-
-  const demoEmails = new Set([
-    'deveshpatel@gmail.com',
-    'devesh@buildsphere.com',
-    'viren@gmail.com',
-    'darshil@buildsphere.com',
-    'viren@buildsphere.com',
-    'san@gmail.com',
-    'sitemanager@buildsphere.com',
-    'labour@buildsphere.com',
-    'arav@gmail.com',
-  ]);
-
-  if (Array.isArray(target.users)) {
-    target.users.forEach((u) => {
-      if (u.role === 'ORG_ADMIN' && u.email && !demoEmails.has(u.email.toLowerCase())) {
-        const uOrgId = Number(u.organization?.id || u.organization || 10);
-        if (uOrgId === 10) {
-          let customOrg = target.organizations.find((o) => Number(o.id) !== 10);
-          if (!customOrg) {
-            const nextOrgId = Math.max(10, ...target.organizations.map((o) => Number(o.id || 0))) + 1;
-            customOrg = {
-              id: nextOrgId,
-              name: u.company_name || `${u.name}'s Organization`,
-              currency: 'INR',
-              workday_hours: '8.00',
-              half_day_hours: '4.00',
-              overtime_after_hours: '8.00',
-              expense_approval_limit: '1000.00',
-              is_active: true,
-              created_at: u.created_at || new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            };
-            target.organizations.push(customOrg);
-          }
-          u.organization = customOrg.id;
-          dbChanged = true;
-        }
-      }
-    });
-  }
-
-  if (typeof window !== 'undefined' && window.localStorage) {
-    if (dbChanged || !localStorage.getItem(STORAGE_KEY)) {
-      saveDB(target);
-    }
-  }
   return target;
 }
 
@@ -321,15 +67,17 @@ let db = loadDB();
 // Reset DB helper
 export function resetDB() {
   db = clone(INITIAL_DB);
-  if (!db.labor_groups) db.labor_groups = [];
-  if (!db.dprs) db.dprs = [];
-  if (!db.night_shifts) db.night_shifts = [];
-  if (!db.credit_logs) db.credit_logs = [];
-  if (!db.running_costs) db.running_costs = [];
-  if (!db.invitations) db.invitations = [];
-  if (!db.audit_logs) db.audit_logs = clone(INITIAL_DB.audit_logs || []);
-  if (!db.cost_estimates) db.cost_estimates = [];
-  if (!db.dispatched_emails) db.dispatched_emails = [];
+  const collections = [
+    'organizations', 'users', 'projects', 'project_memberships', 'budget_categories',
+    'employees', 'attendances', 'holidays', 'work_entries', 'expenses', 'vendors',
+    'advances', 'payroll_runs', 'payroll_vouchers', 'payments', 'accounts',
+    'journal_entries', 'journal_lines', 'transactions', 'audit_logs', 'labor_groups',
+    'dprs', 'night_shifts', 'credit_logs', 'running_costs', 'invitations',
+    'cost_estimates', 'dispatched_emails'
+  ];
+  collections.forEach((col) => {
+    if (!Array.isArray(db[col])) db[col] = [];
+  });
   saveDB(db);
   return db;
 }
@@ -854,7 +602,10 @@ export async function handleMockRequest(endpoint, options = {}) {
 
   if (pathname === '/users/me') {
     const rawUser = localStorage.getItem('cmp_user');
-    const user = rawUser ? JSON.parse(rawUser) : db.users[0];
+    const user = rawUser ? JSON.parse(rawUser) : (db.users && db.users.length > 0 ? db.users[0] : null);
+    if (!user) {
+      throw new Error('Not authenticated.');
+    }
     if (method === 'PATCH') {
       const idx = db.users.findIndex((u) => u.id === user.id);
       if (idx !== -1) {
