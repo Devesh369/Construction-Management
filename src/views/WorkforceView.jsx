@@ -353,6 +353,11 @@ export const WorkforceView = () => {
       toast.error('Cannot pay wages to an employee without marked attendance. Attendance must be marked first.');
       return;
     }
+    const remainingBalance = Number(fin.balance || 0);
+    if (remainingBalance <= 0) {
+      toast.error('Cannot pay wages. Total employee amount is zero (all wages are fully settled).');
+      return;
+    }
     if (!payForm.amount || Number(payForm.amount) <= 0) {
       toast.error('Enter a valid payment amount.');
       return;
@@ -789,7 +794,7 @@ export const WorkforceView = () => {
                 <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
                   TOTAL EMPLOYEE AMOUNT
                 </span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className={`w-2 h-2 rounded-full ${Number(fin.balance || 0) > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
               </div>
               <div className="text-2xl font-black text-emerald-800 dark:text-emerald-300">
                 {formatCurrency(fin.balance)}
@@ -803,38 +808,65 @@ export const WorkforceView = () => {
               const hasAttendance = Boolean(
                 fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
               );
-              return hasAttendance ? (
+              const remainingBalance = Number(fin.balance || 0);
+              const isSettled = remainingBalance <= 0;
+
+              if (!hasAttendance) {
+                return (
+                  <div className="w-full">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled
+                      className="w-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80 flex items-center justify-center gap-1.5"
+                      title="Attendance must be marked before paying wages"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>PAY WAGES (ATTENDANCE REQUIRED)</span>
+                    </Button>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold text-center block mt-1">
+                      Mark attendance first to enable wage disbursement
+                    </span>
+                  </div>
+                );
+              }
+
+              if (isSettled) {
+                return (
+                  <div className="w-full">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled
+                      className="w-full bg-slate-200/90 dark:bg-slate-800/90 text-slate-400 dark:text-slate-500 font-bold border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80 flex items-center justify-center gap-1.5 shadow-none"
+                      title="Total employee amount is zero (all wages are fully settled)"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>PAY WAGES (LOCKED)</span>
+                    </Button>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold text-center block mt-1">
+                      Wages fully settled (₹0 balance remaining)
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
                 <Button
                   variant="primary"
                   size="sm"
                   onClick={() => {
                     setPayForm({
-                      amount: fin.balance && Number(fin.balance) > 0 ? String(fin.balance) : '',
+                      amount: String(remainingBalance),
                       payment_mode: 'CASH',
                       notes: 'Direct wage settlement',
                     });
                     setIsPayModalOpen(true);
                   }}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 font-black shadow-md shadow-emerald-600/30"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 font-black shadow-md shadow-emerald-600/30 cursor-pointer"
                 >
                   PAY WAGES
                 </Button>
-              ) : (
-                <div className="w-full">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled
-                    className="w-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80 flex items-center justify-center gap-1.5"
-                    title="Attendance must be marked before paying wages"
-                  >
-                    <Lock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>PAY WAGES (ATTENDANCE REQUIRED)</span>
-                  </Button>
-                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold text-center block mt-1">
-                    Mark attendance first to enable wage disbursement
-                  </span>
-                </div>
               );
             })()}
           </div>
@@ -1038,6 +1070,9 @@ export const WorkforceView = () => {
             const hasAttendance = Boolean(
               fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
             );
+            const remainingBalance = Number(fin.balance || 0);
+            const isSettled = remainingBalance <= 0;
+
             return (
               <form onSubmit={handlePaySubmit} className="space-y-4">
                 {!hasAttendance && (
@@ -1050,11 +1085,21 @@ export const WorkforceView = () => {
                   </div>
                 )}
 
+                {hasAttendance && isSettled && (
+                  <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs flex items-start gap-2.5">
+                    <Lock className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+                    <div>
+                      <span className="font-bold block">Wages Fully Settled</span>
+                      Total employee amount is ₹0. There is no pending balance to disburse.
+                    </div>
+                  </div>
+                )}
+
                 <Input
                   label="Amount to Pay (₹) *"
                   type="number"
                   step="0.01"
-                  disabled={!hasAttendance}
+                  disabled={!hasAttendance || isSettled}
                   placeholder="e.g. 3000"
                   value={payForm.amount}
                   onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
@@ -1066,7 +1111,7 @@ export const WorkforceView = () => {
                   </label>
                   <select
                     value={payForm.payment_mode}
-                    disabled={!hasAttendance}
+                    disabled={!hasAttendance || isSettled}
                     onChange={(e) => setPayForm({ ...payForm, payment_mode: e.target.value })}
                     className="w-full rounded-xl border border-gray-300 dark:border-[var(--border-default)] bg-white dark:bg-[var(--bg-primary)] px-4 py-2.5 text-sm text-[var(--text-primary)] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
@@ -1079,7 +1124,7 @@ export const WorkforceView = () => {
                 <Input
                   label="Payment Notes / Reference"
                   placeholder="e.g. Weekly settlement or Txn #12345"
-                  disabled={!hasAttendance}
+                  disabled={!hasAttendance || isSettled}
                   value={payForm.notes}
                   onChange={(e) => setPayForm({ ...payForm, notes: e.target.value })}
                 />
@@ -1091,7 +1136,7 @@ export const WorkforceView = () => {
                   <Button
                     type="submit"
                     variant="primary"
-                    disabled={!hasAttendance}
+                    disabled={!hasAttendance || isSettled}
                     className="bg-emerald-600 hover:bg-emerald-700 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Confirm Payment
