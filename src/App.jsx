@@ -204,6 +204,7 @@ const AppContent = () => {
                   selectedProjectId={selectedProjectId}
                   navState={attendanceNavState}
                   onClearNavState={() => setAttendanceNavState(null)}
+                  onNavigate={(tab) => setActiveTab(tab)}
                 />
               )}
               {activeTab === 'progress' && (

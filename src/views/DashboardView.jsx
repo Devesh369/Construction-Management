@@ -30,16 +30,42 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
   const [error, setError] = useState('');
 
   const [assignedTasks, setAssignedTasks] = useState([]);
+  const [netSalaryPayable, setNetSalaryPayable] = useState(null);
 
   const fetchOverview = async () => {
     setLoading(true);
     setError('');
     try {
-      const [res, workRes] = await Promise.all([
+      const [res, workRes, empRes] = await Promise.all([
         api.dashboard.getOverview(selectedProjectId, true),
         api.workEntries.list().catch(() => []),
+        api.workforce.listEmployees({ page_size: 1000 }).catch(() => []),
       ]);
       setData(res);
+
+      const empList = Array.isArray(empRes) ? empRes : empRes?.results || [];
+      const totalBalance = empList.reduce((acc, emp) => {
+        if (selectedProjectId) {
+          const pId = Number(emp.primary_project);
+          const assignedIds = Array.isArray(emp.assigned_projects)
+            ? emp.assigned_projects.map((p) => (typeof p === 'object' ? p.id : p))
+            : [];
+          if (pId !== Number(selectedProjectId) && !assignedIds.includes(Number(selectedProjectId))) {
+            return acc;
+          }
+        }
+        const fin = emp.financials || {};
+        const dailyWage = Number(emp.daily_rate || emp.wage_rate || 0);
+        const hasAtt = Boolean(fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0));
+        const pagar = Number(fin.total_pagar || (hasAtt ? dailyWage : 0));
+        const upad = Number(fin.total_upad || 0);
+        const paid = Number(fin.total_paid || 0);
+        const bal = fin.balance !== undefined && fin.balance !== null
+          ? Number(fin.balance)
+          : Math.max(0, pagar - upad - paid);
+        return acc + bal;
+      }, 0);
+      setNetSalaryPayable(totalBalance);
 
       if (user) {
         const myWork = (Array.isArray(workRes) ? workRes : []).filter((e) => {
@@ -130,12 +156,12 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
     {
       id: 'amount',
       title: 'Employee Amount',
-      value: formatCurrency(data?.month_expenditure ?? data?.employee_amount),
-      subtext: 'Worker wages, UPAD advances & payouts',
+      value: formatCurrency(netSalaryPayable !== null ? netSalaryPayable : (data?.net_salary_payable ?? data?.employee_amount ?? data?.month_expenditure)),
+      subtext: 'Net salary payable across project sites',
       gradient: 'from-teal-500 to-cyan-600',
       shadow: 'hover:shadow-teal-500/20',
       sparklineColor: '#a5f3fc',
-      sparklineData: [4500, 6000, 8500, 12000, 15000, 18500, data?.month_expenditure || 21000],
+      sparklineData: [4500, 6000, 8500, 12000, 15000, 18500, (netSalaryPayable || data?.net_salary_payable || data?.employee_amount || 21000)],
       icon: CreditCard,
       actionText: 'Wages & Payroll',
       tab: 'payroll',
@@ -180,7 +206,7 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
       sparklineData: [12000, 16000, 21000, 28000, 34000, 41000, data?.total_spend || 48000],
       icon: Wallet,
       actionText: 'Ledger Audit',
-      tab: 'ledger',
+      tab: 'payment_central',
       bgImage: statPaymentsBg, // Relevant electronic banking ledger photo
     },
   ];

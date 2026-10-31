@@ -1022,8 +1022,16 @@ export async function handleMockRequest(endpoint, options = {}) {
       .filter((a) => (!projectId || a.project === projectId))
       .reduce((sum, a) => sum + Number(a.amount || 0), 0);
 
+    // Calculate total net salary payable balance (matching Payroll section Net Salary Payable)
+    const netSalaryPayableBalance = (db.employees || [])
+      .filter((e) => !e.deleted_at && Number(e.organization || 10) === currentOrgId && (!projectId || e.primary_project === projectId || (e.assigned_projects || []).includes(projectId)))
+      .reduce((sum, e) => {
+        const fin = computeEmployeeFinancials(e, currentOrgId, db);
+        return sum + Number(fin.balance || 0);
+      }, 0);
+
     // Sum of all wages and UPAD advances paid to employees
-    const totalEmployeeAmount = employeePaymentsSum + payrollVouchersSum + advancesSum;
+    const totalEmployeeAmount = netSalaryPayableBalance;
 
     // Calculate total payments made across the entire platform (Employee Wages & UPAD + Approved Vendor Expenses + Running Costs)
     const approvedExpensesSum = (db.expenses || [])
@@ -1123,6 +1131,7 @@ export async function handleMockRequest(endpoint, options = {}) {
       total_payments: totalPaymentsMade,
       month_expenditure: totalEmployeeAmount,
       employee_amount: totalEmployeeAmount,
+      net_salary_payable: totalEmployeeAmount,
       budget_utilization_pct: budgetPct,
       budget_utilization_percent: budgetPct,
       monthly_burn: approvedExpensesSum,

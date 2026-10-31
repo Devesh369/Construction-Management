@@ -314,6 +314,25 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
                     }
                 )
 
+    # Calculate net salary payable across active workforce
+    from workforce.services import get_employee_financials
+    active_emps = Employee.objects.filter(
+        organization=org, is_active=True, deleted_at__isnull=True
+    )
+    if user.role != Role.ORG_ADMIN:
+        active_emps = active_emps.filter(
+            Q(primary_project__in=active_projects) |
+            Q(assigned_projects__in=active_projects)
+        ).distinct()
+
+    total_net_salary_payable = Decimal("0.00")
+    for emp in active_emps:
+        try:
+            fin = get_employee_financials(emp)
+            total_net_salary_payable += Decimal(str(fin.get("balance", "0.00")))
+        except Exception:
+            pass
+
     # 13. Projects Summary
     projects_list = []
     for proj in active_projects:
@@ -348,7 +367,9 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
         "active_projects": active_projects_count,
         "active_workers": active_workers_count,
         "workers_on_site_today": workers_on_site_today,
-        "month_expenditure": str(month_expenditure),
+        "month_expenditure": str(q2(total_net_salary_payable)),
+        "employee_amount": str(q2(total_net_salary_payable)),
+        "net_salary_payable": str(q2(total_net_salary_payable)),
         "total_budget": str(q2(tot_budget)),
         "total_spend": str(q2(tot_spend)),
         "budget_utilization_percent": str(budget_utilization_percent),

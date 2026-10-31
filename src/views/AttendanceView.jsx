@@ -29,7 +29,7 @@ import toast from 'react-hot-toast';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
-export const AttendanceView = ({ selectedProjectId, navState, onClearNavState }) => {
+export const AttendanceView = ({ selectedProjectId, navState, onClearNavState, onNavigate }) => {
   const { user, role } = useAuth();
   const isEmployeeLabour = role === 'employee/labour' || role === 'EMPLOYEE' || role === 'LABOUR';
 
@@ -2326,7 +2326,9 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
               {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'ACCOUNTANT'].includes(role) && (
                 <button
                   onClick={() => {
-                    toast.success('Navigating to Payroll disbursement module...');
+                    if (onNavigate) {
+                      onNavigate('payroll');
+                    }
                   }}
                   className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-4 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
