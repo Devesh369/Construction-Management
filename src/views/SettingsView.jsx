@@ -52,6 +52,9 @@ export const SettingsView = () => {
   const [users, setUsers] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [dispatchedEmails, setDispatchedEmails] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [selectedInviteEmpId, setSelectedInviteEmpId] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
@@ -99,12 +102,16 @@ export const SettingsView = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [orgRes, usersRes, invRes, emailsRes] = await Promise.all([
+      const [orgRes, usersRes, invRes, emailsRes, empRes] = await Promise.all([
         api.org.getCurrent().catch(() => ({})),
         api.users.list().catch(() => []),
         api.org.listInvitations().catch(() => []),
         api.org.listDispatchedEmails().catch(() => []),
+        api.workforce.listEmployees({ page_size: 1000 }).catch(() => []),
       ]);
+
+      const loadedEmployees = Array.isArray(empRes) ? empRes : empRes?.results || [];
+      setEmployees(loadedEmployees);
 
       setOrg(orgRes);
       setOrgForm({
@@ -158,8 +165,26 @@ export const SettingsView = () => {
     }
   };
 
+  const handleOpenAddUserModal = () => {
+    setSelectedEmployeeId('');
+    setUserForm({
+      name: '',
+      email: '',
+      role: 'employee/labour',
+      password: '',
+      phone: '',
+      notification_email: '',
+      employee_id: null,
+    });
+    setIsAddUserModalOpen(true);
+  };
+
   // Direct User Creation with Guaranteed Credentials Delivery
   const handleCreateUser = async (e) => {
+    if (!userForm.name.trim()) {
+      toast.error('Please select an employee or enter a full name.');
+      return;
+    }
     e.preventDefault();
     if (!userForm.email.trim()) {
       toast.error('Work email address is required.');
@@ -179,6 +204,7 @@ export const SettingsView = () => {
         password: finalPassword,
         phone: cleanPhone,
         notification_email: targetEmail,
+        employee_id: userForm.employee_id || undefined,
       });
 
       // Dispatch credentials email via Resend and/or Outbox
@@ -192,13 +218,15 @@ export const SettingsView = () => {
       });
 
       setIsAddUserModalOpen(false);
+      setSelectedEmployeeId('');
       setUserForm({
         name: '',
         email: '',
-        role: 'SITE_MANAGER',
+        role: 'employee/labour',
         password: '',
         phone: '',
         notification_email: '',
+        employee_id: null,
       });
 
       const providerNote = dispatchRecord.delivery_provider === 'Resend' ? 'via Resend' : 'to Outbox';
@@ -420,7 +448,7 @@ export const SettingsView = () => {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsAddUserModalOpen(true)}
+            onClick={handleOpenAddUserModal}
             className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
           >
             <UserPlus size={15} />
@@ -497,7 +525,7 @@ export const SettingsView = () => {
               </p>
             </div>
             <button
-              onClick={() => setIsAddUserModalOpen(true)}
+              onClick={handleOpenAddUserModal}
               className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
             >
               <UserPlus size={14} />
@@ -976,18 +1004,107 @@ export const SettingsView = () => {
             Create an active login account directly for an administrator, manager, engineer, supervisor, or accountant.
           </p>
 
+          {/* Employee Dropdown Selection */}
           <div>
-            <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
-              Full Name *
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Ramesh Patel"
-              value={userForm.name}
-              onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-black uppercase tracking-wider text-slate-400">
+                Select Employee from Database *
+              </label>
+              {employees.length > 0 && (
+                <span className="text-[10px] text-blue-500 font-bold">
+                  {employees.length} Employee{employees.length > 1 ? 's' : ''} available
+                </span>
+              )}
+            </div>
+            <select
+              value={selectedEmployeeId}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedEmployeeId(val);
+                if (!val) {
+                  setUserForm((prev) => ({
+                    ...prev,
+                    name: '',
+                    email: '',
+                    phone: '',
+                    employee_id: null,
+                  }));
+                  return;
+                }
+                if (val === 'CUSTOM') {
+                  setUserForm((prev) => ({
+                    ...prev,
+                    name: '',
+                    employee_id: null,
+                  }));
+                  return;
+                }
+                const emp = employees.find((item) => String(item.id) === String(val));
+                if (emp) {
+                  setUserForm((prev) => ({
+                    ...prev,
+                    name: emp.full_name || '',
+                    email: emp.email || prev.email || '',
+                    phone: emp.phone ? emp.phone.replace(/\D/g, '').slice(0, 10) : prev.phone,
+                    employee_id: emp.id,
+                    role: 'employee/labour',
+                  }));
+                }
+              }}
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="">-- Select an employee to configure credentials --</option>
+              {employees.map((emp) => {
+                const hasAccount = users.some(
+                  (u) =>
+                    (emp.id && Number(u.employee_id) === Number(emp.id)) ||
+                    (emp.email && u.email?.toLowerCase() === emp.email?.toLowerCase())
+                );
+                return (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.full_name} ({emp.employee_code || `EMP-${emp.id}`}) — {emp.trade || emp.role || 'Worker'} {hasAccount ? '(Account Already Exists)' : ''}
+                  </option>
+                );
+              })}
+              <option value="CUSTOM">+ Enter Other / Custom Name Manually</option>
+            </select>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Select an employee already in our database to automatically link and configure their portal login credentials.
+            </p>
           </div>
+
+          {/* If Custom Name selected */}
+          {selectedEmployeeId === 'CUSTOM' && (
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
+                Full Name *
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Ramesh Patel"
+                value={userForm.name}
+                onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none"
+              />
+            </div>
+          )}
+
+          {/* Selected Employee Info Pill if an employee is chosen */}
+          {selectedEmployeeId && selectedEmployeeId !== 'CUSTOM' && (
+            <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 flex items-center justify-between text-xs">
+              <div>
+                <span className="font-black text-blue-900 dark:text-blue-200">
+                  {userForm.name}
+                </span>
+                <span className="ml-2 font-mono text-[11px] text-blue-600 dark:text-blue-400">
+                  {employees.find((e) => String(e.id) === String(selectedEmployeeId))?.employee_code || `ID: ${selectedEmployeeId}`}
+                </span>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-md">
+                Database Employee
+              </span>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
@@ -1094,6 +1211,48 @@ export const SettingsView = () => {
         title="Send Team Invitation Link"
       >
         <form onSubmit={handleSendInvite} className="space-y-4">
+          {/* Employee Dropdown Selection for Invitations */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-black uppercase tracking-wider text-slate-400">
+                Select Employee from Database
+              </label>
+              {employees.length > 0 && (
+                <span className="text-[10px] text-blue-500 font-bold">
+                  {employees.length} Employee{employees.length > 1 ? 's' : ''} available
+                </span>
+              )}
+            </div>
+            <select
+              value={selectedInviteEmpId}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedInviteEmpId(val);
+                if (!val || val === 'CUSTOM') {
+                  return;
+                }
+                const emp = employees.find((item) => String(item.id) === String(val));
+                if (emp) {
+                  setInviteForm((prev) => ({
+                    ...prev,
+                    name: emp.full_name || '',
+                    email: emp.email || prev.email || '',
+                    role: 'employee/labour',
+                  }));
+                }
+              }}
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="">-- Choose employee from database (optional) --</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.full_name} ({emp.employee_code || `EMP-${emp.id}`}) — {emp.trade || emp.role || 'Worker'}
+                </option>
+              ))}
+              <option value="CUSTOM">+ Enter Custom Name Manually</option>
+            </select>
+          </div>
+
           <div>
             <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-1.5">
               Member Name

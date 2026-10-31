@@ -843,6 +843,12 @@ export async function handleMockRequest(endpoint, options = {}) {
           empId = newEmp.id;
         } else {
           empId = existingEmp.id;
+          if (body.email && !existingEmp.email) {
+            existingEmp.email = body.email;
+          }
+          if (body.phone && !existingEmp.phone) {
+            existingEmp.phone = body.phone;
+          }
         }
       }
 

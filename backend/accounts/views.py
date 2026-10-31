@@ -386,6 +386,33 @@ class UserViewSet(TenantViewSet):
         user.set_password(password)
         user.save()
 
+        # Sync employee email and phone with newly created user if linked
+        emp_id = self.request.data.get("employee_id")
+        if user.organization:
+            from workforce.models import Employee
+            from django.db.models import Q
+            emp = None
+            if emp_id:
+                emp = Employee.objects.filter(id=emp_id, organization=user.organization, deleted_at__isnull=True).first()
+            if not emp:
+                emp = Employee.objects.filter(
+                    organization=user.organization,
+                    deleted_at__isnull=True,
+                ).filter(
+                    Q(full_name__iexact=user.name) |
+                    (Q(phone=user.phone) & ~Q(phone=""))
+                ).first()
+            if emp:
+                changed = False
+                if not emp.email and user.email:
+                    emp.email = user.email
+                    changed = True
+                if not emp.phone and user.phone:
+                    emp.phone = user.phone
+                    changed = True
+                if changed:
+                    emp.save(update_fields=["email", "phone", "updated_at"])
+
         log_action(
             user=self.request.user,
             action=AuditAction.USER_CREATED,
