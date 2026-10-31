@@ -448,6 +448,9 @@ export const WorkforceView = () => {
 
   const formatCurrency = (val) => {
     const num = Number(val || 0);
+    if (num < 0) {
+      return `-₹${Math.abs(num).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    }
     return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
@@ -788,88 +791,151 @@ export const WorkforceView = () => {
           </div>
 
           {/* Card 4: TOTAL EMPLOYEE AMOUNT (Remaining Balance + PAY Button) */}
-          <div className="p-5 rounded-2xl border border-emerald-300 dark:border-emerald-800/50 bg-emerald-50/70 dark:bg-emerald-950/30 flex flex-col justify-between space-y-3 relative overflow-hidden">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                  TOTAL EMPLOYEE AMOUNT
-                </span>
-                <span className={`w-2 h-2 rounded-full ${Number(fin.balance || 0) > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-              </div>
-              <div className="text-2xl font-black text-emerald-800 dark:text-emerald-300">
-                {formatCurrency(fin.balance)}
-              </div>
-              <span className="text-[11px] text-[var(--text-muted)] font-medium block">
-                Remaining Balance
-              </span>
-            </div>
+          {(() => {
+            const numBal = Number(fin.balance || 0);
+            const isNegative = numBal < 0;
+            const isSettled = numBal === 0;
 
-            {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(userRole) && (() => {
-              const hasAttendance = Boolean(
-                fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
-              );
-              const remainingBalance = Number(fin.balance || 0);
-              const isSettled = remainingBalance <= 0;
-
-              if (!hasAttendance) {
-                return (
-                  <div className="w-full">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled
-                      className="w-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80 flex items-center justify-center gap-1.5"
-                      title="Attendance must be marked before paying wages"
+            return (
+              <div
+                className={cn(
+                  'p-5 rounded-2xl border flex flex-col justify-between space-y-3 relative overflow-hidden transition-all',
+                  isNegative
+                    ? 'border-rose-300 dark:border-rose-800/60 bg-rose-50/80 dark:bg-rose-950/40 shadow-sm'
+                    : 'border-emerald-300 dark:border-emerald-800/50 bg-emerald-50/70 dark:bg-emerald-950/30'
+                )}
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={cn(
+                        'text-[10px] font-black uppercase tracking-wider',
+                        isNegative
+                          ? 'text-rose-700 dark:text-rose-400'
+                          : 'text-emerald-700 dark:text-emerald-400'
+                      )}
                     >
-                      <Lock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>PAY WAGES (ATTENDANCE REQUIRED)</span>
-                    </Button>
-                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold text-center block mt-1">
-                      Mark attendance first to enable wage disbursement
+                      TOTAL EMPLOYEE AMOUNT
                     </span>
+                    <span
+                      className={cn(
+                        'w-2 h-2 rounded-full',
+                        isNegative
+                          ? 'bg-rose-500 animate-pulse'
+                          : numBal > 0
+                          ? 'bg-emerald-500 animate-pulse'
+                          : 'bg-slate-400'
+                      )}
+                    />
                   </div>
-                );
-              }
+                  <div
+                    className={cn(
+                      'text-2xl font-black',
+                      isNegative
+                        ? 'text-rose-600 dark:text-rose-400 font-mono'
+                        : 'text-emerald-800 dark:text-emerald-300'
+                    )}
+                  >
+                    {formatCurrency(fin.balance)}
+                  </div>
+                  <span
+                    className={cn(
+                      'text-[11px] font-medium block',
+                      isNegative
+                        ? 'text-rose-600 dark:text-rose-400 font-bold'
+                        : 'text-[var(--text-muted)]'
+                    )}
+                  >
+                    {isNegative ? 'Negative Balance (Upad Exceeds Salary)' : 'Remaining Balance'}
+                  </span>
+                </div>
 
-              if (isSettled) {
-                return (
-                  <div className="w-full">
+                {['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'].includes(userRole) && (() => {
+                  const hasAttendance = Boolean(
+                    fin.has_attendance || (fin.total_pagar && Number(fin.total_pagar) > 0)
+                  );
+
+                  if (!hasAttendance) {
+                    return (
+                      <div className="w-full">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled
+                          className="w-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80 flex items-center justify-center gap-1.5"
+                          title="Attendance must be marked before paying wages"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>PAY WAGES (ATTENDANCE REQUIRED)</span>
+                        </Button>
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold text-center block mt-1">
+                          Mark attendance first to enable wage disbursement
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  if (isNegative) {
+                    return (
+                      <div className="w-full">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled
+                          className="w-full bg-rose-100/90 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400 font-bold border border-rose-200 dark:border-rose-900/50 cursor-not-allowed opacity-85 flex items-center justify-center gap-1.5 shadow-none"
+                          title="Upad advance exceeds earned salary (Negative balance)"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-rose-500" />
+                          <span>PAY WAGES (LOCKED - NEGATIVE)</span>
+                        </Button>
+                        <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold text-center block mt-1">
+                          Upad exceeds salary (worker owes {formatCurrency(Math.abs(numBal))})
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  if (isSettled) {
+                    return (
+                      <div className="w-full">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled
+                          className="w-full bg-slate-200/90 dark:bg-slate-800/90 text-slate-400 dark:text-slate-500 font-bold border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80 flex items-center justify-center gap-1.5 shadow-none"
+                          title="Total employee amount is zero (all wages are fully settled)"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>PAY WAGES (LOCKED)</span>
+                        </Button>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold text-center block mt-1">
+                          Wages fully settled (₹0 balance remaining)
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
                     <Button
-                      variant="secondary"
+                      variant="primary"
                       size="sm"
-                      disabled
-                      className="w-full bg-slate-200/90 dark:bg-slate-800/90 text-slate-400 dark:text-slate-500 font-bold border border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-80 flex items-center justify-center gap-1.5 shadow-none"
-                      title="Total employee amount is zero (all wages are fully settled)"
+                      onClick={() => {
+                        setPayForm({
+                          amount: String(numBal),
+                          payment_mode: 'CASH',
+                          notes: 'Direct wage settlement',
+                        });
+                        setIsPayModalOpen(true);
+                      }}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 font-black shadow-md shadow-emerald-600/30 cursor-pointer"
                     >
-                      <Lock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>PAY WAGES (LOCKED)</span>
+                      PAY WAGES
                     </Button>
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold text-center block mt-1">
-                      Wages fully settled (₹0 balance remaining)
-                    </span>
-                  </div>
-                );
-              }
-
-              return (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    setPayForm({
-                      amount: String(remainingBalance),
-                      payment_mode: 'CASH',
-                      notes: 'Direct wage settlement',
-                    });
-                    setIsPayModalOpen(true);
-                  }}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 font-black shadow-md shadow-emerald-600/30 cursor-pointer"
-                >
-                  PAY WAGES
-                </Button>
-              );
-            })()}
-          </div>
+                  );
+                })()}
+              </div>
+            );
+          })()}
         </div>
 
         {/* View Full Payment History Centered Link */}
@@ -1091,6 +1157,16 @@ export const WorkforceView = () => {
                     <div>
                       <span className="font-bold block">Wages Fully Settled</span>
                       Total employee amount is ₹0. There is no pending balance to disburse.
+                    </div>
+                  </div>
+                )}
+
+                {hasAttendance && remainingBalance < 0 && (
+                  <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                    <div>
+                      <span className="font-bold block">Negative Balance (Upad Exceeds Salary)</span>
+                      This employee has taken more Upad advance than their total earned salary. Cannot pay wages until balance becomes positive.
                     </div>
                   </div>
                 )}
@@ -1596,10 +1672,25 @@ export const WorkforceView = () => {
 
                       {/* Column 2: BALANCE Badge */}
                       <td className="py-3 px-4">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200/60 dark:border-emerald-800/40">
-                          <Wallet className="w-3.5 h-3.5 shrink-0" />
-                          <span>{formatCurrency(balanceVal)}</span>
-                        </div>
+                        {(() => {
+                          const numB = Number(balanceVal || 0);
+                          const isNeg = numB < 0;
+                          return (
+                            <div
+                              className={cn(
+                                'inline-flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold border transition-colors',
+                                isNeg
+                                  ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-200/80 dark:border-rose-800/50 shadow-sm'
+                                  : numB === 0
+                                  ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200/60 dark:border-emerald-800/40'
+                              )}
+                            >
+                              <Wallet className="w-3.5 h-3.5 shrink-0" />
+                              <span>{formatCurrency(balanceVal)}</span>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Column 3: PHONE */}

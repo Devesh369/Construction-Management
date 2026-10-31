@@ -215,7 +215,7 @@ class AttendanceSettlementService:
             unlinked_adv += a.amount
 
         total_paid = total_paid_payments + unlinked_adv
-        remaining = max(Decimal("0.00"), total_earned - total_paid)
+        remaining = total_earned - total_paid
 
         return {
             "employee_id": employee.id,

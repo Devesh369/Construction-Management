@@ -215,6 +215,12 @@ export const UpadView = ({ selectedProjectId }) => {
   // Format currency with Indian Comma separators: ₹68,150
   const formatCurrency = (val) => {
     const num = Number(val || 0);
+    if (num < 0) {
+      return `-₹${Math.abs(num).toLocaleString('en-IN', {
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+      })}`;
+    }
     return `₹${num.toLocaleString('en-IN', {
       maximumFractionDigits: 0,
       minimumFractionDigits: 0,

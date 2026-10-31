@@ -211,6 +211,12 @@ export const PayrollView = ({ selectedProjectId }) => {
   // Format currency: ₹XX,XXX
   const formatCurrency = (val) => {
     const num = Number(val || 0);
+    if (num < 0) {
+      return `-₹${Math.abs(num).toLocaleString('en-IN', {
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+      })}`;
+    }
     return `₹${num.toLocaleString('en-IN', {
       maximumFractionDigits: 0,
       minimumFractionDigits: 0,
@@ -1110,6 +1116,10 @@ export const PayrollView = ({ selectedProjectId }) => {
                           <td className="py-3.5 px-5 text-right font-mono font-black">
                             {balance > 0 ? (
                               <span className="text-emerald-600 dark:text-emerald-400 text-sm">
+                                {formatCurrency(balance)}
+                              </span>
+                            ) : balance < 0 ? (
+                              <span className="text-rose-600 dark:text-rose-400 text-sm">
                                 {formatCurrency(balance)}
                               </span>
                             ) : (

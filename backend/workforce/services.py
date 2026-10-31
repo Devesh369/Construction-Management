@@ -279,8 +279,8 @@ def get_employee_financials(employee: Employee) -> dict:
         unlinked_salary += p.amount
     total_paid = q2(vouch_paid + unlinked_salary)
 
-    # 4. Remaining Balance: e.g. 800 wage - 500 upad = 300 balance
-    balance = max(Decimal("0.00"), q2(total_pagar - total_upad - total_paid))
+    # 4. Remaining Balance: can be negative if Upad advances exceed earned salary
+    balance = q2(total_pagar - total_upad - total_paid)
 
     return {
         "total_pagar": str(q2(total_pagar)),

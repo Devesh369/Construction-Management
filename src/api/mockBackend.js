@@ -452,8 +452,8 @@ export function computeEmployeeFinancials(emp, currentOrgId, targetDb = null) {
   );
   const totalPaid = empWages.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-  // Remaining balance
-  const balance = Math.max(0, totalPagar - totalUpad - totalPaid);
+  // Remaining balance (can be negative if Upad advances exceed earned salary)
+  const balance = totalPagar - totalUpad - totalPaid;
   const hasAttendance = (fullDays + halfDays) > 0;
 
   return {
