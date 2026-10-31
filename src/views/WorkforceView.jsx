@@ -36,6 +36,7 @@ import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../context/AuthContext';
+import { cn } from '../utils/cn';
 import constructionBg from '../assets/construction-bg.png';
 
 const ROLE_OPTIONS = [
