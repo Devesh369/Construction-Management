@@ -73,6 +73,16 @@ class TransactionViewSet(TenantViewSet):
             qs = qs.filter(date__gte=from_date)
         if to_date:
             qs = qs.filter(date__lte=to_date)
+        admin_filter = self.request.query_params.get("admin") or self.request.query_params.get(
+            "recorded_by"
+        )
+        if admin_filter:
+            if str(admin_filter).isdigit():
+                qs = qs.filter(recorded_by_id=int(admin_filter))
+            else:
+                qs = qs.filter(
+                    recorded_by__name__icontains=admin_filter
+                ) | qs.filter(recorded_by__email__icontains=admin_filter)
         if module:
             if module == "spend_vendor":
                 qs = qs.filter(metadata__source__in=["expense", "vendor_payment", "running_cost"])

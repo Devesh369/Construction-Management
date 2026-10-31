@@ -53,6 +53,7 @@ export const PaymentCentralView = () => {
   const [employees, setEmployees] = useState([]);
   const [projects, setProjects] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Filters & Search (Matches Screenshot 1)
@@ -88,18 +89,78 @@ export const PaymentCentralView = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [txnRes, empRes, projRes, venRes] = await Promise.all([
+      const [txnRes, empRes, projRes, venRes, usersRes] = await Promise.all([
         api.transactions.list({ page_size: 1000 }),
         api.workforce.listEmployees({ page_size: 1000 }).catch(() => []),
         api.projects.list().catch(() => []),
         api.expenses.listVendors().catch(() => []),
+        api.users.list().catch(() => []),
       ]);
 
       const txns = Array.isArray(txnRes) ? txnRes : txnRes?.results || [];
+      const loadedEmps = Array.isArray(empRes) ? empRes : empRes?.results || [];
+      const loadedUsers = Array.isArray(usersRes) ? usersRes : usersRes?.results || [];
+
       setTransactions(txns);
-      setEmployees(Array.isArray(empRes) ? empRes : empRes?.results || []);
+      setEmployees(loadedEmps);
       setProjects(Array.isArray(projRes) ? projRes : projRes?.results || []);
       setVendors(Array.isArray(venRes) ? venRes : venRes?.results || []);
+
+      // Extract real Admin & Super Admin accounts only (no dummy entries)
+      const adminMap = new Map();
+      loadedUsers.forEach((u) => {
+        const r = (u.role || '').toUpperCase();
+        if (
+          r === 'ORG_ADMIN' ||
+          r === 'SUPER_ADMIN' ||
+          r === 'ADMIN' ||
+          Boolean(u.is_superuser)
+        ) {
+          const key = (u.name || u.email || '').trim();
+          if (key) {
+            adminMap.set(key.toLowerCase(), {
+              id: u.id,
+              name: u.name || u.email,
+              email: u.email,
+              role: u.role,
+            });
+          }
+        }
+      });
+
+      // Include current logged-in user if they are an admin
+      if (
+        user &&
+        (role === 'ORG_ADMIN' ||
+          role === 'SUPER_ADMIN' ||
+          role === 'ADMIN' ||
+          user?.is_superuser)
+      ) {
+        const curKey = (user.name || user.email || '').trim();
+        if (curKey && !adminMap.has(curKey.toLowerCase())) {
+          adminMap.set(curKey.toLowerCase(), {
+            id: user.id || user.email,
+            name: user.name || user.email,
+            email: user.email,
+            role: user.role || role,
+          });
+        }
+      }
+
+      // Check transactions for any real admin names recorded
+      txns.forEach((t) => {
+        const recName = (t.recorded_by_name || '').trim();
+        if (recName && recName.toUpperCase() !== 'NARESH' && !adminMap.has(recName.toLowerCase())) {
+          adminMap.set(recName.toLowerCase(), {
+            id: t.recorded_by || recName,
+            name: recName,
+            email: t.recorded_by_email || '',
+            role: 'ORG_ADMIN',
+          });
+        }
+      });
+
+      setAdmins(Array.from(adminMap.values()));
     } catch (err) {
       console.error('Failed to load transaction ledger', err);
       toast.error('Failed to load transaction ledger');
@@ -192,6 +253,21 @@ export const PaymentCentralView = () => {
     };
   };
 
+  // Helper to resolve admin display name without dummy fallbacks
+  const getRecordedByName = (t) => {
+    if (t.recorded_by_name) return t.recorded_by_name;
+    if (t.recorded_by) {
+      const rec = Array.isArray(t.recorded_by) ? t.recorded_by[0] : t.recorded_by;
+      const match = admins.find(
+        (a) => a.id === rec || String(a.id) === String(rec) || a.email === rec
+      );
+      if (match?.name) return match.name;
+      if (typeof rec === 'string' && rec && !rec.includes('@')) return rec;
+    }
+    if (user?.name) return user.name;
+    return 'Admin';
+  };
+
   // Filtered transactions
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
@@ -235,6 +311,35 @@ export const PaymentCentralView = () => {
         return false;
       }
 
+      // Filter by Admin & Super Admin (Original Data Only)
+      if (filterAdmin !== 'all') {
+        const selectedAdmin = admins.find(
+          (a) => a.name === filterAdmin || a.email === filterAdmin || String(a.id) === String(filterAdmin)
+        );
+        const qName = (selectedAdmin?.name || filterAdmin).toLowerCase().trim();
+        const qEmail = (selectedAdmin?.email || '').toLowerCase().trim();
+        const qId = selectedAdmin?.id ? String(selectedAdmin.id) : null;
+
+        const recName = String(t.recorded_by_name || '').toLowerCase().trim();
+        const recEmail = String(t.recorded_by_email || '').toLowerCase().trim();
+        const recBy = Array.isArray(t.recorded_by)
+          ? t.recorded_by.map((r) => String(r).toLowerCase()).join(' ')
+          : String(t.recorded_by || '').toLowerCase();
+        const createdBy = Array.isArray(t.created_by)
+          ? t.created_by.map((c) => String(c).toLowerCase()).join(' ')
+          : String(t.created_by || '').toLowerCase();
+        const payer = String(t.payer_name || '').toLowerCase();
+
+        const match =
+          (recName && (recName === qName || recName.includes(qName) || qName.includes(recName))) ||
+          (qEmail && (recEmail === qEmail || recBy.includes(qEmail) || createdBy.includes(qEmail))) ||
+          (qId && (String(t.recorded_by) === qId || recBy.includes(qId))) ||
+          (recEmail && recEmail.includes(qName)) ||
+          (payer && (payer === qName || payer.includes(qName)));
+
+        if (!match) return false;
+      }
+
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -249,7 +354,7 @@ export const PaymentCentralView = () => {
 
       return true;
     });
-  }, [transactions, fromDate, toDate, filterModule, filterType, filterStatus, filterEmployee, searchQuery]);
+  }, [transactions, fromDate, toDate, filterModule, filterType, filterStatus, filterEmployee, filterAdmin, searchQuery, admins]);
 
   // Aggregate Metrics (Matches Screenshot 1 KPI Cards)
   const totalOutgoing = useMemo(() => {
@@ -323,6 +428,8 @@ export const PaymentCentralView = () => {
         method: recordForm.method,
         status: recordForm.status,
         description: recordForm.description?.trim() || '',
+        recorded_by: user?.id,
+        recorded_by_name: user?.name || user?.email || 'Admin',
       });
 
       toast.success('Transaction confirmed and recorded in central ledger!');
@@ -379,7 +486,7 @@ export const PaymentCentralView = () => {
     const headers = ['SR_NO,TRANSACTION_ID,DATE,PAYEE,TYPE,CATEGORY,PAID_BY,DESCRIPTION,AMOUNT,STATUS'];
     const rows = filteredTransactions.map((t, idx) => {
       const amtStr = t.type === 'outgoing' ? `-${t.amount}` : `${t.amount}`;
-      return `${idx + 1},"${t.transaction_id}","${t.date}","${t.payee_name}","${t.type}","${t.category}","${t.recorded_by_name || 'NARESH'}","${t.description || ''}",${amtStr},"${t.status}"`;
+      return `${idx + 1},"${t.transaction_id}","${t.date}","${t.payee_name}","${t.type}","${t.category}","${getRecordedByName(t)}","${t.description || ''}",${amtStr},"${t.status}"`;
     });
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -498,13 +605,18 @@ export const PaymentCentralView = () => {
                 </label>
                 <select
                   value={filterAdmin}
-                  onChange={(e) => setFilterAdmin(e.target.value)}
+                  onChange={(e) => {
+                    setFilterAdmin(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none cursor-pointer"
                 >
-                  <option value="all">All Admins & Super Ad...</option>
-                  <option value="naresh">Naresh</option>
-                  <option value="priya">Priya</option>
-                  <option value="rohan">Rohan</option>
+                  <option value="all">All Admins & Super Admins</option>
+                  {admins.map((adm) => (
+                    <option key={adm.id || adm.email || adm.name} value={adm.name || adm.email}>
+                      {adm.name || adm.email}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -781,7 +893,7 @@ export const PaymentCentralView = () => {
 
                       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                         <span className="text-[10px] font-bold text-slate-400 uppercase">
-                          Recorded: {t.recorded_by_name?.toUpperCase() || 'NARESH'}
+                          Recorded: {getRecordedByName(t).toUpperCase()}
                         </span>
                         <div className="flex items-center gap-2">
                           <span
@@ -880,7 +992,7 @@ export const PaymentCentralView = () => {
                             </div>
                           </td>
                           <td className="py-3.5 px-4 text-center font-black text-slate-900 dark:text-white text-xs uppercase">
-                            {t.recorded_by_name?.toUpperCase() || 'NARESH'}
+                            {getRecordedByName(t).toUpperCase()}
                           </td>
                           <td className="py-3.5 px-5 font-medium text-slate-700 dark:text-slate-300 max-w-xs truncate">
                             {t.description || '—'}
@@ -952,7 +1064,7 @@ export const PaymentCentralView = () => {
                               <button
                                 onClick={() => {
                                   alert(
-                                    `Transaction: ${t.transaction_id}\nDate: ${t.date}\nAmount: ₹${t.amount}\nPayee: ${t.payee_name}\nRecorded by: ${t.recorded_by_name || 'Naresh'}`
+                                    `Transaction: ${t.transaction_id}\nDate: ${t.date}\nAmount: ₹${t.amount}\nPayee: ${t.payee_name}\nRecorded by: ${getRecordedByName(t)}`
                                   );
                                 }}
                                 className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"

@@ -2905,11 +2905,27 @@ export async function handleMockRequest(endpoint, options = {}) {
   // PAYMENT CENTRAL / TRANSACTIONS
   // -------------------------------------------------------------
   if (pathname === '/transactions') {
-    if (method === 'GET') return (db.transactions || []).filter((t) => Number(t.organization || 10) === currentOrgId);
+    if (method === 'GET') {
+      const list = (db.transactions || []).filter((t) => Number(t.organization || 10) === currentOrgId);
+      list.forEach((t) => {
+        if (!t.recorded_by_name) {
+          const rec = Array.isArray(t.recorded_by) ? t.recorded_by[0] : t.recorded_by;
+          const u = (db.users || []).find((usr) => usr.email === rec || usr.id === rec);
+          if (u) {
+            t.recorded_by_name = u.name;
+          } else if (currentUser?.name) {
+            t.recorded_by_name = currentUser.name;
+          }
+        }
+      });
+      return list;
+    }
     if (method === 'POST') {
       const tx = {
         id: nextId(db.transactions),
         ...body,
+        recorded_by: body.recorded_by || currentUser?.id,
+        recorded_by_name: body.recorded_by_name || currentUser?.name || currentUser?.email || 'Admin',
         amount: String(Number(body.amount || 0).toFixed(2)),
         organization: currentOrgId,
         created_at: new Date().toISOString(),
