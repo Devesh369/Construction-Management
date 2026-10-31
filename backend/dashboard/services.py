@@ -333,6 +333,20 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
         except Exception:
             pass
 
+    # Calculate total paid UPAD advances (matching Upad section Paid Total)
+    try:
+        from payroll.models import Payment, PaymentLifecycleStatus
+        upad_payments_qs = Payment.objects.filter(
+            organization=org,
+            status__in=["paid", "confirmed", "approved", PaymentLifecycleStatus.PAID, PaymentLifecycleStatus.APPROVED],
+            deleted_at__isnull=True,
+        )
+        if user.role != Role.ORG_ADMIN or active_projects.count() < scoped_projects.count():
+            upad_payments_qs = upad_payments_qs.filter(project__in=active_projects)
+        total_paid_upad = upad_payments_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    except Exception:
+        total_paid_upad = Decimal("0.00")
+
     # 13. Projects Summary
     projects_list = []
     for proj in active_projects:
@@ -370,6 +384,8 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
         "month_expenditure": str(q2(total_net_salary_payable)),
         "employee_amount": str(q2(total_net_salary_payable)),
         "net_salary_payable": str(q2(total_net_salary_payable)),
+        "total_upad": str(q2(total_paid_upad)),
+        "paid_upad": str(q2(total_paid_upad)),
         "total_budget": str(q2(tot_budget)),
         "total_spend": str(q2(tot_spend)),
         "budget_utilization_percent": str(budget_utilization_percent),

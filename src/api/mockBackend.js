@@ -1030,6 +1030,19 @@ export async function handleMockRequest(endpoint, options = {}) {
         return sum + Number(fin.balance || 0);
       }, 0);
 
+    // Calculate total paid UPAD advances (matching Upad section Paid Total)
+    const totalPaidUpad = (db.payments || [])
+      .filter((p) => {
+        if (Number(p.organization || 10) !== currentOrgId) return false;
+        if (projectId && Number(p.project || p.project_id) !== Number(projectId)) {
+          const emp = (db.employees || []).find((e) => Number(e.id) === Number(p.employee || p.employee_id));
+          if (Number(emp?.primary_project) !== Number(projectId)) return false;
+        }
+        const status = (p.status || '').toLowerCase();
+        return status === 'paid' || status === 'confirmed' || status === 'approved';
+      })
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
     // Sum of all wages and UPAD advances paid to employees
     const totalEmployeeAmount = netSalaryPayableBalance;
 
@@ -1129,6 +1142,8 @@ export async function handleMockRequest(endpoint, options = {}) {
       actual_spend: totalPaymentsMade,
       total_spend: totalPaymentsMade,
       total_payments: totalPaymentsMade,
+      total_upad: totalPaidUpad,
+      paid_upad: totalPaidUpad,
       month_expenditure: totalEmployeeAmount,
       employee_amount: totalEmployeeAmount,
       net_salary_payable: totalEmployeeAmount,

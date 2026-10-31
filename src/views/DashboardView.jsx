@@ -6,6 +6,7 @@ import {
   CalendarCheck,
   CalendarX,
   Wallet,
+  Banknote,
   ArrowRight,
   ClipboardList,
 } from 'lucide-react';
@@ -31,15 +32,17 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
 
   const [assignedTasks, setAssignedTasks] = useState([]);
   const [netSalaryPayable, setNetSalaryPayable] = useState(null);
+  const [totalPaidUpad, setTotalPaidUpad] = useState(null);
 
   const fetchOverview = async () => {
     setLoading(true);
     setError('');
     try {
-      const [res, workRes, empRes] = await Promise.all([
+      const [res, workRes, empRes, paymentsRes] = await Promise.all([
         api.dashboard.getOverview(selectedProjectId, true),
         api.workEntries.list().catch(() => []),
         api.workforce.listEmployees({ page_size: 1000 }).catch(() => []),
+        api.payments.list().catch(() => []),
       ]);
       setData(res);
 
@@ -66,6 +69,23 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
         return acc + bal;
       }, 0);
       setNetSalaryPayable(totalBalance);
+
+      const payList = Array.isArray(paymentsRes) ? paymentsRes : paymentsRes?.results || [];
+      const paidUpadSum = payList
+        .filter((p) => {
+          if (selectedProjectId) {
+            const empId = p.employee || p.employee_id;
+            const empObj = empList.find((e) => String(e.id) === String(empId));
+            const projId = p.project || p.project_id || empObj?.primary_project;
+            if (String(projId) !== String(selectedProjectId)) {
+              return false;
+            }
+          }
+          const st = (p.status || '').toLowerCase();
+          return st === 'paid' || st === 'confirmed' || st === 'approved';
+        })
+        .reduce((acc, p) => acc + Number(p.amount || 0), 0);
+      setTotalPaidUpad(paidUpadSum);
 
       if (user) {
         const myWork = (Array.isArray(workRes) ? workRes : []).filter((e) => {
@@ -196,17 +216,17 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
       bgImage: statAbsentBg, // Relevant quiet/empty site zone photo
     },
     {
-      id: 'payments',
-      title: 'Total Payments',
-      value: formatCurrency(data?.total_spend ?? data?.total_payments),
-      subtext: `${data?.budget_utilization_percent || 0}% allocated budget utilized`,
+      id: 'upad',
+      title: 'Total Upad',
+      value: formatCurrency(totalPaidUpad !== null ? totalPaidUpad : (data?.total_upad ?? data?.paid_upad ?? 0)),
+      subtext: 'Paid cash advances disbursed',
       gradient: 'from-violet-500 to-purple-700',
       shadow: 'hover:shadow-violet-500/20',
       sparklineColor: '#c4b5fd',
-      sparklineData: [12000, 16000, 21000, 28000, 34000, 41000, data?.total_spend || 48000],
-      icon: Wallet,
-      actionText: 'Ledger Audit',
-      tab: 'payment_central',
+      sparklineData: [400, 800, 1200, 1800, 2400, 3100, (totalPaidUpad || data?.total_upad || 3600)],
+      icon: Banknote,
+      actionText: 'Upad Register',
+      tab: 'upad',
       bgImage: statPaymentsBg, // Relevant electronic banking ledger photo
     },
   ];
