@@ -87,7 +87,9 @@ def create_employee(org, data: dict, user, request=None) -> Employee:
             group=data.get("group"),
         )
 
-        if "assigned_project_ids" in data:
+        if "assigned_projects" in data:
+            employee.assigned_projects.set(data["assigned_projects"])
+        elif "assigned_project_ids" in data:
             employee.assigned_projects.set(data["assigned_project_ids"])
 
         return employee

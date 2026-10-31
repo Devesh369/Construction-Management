@@ -217,6 +217,8 @@ export const WorkforceView = () => {
         bank_account_number: addForm.bank_account_number.trim(),
         bank_ifsc: addForm.bank_ifsc.trim(),
         bank_name: addForm.bank_name.trim(),
+        primary_project: null,
+        assigned_projects: [],
       };
 
       const created = await api.workforce.createEmployee(payload);
