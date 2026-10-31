@@ -145,7 +145,10 @@ export const PayrollView = ({ selectedProjectId }) => {
       let empList = Array.isArray(empRes) ? empRes : empRes.results || [];
       let payList = Array.isArray(payRes) ? payRes : payRes?.results || [];
 
-      let salList = payList.filter((p) => (p.type || '').toLowerCase() === 'salary');
+      let salList = payList.filter((p) => {
+        const t = (p.type || p.payment_type || '').toLowerCase();
+        return t === 'salary' || t === 'wage';
+      });
 
       if (isEmployeeLabour) {
         if (currentEmpId) {

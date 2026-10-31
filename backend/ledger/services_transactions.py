@@ -330,9 +330,18 @@ class TransactionService:
             }
             txn_method = method_map.get(method_str, TransactionMethod.CASH)
 
+            is_salary = (p.type == PaymentType.SALARY)
+            meta_source = "payroll" if is_salary else "upad"
+            txn_desc = (
+                f"[PAYROLL-{p.id}] Salary payment to {payee_name}: {p.description or 'Wage settlement'}"
+                if is_salary
+                else f"[UPAD-{p.id}] Advance to {payee_name}: {p.description or 'Worker advance'}"
+            )
+            txn_ref_id = f"TXN-SAL-{p.id}" if is_salary else txn_id
+
             Transaction.objects.update_or_create(
                 organization=organization,
-                transaction_id=txn_id,
+                transaction_id=txn_ref_id,
                 defaults={
                     "date": p_date,
                     "type": TransactionType.OUTGOING,
@@ -342,10 +351,10 @@ class TransactionService:
                     "amount": p.amount,
                     "method": txn_method,
                     "status": txn_status,
-                    "description": f"[UPAD-{p.id}] {p.type.upper()}: {p.description or 'Worker payment'}",
+                    "description": txn_desc,
                     "recorded_by": p.created_by or first_user,
                     "metadata": {
-                        "source": "upad",
+                        "source": meta_source,
                         "paymentId": p.id,
                         "employeeId": getattr(p.employee, "id", None),
                         "paymentType": p.type,

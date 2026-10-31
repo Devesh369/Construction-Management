@@ -73,6 +73,12 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
       const payList = Array.isArray(paymentsRes) ? paymentsRes : paymentsRes?.results || [];
       const paidUpadSum = payList
         .filter((p) => {
+          // Strictly UPAD advances; exclude wages and salaries
+          const t = (p.payment_type || p.type || '').toLowerCase();
+          if (t === 'salary' || t === 'wage') return false;
+          const desc = (p.description || p.notes || '').toLowerCase();
+          if (desc.includes('salary payment') || desc.includes('wage settlement') || desc.includes('[full salary]')) return false;
+
           if (selectedProjectId) {
             const empId = p.employee || p.employee_id;
             const empObj = empList.find((e) => String(e.id) === String(empId));

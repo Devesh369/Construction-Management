@@ -100,12 +100,20 @@ export const UpadView = ({ selectedProjectId }) => {
     setLoading(true);
     try {
       const [paymentsRes, empRes, projRes] = await Promise.all([
-        api.payments.list().catch(() => []),
+        api.payments.list({ type: 'advance' }).catch(() => []),
         api.workforce.listEmployees({ page_size: 1000 }).catch(() => []),
         api.projects.list().catch(() => []),
       ]);
 
-      let payList = Array.isArray(paymentsRes) ? paymentsRes : paymentsRes?.results || [];
+      let rawPayList = Array.isArray(paymentsRes) ? paymentsRes : paymentsRes?.results || [];
+      // Upad section strictly tracks worker cash advances; exclude all wage/salary disbursements
+      let payList = rawPayList.filter((p) => {
+        const t = (p.payment_type || p.type || '').toLowerCase();
+        if (t === 'salary' || t === 'wage') return false;
+        const desc = (p.description || p.notes || '').toLowerCase();
+        if (desc.includes('salary payment') || desc.includes('wage settlement') || desc.includes('[full salary]')) return false;
+        return true;
+      });
       let empList = Array.isArray(empRes) ? empRes : empRes?.results || [];
       const projList = Array.isArray(projRes) ? projRes : projRes?.results || [];
 
@@ -160,6 +168,11 @@ export const UpadView = ({ selectedProjectId }) => {
   // Filtered payments based on date range, employee, and project
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
+      // Exclude salary/wage settlements from Upad
+      const pType = (p.payment_type || p.type || '').toLowerCase();
+      if (pType === 'salary' || pType === 'wage') return false;
+      const desc = (p.description || p.notes || '').toLowerCase();
+      if (desc.includes('salary payment') || desc.includes('wage settlement') || desc.includes('[full salary]')) return false;
       // Date filter
       const rawDate = p.payment_date || p.date_from || p.date_to || p.advance_date || p.date || (p.created_at ? p.created_at.split('T')[0] : '');
       const cleanDate = rawDate ? String(rawDate).split('T')[0] : '';
@@ -635,15 +648,8 @@ export const UpadView = ({ selectedProjectId }) => {
                               <span className="font-bold text-slate-900 dark:text-white">
                                 {empName}
                               </span>
-                              <span
-                                className={cn(
-                                  'px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider',
-                                  (p.type || '').toLowerCase() === 'salary'
-                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
-                                    : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                                )}
-                              >
-                                {(p.type || '').toLowerCase() === 'salary' ? 'Full Salary' : 'Upad'}
+                              <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                Upad
                               </span>
                             </div>
                             {empObj && (() => {
@@ -971,55 +977,15 @@ export const UpadView = ({ selectedProjectId }) => {
       <Modal
         isOpen={isProcessModalOpen}
         onClose={() => setIsProcessModalOpen(false)}
-        title={processForm.type === 'salary' ? 'Disburse Worker Salary' : 'Process Upad Advance'}
-        subtitle={
-          processForm.type === 'salary'
-            ? 'Disburse earned wage payment and update financial ledgers'
-            : 'Disburse worker advance and update financial ledgers'
-        }
+        title="Process Upad Advance"
+        subtitle="Disburse worker cash advance (Upad) and update worker advance ledger" 
         size="lg"
       >
         <form onSubmit={handleProcessUpad} className="space-y-4">
-          {/* Row 0: Payment Type Toggle (Advance vs Full Salary) */}
-          <div className="p-1 rounded-xl bg-slate-100 dark:bg-slate-800 flex gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                setProcessForm((prev) => ({
-                  ...prev,
-                  type: 'advance',
-                  description: prev.description.replace(/^Full salary payment/, 'Upad advance'),
-                }));
-              }}
-              className={cn(
-                'flex-1 py-2 rounded-lg text-xs font-bold transition-all',
-                processForm.type === 'advance'
-                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              )}
-            >
-              Worker Advance (Upad)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const fillAmt = empCurrentBalance > 0 ? empCurrentBalance : empDailyWage;
-                setProcessForm((prev) => ({
-                  ...prev,
-                  type: 'salary',
-                  amount: fillAmt > 0 ? String(fillAmt) : '',
-                  description: selectedEmp ? `Full salary payment for ${selectedEmp.full_name}` : 'Full salary payment',
-                }));
-              }}
-              className={cn(
-                'flex-1 py-2 rounded-lg text-xs font-bold transition-all',
-                processForm.type === 'salary'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-              )}
-            >
-              Full Salary / Wage Payment
-            </button>
+          {/* Upad Advance Disbursal */}
+          <div className="px-3.5 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 flex items-center justify-between">
+            <span className="text-xs font-bold text-blue-900 dark:text-blue-200">Worker Cash Advance (Upad)</span>
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">Advance</span>
           </div>
 
           {/* Row 1: Employee & Project Selection */}
@@ -1233,11 +1199,7 @@ export const UpadView = ({ selectedProjectId }) => {
             >
               <Plus size={14} strokeWidth={3} />
               <span>
-                {submitting
-                  ? 'Processing...'
-                  : processForm.type === 'salary'
-                  ? 'Disburse Full Salary'
-                  : 'Disburse Upad'}
+                {submitting ? 'Processing...' : 'Disburse Upad'}
               </span>
             </button>
           </div>

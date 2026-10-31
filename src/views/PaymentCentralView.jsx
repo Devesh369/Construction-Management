@@ -181,21 +181,31 @@ export const PaymentCentralView = () => {
 
     transactions.forEach((t) => {
       const src = t.metadata?.source?.toLowerCase() || '';
+      const cat = (t.category || '').toLowerCase();
+      const desc = (t.description || '').toLowerCase();
+      const pType = (t.metadata?.paymentType || '').toLowerCase();
+
       if (
         src === 'expense' ||
         src === 'vendor_payment' ||
         src === 'running_cost' ||
-        t.category === 'vendor' ||
-        t.category === 'site_cost'
+        cat === 'vendor' ||
+        cat === 'site_cost'
       ) {
         spend_vendor++;
       } else if (
         src === 'upad' ||
-        (t.category === 'salary' &&
-          (t.description?.includes('[UPAD') || t.metadata?.paymentType === 'advance'))
+        (cat === 'salary' && (desc.includes('[upad') || pType === 'advance'))
       ) {
         upad++;
-      } else if (src === 'payroll' || t.description?.includes('[PAYROLL')) {
+      } else if (
+        src === 'payroll' ||
+        desc.includes('[payroll') ||
+        desc.includes('[salary') ||
+        desc.includes('wage settlement') ||
+        desc.includes('salary payment') ||
+        (cat === 'salary' && pType !== 'advance' && !desc.includes('[upad'))
+      ) {
         payroll++;
       }
     });
@@ -239,9 +249,20 @@ export const PaymentCentralView = () => {
           'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-900/40',
       };
     }
-    if (src === 'payroll' || t.description?.includes('[PAYROLL')) {
+    const cat = (t.category || '').toLowerCase();
+    const desc = (t.description || '').toLowerCase();
+    const pType = (t.metadata?.paymentType || '').toLowerCase();
+
+    if (
+      src === 'payroll' ||
+      desc.includes('[payroll') ||
+      desc.includes('[salary') ||
+      desc.includes('wage settlement') ||
+      desc.includes('salary payment') ||
+      (cat === 'salary' && pType !== 'advance' && !desc.includes('[upad'))
+    ) {
       return {
-        label: 'PAYROLL VOUCHER',
+        label: 'PAYROLL / SALARY',
         color:
           'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/40',
       };
@@ -291,8 +312,17 @@ export const PaymentCentralView = () => {
             (t.description?.includes('[UPAD') || t.metadata?.paymentType === 'advance'));
         if (!isUpad) return false;
       } else if (filterModule === 'payroll') {
+        const src = t.metadata?.source?.toLowerCase() || '';
+        const cat = (t.category || '').toLowerCase();
+        const desc = (t.description || '').toLowerCase();
+        const pType = (t.metadata?.paymentType || '').toLowerCase();
         const isPayroll =
-          t.metadata?.source === 'payroll' || t.description?.includes('[PAYROLL');
+          src === 'payroll' ||
+          desc.includes('[payroll') ||
+          desc.includes('[salary') ||
+          desc.includes('wage settlement') ||
+          desc.includes('salary payment') ||
+          (cat === 'salary' && pType !== 'advance' && !desc.includes('[upad'));
         if (!isPayroll) return false;
       }
 

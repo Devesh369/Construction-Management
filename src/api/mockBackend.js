@@ -181,6 +181,83 @@ function loadDB() {
     });
   }
 
+  // Self-heal: ensure wage / salary payments are mirrored into transactions (Payment Central) and payroll_vouchers (Payroll)
+  if (Array.isArray(target.payments)) {
+    if (!target.transactions) target.transactions = [];
+    if (!target.payroll_vouchers) target.payroll_vouchers = [];
+
+    target.payments.forEach((p) => {
+      const pType = (p.payment_type || p.type || '').toLowerCase();
+      const isSalary = pType === 'salary' || pType === 'wage' || (p.description && p.description.toLowerCase().includes('wage settlement'));
+      if (isSalary) {
+        const empId = Number(p.employee || p.employee_id || 0);
+        const emp = (target.employees || []).find((e) => Number(e.id) === empId);
+        const pDate = p.payment_date || p.date || (p.created_at ? p.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+        const existsTx = target.transactions.find((t) => 
+          t.metadata?.payment_id === p.id ||
+          (t.category === 'salary' && Number(t.amount) === Number(p.amount) && Number(t.metadata?.employee_id || 0) === empId)
+        );
+        if (!existsTx) {
+          const nextTxId = nextId(target.transactions);
+          target.transactions.push({
+            id: nextTxId,
+            transaction_id: `TXN-SAL-${p.id}`,
+            type: 'outgoing',
+            category: 'salary',
+            payer_name: 'Pragati Construction',
+            payee_name: p.employee_name || emp?.full_name || 'Worker',
+            amount: String(Number(p.amount || 0).toFixed(2)),
+            method: (p.method || p.payment_mode || 'cash').toLowerCase(),
+            status: 'completed',
+            date: pDate,
+            description: `[PAYROLL] Wage settlement for ${p.employee_name || emp?.full_name || 'Worker'}`,
+            recorded_by: p.created_by || 1,
+            recorded_by_name: p.recorded_by_name || 'Naresh Prajapati',
+            metadata: {
+              source: 'payroll',
+              employee_id: empId,
+              paymentType: 'salary',
+              payment_id: p.id,
+            },
+            organization: Number(p.organization || 10),
+            created_at: p.created_at || new Date().toISOString(),
+          });
+          dbChanged = true;
+        }
+
+        const existsVoucher = target.payroll_vouchers.find((v) =>
+          Number(v.employee) === empId && Number(v.net_pay || v.gross_pay || v.net_payable || 0) === Number(p.amount)
+        );
+        if (!existsVoucher) {
+          const nextVId = nextId(target.payroll_vouchers);
+          target.payroll_vouchers.push({
+            id: nextVId,
+            voucher_number: `VOU-${String(nextVId).padStart(4, '0')}`,
+            employee: empId,
+            employee_name: p.employee_name || emp?.full_name || 'Worker',
+            employee_code: p.employee_code || emp?.employee_code || '',
+            daily_rate: emp?.daily_rate || '800.00',
+            gross_amount: String(Number(p.amount || 0).toFixed(2)),
+            gross_pay: String(Number(p.amount || 0).toFixed(2)),
+            basic_pay: String(Number(p.amount || 0).toFixed(2)),
+            advance_deductions: '0.00',
+            net_payable: String(Number(p.amount || 0).toFixed(2)),
+            net_pay: String(Number(p.amount || 0).toFixed(2)),
+            payment_mode: (p.payment_mode || 'CASH').toUpperCase(),
+            status: 'PAID',
+            paid_at: p.created_at || new Date().toISOString(),
+            date: pDate,
+            payment_reference: p.notes || `Wage Settlement - ${pDate}`,
+            organization: Number(p.organization || 10),
+            project: Number(p.project || 29),
+            created_at: p.created_at || new Date().toISOString(),
+          });
+          dbChanged = true;
+        }
+      }
+    });
+  }
+
   const demoEmails = new Set([
     'deveshpatel@gmail.com',
     'devesh@buildsphere.com',
@@ -1034,6 +1111,10 @@ export async function handleMockRequest(endpoint, options = {}) {
     const totalPaidUpad = (db.payments || [])
       .filter((p) => {
         if (Number(p.organization || 10) !== currentOrgId) return false;
+        const pType = (p.payment_type || p.type || '').toLowerCase();
+        if (pType === 'salary' || pType === 'wage') return false;
+        const desc = (p.description || p.notes || '').toLowerCase();
+        if (desc.includes('salary payment') || desc.includes('wage settlement') || desc.includes('[full salary]')) return false;
         if (projectId && Number(p.project || p.project_id) !== Number(projectId)) {
           const emp = (db.employees || []).find((e) => Number(e.id) === Number(p.employee || p.employee_id));
           if (Number(emp?.primary_project) !== Number(projectId)) return false;
@@ -1440,6 +1521,61 @@ export async function handleMockRequest(endpoint, options = {}) {
         created_at: new Date().toISOString(),
       };
       db.payments.push(payment);
+
+      // Route wage payment directly into Payment Central (Transactions)
+      if (!db.transactions) db.transactions = [];
+      const txId = nextId(db.transactions);
+      db.transactions.push({
+        id: txId,
+        transaction_id: `TXN-SAL-${payment.id}`,
+        type: 'outgoing',
+        category: 'salary',
+        payer_name: 'Pragati Construction',
+        payee_name: emp.full_name || 'Worker',
+        amount: payment.amount,
+        method: payment.method,
+        status: 'completed',
+        date: normDate,
+        description: `[PAYROLL] Wage settlement for ${emp.full_name || 'Worker'}`,
+        recorded_by: currentUser?.id || 1,
+        recorded_by_name: currentUser?.name || 'Naresh Prajapati',
+        metadata: {
+          source: 'payroll',
+          employee_id: eId,
+          paymentType: 'salary',
+          payment_id: payment.id,
+        },
+        organization: currentOrgId,
+        created_at: new Date().toISOString(),
+      });
+
+      // Route wage payment directly into Payroll (Paid Voucher)
+      if (!db.payroll_vouchers) db.payroll_vouchers = [];
+      const vId = nextId(db.payroll_vouchers);
+      const voucher = {
+        id: vId,
+        voucher_number: `VOU-${String(vId).padStart(4, '0')}`,
+        employee: eId,
+        employee_name: emp.full_name,
+        employee_code: emp.employee_code,
+        daily_rate: emp.daily_rate,
+        gross_amount: payment.amount,
+        gross_pay: payment.amount,
+        basic_pay: payment.amount,
+        advance_deductions: '0.00',
+        net_payable: payment.amount,
+        net_pay: payment.amount,
+        payment_mode: payment.payment_mode,
+        status: 'PAID',
+        paid_at: new Date().toISOString(),
+        date: normDate,
+        payment_reference: payment.notes,
+        organization: currentOrgId,
+        project: projId,
+        created_at: new Date().toISOString(),
+      };
+      db.payroll_vouchers.push(voucher);
+
       recordAuditLog(db, {
         action: 'EMPLOYEE_PAYMENT_DISBURSED',
         resource_type: 'Payment',
@@ -2749,6 +2885,9 @@ export async function handleMockRequest(endpoint, options = {}) {
   if (pathname === '/payments') {
     if (method === 'GET') {
       let list = (db.payments || []).filter((p) => Number(p.organization || 10) === currentOrgId && !p.deleted_at);
+      if (params.type && params.type !== 'all') {
+        list = list.filter((p) => (p.type || p.payment_type || '').toLowerCase() === params.type.toLowerCase());
+      }
       if (params.project && params.project !== 'all') {
         list = list.filter((p) => Number(p.project || p.project_id) === Number(params.project));
       }
@@ -2805,6 +2944,60 @@ export async function handleMockRequest(endpoint, options = {}) {
           notes: p.notes,
           status: 'PAID',
           organization: currentOrgId,
+          created_at: new Date().toISOString(),
+        });
+      }
+
+      // If salary / wage, route directly to Payment Central (Transactions) and Payroll (Vouchers)
+      if (p.payment_type === 'SALARY' || p.type === 'salary' || p.payment_type === 'WAGE') {
+        if (!db.transactions) db.transactions = [];
+        const txId = nextId(db.transactions);
+        db.transactions.push({
+          id: txId,
+          transaction_id: `TXN-SAL-${p.id}`,
+          type: 'outgoing',
+          category: 'salary',
+          payer_name: 'Pragati Construction',
+          payee_name: p.employee_name,
+          amount: p.amount,
+          method: p.method,
+          status: 'completed',
+          date: normDate,
+          description: `[PAYROLL] Salary disbursement for ${p.employee_name}`,
+          recorded_by: currentUser?.id || 1,
+          recorded_by_name: currentUser?.name || 'Naresh Prajapati',
+          metadata: {
+            source: 'payroll',
+            employee_id: empId,
+            paymentType: 'salary',
+            payment_id: p.id,
+          },
+          organization: currentOrgId,
+          created_at: new Date().toISOString(),
+        });
+
+        if (!db.payroll_vouchers) db.payroll_vouchers = [];
+        const vId = nextId(db.payroll_vouchers);
+        db.payroll_vouchers.push({
+          id: vId,
+          voucher_number: `VOU-${String(vId).padStart(4, '0')}`,
+          employee: empId,
+          employee_name: p.employee_name,
+          employee_code: p.employee_code,
+          daily_rate: emp?.daily_rate,
+          gross_amount: p.amount,
+          gross_pay: p.amount,
+          basic_pay: p.amount,
+          advance_deductions: '0.00',
+          net_payable: p.amount,
+          net_pay: p.amount,
+          payment_mode: p.payment_mode,
+          status: 'PAID',
+          paid_at: new Date().toISOString(),
+          date: normDate,
+          payment_reference: p.notes,
+          organization: currentOrgId,
+          project: projId,
           created_at: new Date().toISOString(),
         });
       }
