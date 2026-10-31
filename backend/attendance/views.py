@@ -97,6 +97,21 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
                 | Q(employee__employee_code__icontains=search)
                 | Q(employee__phone__icontains=search)
             )
+
+        project_param = (
+            self.request.query_params.get("project")
+            or self.request.query_params.get("project_id")
+        )
+        if project_param and project_param not in ["ALL", "all"]:
+            qs = qs.filter(project_id=project_param)
+
+        emp_param = (
+            self.request.query_params.get("employee")
+            or self.request.query_params.get("employee_id")
+        )
+        if emp_param and emp_param not in ["ALL", "all"]:
+            qs = qs.filter(employee_id=emp_param)
+
         return qs
 
     def perform_create(self, serializer):
@@ -449,6 +464,33 @@ class AttendanceViewSet(ProjectScopedMixin, TenantViewSet):
 
             ot_rate = float(emp.ot_hourly_rate or Decimal("0.00"))
             w["total_earnings"] += float(rec.ot_hours or Decimal("0.00")) * ot_rate
+
+        emp_param = self.request.query_params.get("employee") or self.request.query_params.get("employee_id")
+        if emp_param and emp_param not in ["ALL", "all"] and not worker_map:
+            from workforce.models import Employee
+            try:
+                emp = Employee.objects.get(id=emp_param, organization=request.user.organization)
+                trade = (emp.trade or "").upper()
+                role = (
+                    "KARIGAR"
+                    if trade in ["MASON", "CARPENTER", "ELECTRICIAN", "PLUMBER", "WELDER"]
+                    else "LABOUR"
+                )
+                worker_map[emp.id] = {
+                    "employee_id": emp.id,
+                    "employee_code": emp.employee_code,
+                    "employee_name": emp.full_name,
+                    "employee_role": role,
+                    "daily_wage": float(emp.daily_rate or Decimal("0.00")),
+                    "full_days": 0,
+                    "half_days": 0,
+                    "absent_days": 0,
+                    "total_attendance": 0.0,
+                    "total_earnings": 0.0,
+                    "projects": set(),
+                }
+            except Employee.DoesNotExist:
+                pass
 
         report_rows = []
         for w in worker_map.values():

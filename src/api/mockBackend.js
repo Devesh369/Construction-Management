@@ -1626,10 +1626,12 @@ export async function handleMockRequest(endpoint, options = {}) {
       if (params.date_from) list = list.filter((a) => a.date >= params.date_from);
       if (params.date_to) list = list.filter((a) => a.date <= params.date_to);
       if (params.project && params.project !== 'ALL' && params.project !== 'all') {
-        list = list.filter((a) => a.project === Number(params.project));
+        const projId = Number(params.project);
+        list = list.filter((a) => Number(a.project?.id || a.project_id || a.project) === projId);
       }
       if (params.employee && params.employee !== 'ALL' && params.employee !== 'all') {
-        list = list.filter((a) => a.employee === Number(params.employee));
+        const empId = Number(params.employee);
+        list = list.filter((a) => Number(a.employee?.id || a.employee_id || a.employee) === empId);
       }
 
       // Attach employee details, project_name, and earning
@@ -1701,10 +1703,12 @@ export async function handleMockRequest(endpoint, options = {}) {
     if (params.date_from) list = list.filter((a) => a.date >= params.date_from);
     if (params.date_to) list = list.filter((a) => a.date <= params.date_to);
     if (params.project && params.project !== 'ALL' && params.project !== 'all') {
-      list = list.filter((a) => a.project === Number(params.project));
+      const projId = Number(params.project);
+      list = list.filter((a) => Number(a.project?.id || a.project_id || a.project) === projId);
     }
     if (params.employee && params.employee !== 'ALL' && params.employee !== 'all') {
-      list = list.filter((a) => a.employee === Number(params.employee));
+      const empId = Number(params.employee);
+      list = list.filter((a) => Number(a.employee?.id || a.employee_id || a.employee) === empId);
     }
 
     const fullDays = list.filter((a) => a.status === 'PRESENT').length;
@@ -1744,7 +1748,8 @@ export async function handleMockRequest(endpoint, options = {}) {
       (e) => !e.deleted_at && Number(e.organization || 10) === currentOrgId
     );
     if (params.employee && params.employee !== 'ALL' && params.employee !== 'all') {
-      orgEmployees = orgEmployees.filter((e) => e.id === Number(params.employee));
+      const empId = Number(params.employee);
+      orgEmployees = orgEmployees.filter((e) => Number(e.id) === empId);
     }
     if (params.project && params.project !== 'ALL' && params.project !== 'all') {
       const pId = Number(params.project);

@@ -319,14 +319,28 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
       ]);
 
       let list = Array.isArray(listRes) ? listRes : listRes.results || [];
-      if (isEmployeeLabour && currentEmpId) {
-        list = list.filter(
-          (r) =>
-            r.employee === currentEmpId ||
-            r.employee_id === currentEmpId ||
-            String(r.employee) === String(currentEmpId)
-        );
+
+      // Filter by Employee if selected
+      if (eFilter && eFilter !== 'ALL') {
+        list = list.filter((r) => {
+          const recEmpId = r.employee?.id ?? r.employee_id ?? r.employee;
+          return String(recEmpId) === String(eFilter);
+        });
+      } else if (isEmployeeLabour && currentEmpId) {
+        list = list.filter((r) => {
+          const recEmpId = r.employee?.id ?? r.employee_id ?? r.employee;
+          return String(recEmpId) === String(currentEmpId);
+        });
       }
+
+      // Filter by Project if selected
+      if (pFilter && pFilter !== 'ALL') {
+        list = list.filter((r) => {
+          const recProjId = r.project?.id ?? r.project_id ?? r.project;
+          return String(recProjId) === String(pFilter);
+        });
+      }
+
       const sortedList = [...list].sort((a, b) => {
         const dateDiff = new Date(b.date) - new Date(a.date);
         if (dateDiff !== 0) return dateDiff;
@@ -341,11 +355,21 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
         0
       );
       setHistSummary({
-        total_present: sumRes?.total_present ?? (totalFullDays + totalHalfDays),
-        full_days: sumRes?.full_days ?? totalFullDays,
-        half_days: sumRes?.half_days ?? totalHalfDays,
-        total_absent: sumRes?.total_absent ?? totalAbsentDays,
-        total_earnings: sumRes?.total_earnings ?? totalEarnedCalc,
+        total_present: (eFilter !== 'ALL' || pFilter !== 'ALL')
+          ? (totalFullDays + totalHalfDays)
+          : (sumRes?.total_present ?? (totalFullDays + totalHalfDays)),
+        full_days: (eFilter !== 'ALL' || pFilter !== 'ALL')
+          ? totalFullDays
+          : (sumRes?.full_days ?? totalFullDays),
+        half_days: (eFilter !== 'ALL' || pFilter !== 'ALL')
+          ? totalHalfDays
+          : (sumRes?.half_days ?? totalHalfDays),
+        total_absent: (eFilter !== 'ALL' || pFilter !== 'ALL')
+          ? totalAbsentDays
+          : (sumRes?.total_absent ?? totalAbsentDays),
+        total_earnings: (eFilter !== 'ALL' || pFilter !== 'ALL')
+          ? totalEarnedCalc
+          : (sumRes?.total_earnings ?? totalEarnedCalc),
       });
     } catch (err) {
       console.error('Error fetching history:', err);
@@ -410,7 +434,41 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
         });
         rows = Object.values(empMap);
       }
-      if (isEmployeeLabour && currentEmpId && rows.length > 0) {
+      // Filter by Employee if selected
+      if (eFilter && eFilter !== 'ALL') {
+        const matchingRows = rows.filter((r) => {
+          const recEmpId = r.employee_id ?? r.id;
+          return String(recEmpId) === String(eFilter);
+        });
+        if (matchingRows.length > 0) {
+          rows = matchingRows;
+        } else {
+          // If the employee is in workforce but had 0 attendance in this period, show 1 row with 0 attendance
+          const targetEmp = employees.find((e) => String(e.id) === String(eFilter));
+          if (targetEmp) {
+            rows = [
+              {
+                employee_id: targetEmp.id,
+                id: targetEmp.id,
+                employee_name: targetEmp.full_name || 'Worker',
+                employee_code: targetEmp.employee_code || '',
+                trade: targetEmp.trade || targetEmp.role || '',
+                daily_wage: Number(targetEmp.daily_rate || 800),
+                daily_rate: Number(targetEmp.daily_rate || 800),
+                full_days: 0,
+                half_days: 0,
+                total_present: 0,
+                total_attendance: 0,
+                total_absent: 0,
+                total_earnings: 0,
+                attendance_count: 0,
+              },
+            ];
+          } else {
+            rows = [];
+          }
+        }
+      } else if (isEmployeeLabour && currentEmpId && rows.length > 0) {
         rows = rows.filter(
           (r) =>
             r.employee_id === currentEmpId ||
@@ -418,6 +476,16 @@ export const AttendanceView = ({ selectedProjectId, navState, onClearNavState })
             r.id === currentEmpId
         );
       }
+
+      // Filter by Project if selected
+      if (repProjectFilter !== 'ALL' && rows.length > 0) {
+        const targetProjId = Number(repProjectFilter);
+        rows = rows.filter((r) => {
+          const emp = employees.find((e) => String(e.id) === String(r.employee_id || r.id));
+          return emp && belongsToProject(emp, targetProjId);
+        });
+      }
+
       setReportRows(rows);
     } catch (err) {
       console.error('Error fetching report:', err);
