@@ -105,7 +105,23 @@ export const formatINR = (val) => {
 };
 
 export const AICostEstimatorView = ({ projects = [], selectedProjectId: initialProjectId, onProjectsUpdated }) => {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+
+  if (role && role !== 'ORG_ADMIN') {
+    return (
+      <div className="card max-w-xl mx-auto my-12 p-10 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm animate-fade-in">
+        <div className="w-16 h-16 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto mb-4">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-xl font-black text-slate-900 dark:text-white mb-2">
+          Access Restricted
+        </h2>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Only Organization Administrators have permission to access the AI Cost Estimator module.
+        </p>
+      </div>
+    );
+  }
 
   // Clean form state — ZERO dummy / mock pre-filled data
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId || '');

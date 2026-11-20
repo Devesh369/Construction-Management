@@ -4,7 +4,7 @@ import logging
 from decimal import Decimal
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,7 +18,21 @@ from .services import CostEstimatorService
 logger = logging.getLogger(__name__)
 
 
-class EstimateCreateView(LoginRequiredMixin, View):
+class OrgAdminOnlyMixin(UserPassesTestMixin):
+    """Restricts access exclusively to Organization Administrators."""
+
+    def test_func(self):
+        user = self.request.user
+        return bool(
+            user.is_authenticated
+            and (
+                getattr(user, "role", None) == "ORG_ADMIN"
+                or getattr(user, "is_superuser", False)
+            )
+        )
+
+
+class EstimateCreateView(LoginRequiredMixin, OrgAdminOnlyMixin, View):
     """
     Renders 8-section ModelForm and executes AI or Fallback estimation.
     Prevents duplicate submissions and displays responsive loading feedback.
@@ -91,7 +105,7 @@ class EstimateCreateView(LoginRequiredMixin, View):
             )
 
 
-class EstimateResultView(LoginRequiredMixin, View):
+class EstimateResultView(LoginRequiredMixin, OrgAdminOnlyMixin, View):
     """
     Displays summary KPI cards, Chart.js breakdown visualization,
     detailed Bill of Quantities table, assumptions, risks, and interactive actions.
@@ -132,7 +146,7 @@ class EstimateResultView(LoginRequiredMixin, View):
         )
 
 
-class EstimateDetailView(LoginRequiredMixin, View):
+class EstimateDetailView(LoginRequiredMixin, OrgAdminOnlyMixin, View):
     """
     View-only printable detail page of a previous cost estimate.
     """
@@ -152,7 +166,7 @@ class EstimateDetailView(LoginRequiredMixin, View):
         )
 
 
-class EstimateHistoryView(LoginRequiredMixin, View):
+class EstimateHistoryView(LoginRequiredMixin, OrgAdminOnlyMixin, View):
     """
     Lists past estimates for the logged-in user with city filter, keyword search,
     and deletion capabilities.
@@ -193,7 +207,7 @@ class EstimateHistoryView(LoginRequiredMixin, View):
         )
 
 
-class EstimateDeleteView(LoginRequiredMixin, View):
+class EstimateDeleteView(LoginRequiredMixin, OrgAdminOnlyMixin, View):
     """
     Deletes a user-owned cost estimate.
     """
@@ -206,7 +220,7 @@ class EstimateDeleteView(LoginRequiredMixin, View):
         return redirect("cost_estimator:history")
 
 
-class EstimateRecalculateView(LoginRequiredMixin, View):
+class EstimateRecalculateView(LoginRequiredMixin, OrgAdminOnlyMixin, View):
     """
     Recalculates margin and totals strictly via Python math without re-invoking the AI.
     """
@@ -232,7 +246,7 @@ class EstimateRecalculateView(LoginRequiredMixin, View):
         return redirect("cost_estimator:result", pk=estimate.pk)
 
 
-class EstimateAttachProjectView(LoginRequiredMixin, View):
+class EstimateAttachProjectView(LoginRequiredMixin, OrgAdminOnlyMixin, View):
     """
     Attaches estimate to an existing Project in the system.
     """
@@ -255,7 +269,7 @@ class EstimateAttachProjectView(LoginRequiredMixin, View):
         return redirect("cost_estimator:result", pk=estimate.pk)
 
 
-class EstimateExportPDFView(LoginRequiredMixin, View):
+class EstimateExportPDFView(LoginRequiredMixin, OrgAdminOnlyMixin, View):
     """
     Generates a professional Bill of Quantities / Cost Estimate PDF report
     with letterhead, client details, breakdown table, and signature block.

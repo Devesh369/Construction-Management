@@ -34,7 +34,7 @@ export const ROLE_PERMISSIONS = {
   credits: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
   payroll: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER', 'employee/labour', 'EMPLOYEE', 'LABOUR'],
   reports: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
-  cost_estimator: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+  cost_estimator: ['ORG_ADMIN'],
   settings: ['ORG_ADMIN'],
 };
 

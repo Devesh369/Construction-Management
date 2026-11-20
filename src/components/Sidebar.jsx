@@ -100,7 +100,7 @@ export const Sidebar = ({ activeTab, setActiveTab }) => {
       id: 'cost_estimator',
       label: 'Cost Estimator',
       icon: Calculator,
-      roles: ['ORG_ADMIN', 'PROJECT_MANAGER', 'SITE_MANAGER'],
+      roles: ['ORG_ADMIN'],
     },
     {
       id: 'settings',
