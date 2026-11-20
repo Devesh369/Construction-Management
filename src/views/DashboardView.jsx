@@ -68,7 +68,7 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
           : Math.max(0, pagar - upad - paid);
         return acc + bal;
       }, 0);
-      setNetSalaryPayable(totalBalance);
+      setNetSalaryPayable(totalBalance > 0 ? totalBalance : (res?.net_salary_payable ? Number(res.net_salary_payable) : totalBalance));
 
       const payList = Array.isArray(paymentsRes) ? paymentsRes : paymentsRes?.results || [];
       const paidUpadSum = payList
@@ -91,7 +91,7 @@ export const DashboardView = ({ selectedProjectId, onNavigate }) => {
           return st === 'paid' || st === 'confirmed' || st === 'approved';
         })
         .reduce((acc, p) => acc + Number(p.amount || 0), 0);
-      setTotalPaidUpad(paidUpadSum);
+      setTotalPaidUpad(paidUpadSum > 0 ? paidUpadSum : (res?.total_upad ? Number(res.total_upad) : paidUpadSum));
 
       if (user) {
         const myWork = (Array.isArray(workRes) ? workRes : []).filter((e) => {

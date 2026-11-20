@@ -11,7 +11,7 @@ from attendance.models import Attendance, AttendanceStatus
 from core.money import q2
 from core.roles import Role
 from django.core.cache import cache
-from django.db.models import Sum
+from django.db.models import Sum, Q
 from django.utils import timezone
 from expenses.models import Expense, ExpenseCategory, ExpenseStatus, PaymentMode
 from ledger.models import JournalLine, Side
@@ -23,16 +23,17 @@ from rest_framework.exceptions import PermissionDenied
 from workforce.models import Employee
 
 
-def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
+def get_dashboard_overview(org, user, force_refresh: bool = False, project_id=None) -> dict:
     """
     Generate organization-wide or role-scoped executive dashboard metrics.
     Caches results per organization and role/user for 60 seconds.
     """
     # 1. Check cache unless explicit refresh requested
-    if user.role == Role.ORG_ADMIN:
-        cache_key = f"dashboard_overview_{org.id}_{user.role}"
+    p_key = f"proj_{project_id}" if project_id else "all"
+    if user.role in [Role.ORG_ADMIN, Role.SITE_MANAGER, Role.PROJECT_MANAGER]:
+        cache_key = f"dashboard_overview_{org.id}_{user.role}_{p_key}"
     else:
-        cache_key = f"dashboard_overview_{org.id}_{user.role}_{user.id}"
+        cache_key = f"dashboard_overview_{org.id}_{user.role}_{user.id}_{p_key}"
 
     if not force_refresh:
         cached_data = cache.get(cache_key)
@@ -40,7 +41,7 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
             return cached_data
 
     # 2. Determine project scope
-    if user.role == Role.ORG_ADMIN:
+    if user.role in [Role.ORG_ADMIN, Role.SITE_MANAGER, Role.PROJECT_MANAGER]:
         scoped_projects = Project.objects.filter(organization=org, deleted_at__isnull=True)
     else:
         allowed_ids = user_project_ids(user)
@@ -48,13 +49,24 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
             organization=org, id__in=allowed_ids, deleted_at__isnull=True
         )
 
+    if project_id:
+        scoped_projects = scoped_projects.filter(id=project_id)
+
     active_projects = scoped_projects.filter(status=ProjectStatus.ACTIVE)
     active_projects_count = active_projects.count()
 
     # 3. Active workers count in tenant
-    active_workers_count = Employee.objects.filter(
-        organization=org, is_active=True, deleted_at__isnull=True
-    ).count()
+    if project_id:
+        active_workers_count = (
+            Employee.objects.filter(organization=org, is_active=True, deleted_at__isnull=True)
+            .filter(Q(primary_project_id=project_id) | Q(assigned_projects__id=project_id))
+            .distinct()
+            .count()
+        )
+    else:
+        active_workers_count = Employee.objects.filter(
+            organization=org, is_active=True, deleted_at__isnull=True
+        ).count()
 
     # 4. Workers on site today
     today = timezone.localdate()
@@ -70,6 +82,28 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
         .distinct()
         .count()
     )
+
+    workers_absent_today = (
+        Attendance.objects.filter(
+            organization=org,
+            project__in=active_projects,
+            date=today,
+            status=AttendanceStatus.ABSENT,
+            deleted_at__isnull=True,
+        )
+        .values("employee_id")
+        .distinct()
+        .count()
+    )
+    if workers_absent_today == 0 and active_workers_count > workers_on_site_today:
+        has_any_att = Attendance.objects.filter(
+            organization=org,
+            project__in=active_projects,
+            date=today,
+            deleted_at__isnull=True,
+        ).exists()
+        if has_any_att:
+            workers_absent_today = max(0, active_workers_count - workers_on_site_today)
 
     # 5. Total Budget and Actual Spend
     tot_budget = active_projects.aggregate(total=Sum("estimated_budget"))["total"] or Decimal(
@@ -319,7 +353,11 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
     active_emps = Employee.objects.filter(
         organization=org, is_active=True, deleted_at__isnull=True
     )
-    if user.role != Role.ORG_ADMIN:
+    if project_id:
+        active_emps = active_emps.filter(
+            Q(primary_project_id=project_id) | Q(assigned_projects__id=project_id)
+        ).distinct()
+    elif user.role not in [Role.ORG_ADMIN, Role.SITE_MANAGER, Role.PROJECT_MANAGER]:
         active_emps = active_emps.filter(
             Q(primary_project__in=active_projects) |
             Q(assigned_projects__in=active_projects)
@@ -341,7 +379,9 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
             status__in=["paid", "confirmed", "approved", PaymentLifecycleStatus.PAID, PaymentLifecycleStatus.APPROVED],
             deleted_at__isnull=True,
         )
-        if user.role != Role.ORG_ADMIN or active_projects.count() < scoped_projects.count():
+        if project_id:
+            upad_payments_qs = upad_payments_qs.filter(project_id=project_id)
+        elif user.role not in [Role.ORG_ADMIN, Role.SITE_MANAGER, Role.PROJECT_MANAGER] and active_projects.count() < scoped_projects.count():
             upad_payments_qs = upad_payments_qs.filter(project__in=active_projects)
         total_paid_upad = upad_payments_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
     except Exception:
@@ -381,6 +421,7 @@ def get_dashboard_overview(org, user, force_refresh: bool = False) -> dict:
         "active_projects": active_projects_count,
         "active_workers": active_workers_count,
         "workers_on_site_today": workers_on_site_today,
+        "workers_absent_today": workers_absent_today,
         "month_expenditure": str(q2(total_net_salary_payable)),
         "employee_amount": str(q2(total_net_salary_payable)),
         "net_salary_payable": str(q2(total_net_salary_payable)),

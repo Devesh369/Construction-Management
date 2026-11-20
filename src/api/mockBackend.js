@@ -829,7 +829,10 @@ export async function handleMockRequest(endpoint, options = {}) {
 
     const todayAbsentAtt = todayRecords.filter((a) => a.status === 'ABSENT');
     const uniqueAbsentIds = new Set(todayAbsentAtt.map((a) => a.employee));
-    const workersAbsentToday = uniqueAbsentIds.size;
+    let workersAbsentToday = uniqueAbsentIds.size;
+    if (workersAbsentToday === 0 && activeWorkers.length > workersOnSiteToday) {
+      workersAbsentToday = Math.max(0, activeWorkers.length - workersOnSiteToday);
+    }
 
     const totalBudget = activeProjects.reduce((sum, p) => sum + Number(p.estimated_budget || 0), 0);
 

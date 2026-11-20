@@ -24,15 +24,23 @@ class DashboardOverviewView(views.APIView):
     permission_classes = [
         IsAuthenticated,
         IsTenantUser,
-        roles_required(Role.ORG_ADMIN, Role.PROJECT_MANAGER, Role.ACCOUNTANT),
+        roles_required(
+            Role.ORG_ADMIN,
+            Role.SITE_MANAGER,
+            Role.PROJECT_MANAGER,
+            Role.ACCOUNTANT,
+        ),
     ]
 
     def get(self, request):
         force_refresh = request.query_params.get("refresh", "").lower() in ["true", "1"]
+        project_param = request.query_params.get("project")
+        project_id = int(project_param) if project_param and project_param.isdigit() else None
         data = get_dashboard_overview(
             org=request.user.organization,
             user=request.user,
             force_refresh=force_refresh,
+            project_id=project_id,
         )
         return Response(data, status=status.HTTP_200_OK)
 
